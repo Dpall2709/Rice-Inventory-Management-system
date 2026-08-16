@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rice Billing Login</title>
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:Inter, Arial, sans-serif;
+}
+
+body{
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    background:linear-gradient(135deg,#0f172a,#1e293b);
+}
+
+.login-container{
+    width:100%;
+    max-width:420px;
+    padding:20px;
+}
+
+.login-card{
+    background:#fff;
+    border-radius:20px;
+    padding:40px;
+    box-shadow:0 15px 40px rgba(0,0,0,.15);
+}
+
+.logo{
+    text-align:center;
+    margin-bottom:25px;
+}
+
+.logo h1{
+    color:#16a34a;
+    font-size:30px;
+    margin-bottom:6px;
+}
+
+.logo p{
+    color:#64748b;
+    font-size:14px;
+}
+
+.form-group{
+    margin-bottom:18px;
+}
+
+.form-group label{
+    display:block;
+    margin-bottom:6px;
+    font-weight:600;
+    color:#334155;
+}
+
+.form-group input{
+    width:100%;
+    padding:12px 14px;
+    border:1px solid #dbe2ea;
+    border-radius:10px;
+    font-size:15px;
+}
+
+.form-group input:focus{
+    outline:none;
+    border-color:#16a34a;
+}
+
+.btn-login{
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:10px;
+    background:#16a34a;
+    color:white;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    transition:.3s;
+}
+
+.btn-login:hover{
+    background:#15803d;
+}
+
+.alert{
+    background:#fee2e2;
+    color:#dc2626;
+    padding:10px;
+    border-radius:8px;
+    margin-bottom:15px;
+    font-size:14px;
+}
+
+.footer{
+    margin-top:20px;
+    text-align:center;
+    color:#94a3b8;
+    font-size:13px;
+}
+</style>
+
+</head>
+<body>
+
+<div class="login-container">
+
+    <div class="login-card">
+
+        <div class="logo">
+            <h1>🌾 Rice Billing</h1>
+            <p>Inventory & Billing Management System</p>
+        </div>
+
+        {% for message in messages %}
+            <div class="alert">
+                {{ message }}
+            </div>
+        {% endfor %}
+
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="form-group">
+                <label>Username</label>
+                <input
+                    type="text"
+                    name="username"
+                    placeholder="Enter username"
+                    required>
+            </div>
+
+            <div class="form-group">
+                <label>Password</label>
+                <input
+                    type="password"
+                    name="password"
+                    placeholder="Enter password"
+                    required>
+            </div>
+
+            <button
+                type="submit"
+                class="btn-login"
+                onclick="this.disabled=true; this.innerText='Logging in...'; this.form.submit();">
+                Login
+            </button>
+
+        </form>
+        <p class="text-center mt-3">
+    New Company?
+    <a href="{% url 'register' %}">Register Here</a>
+</p>
+
+        <div class="footer">
+            © 2026 Rice Billing System
+        </div>
+
+    </div>
+
+</div>
+
+</body>
+</html>
+```

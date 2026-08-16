@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register Company</title>
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+}
+
+body{
+background:#f4f6f9;
+display:flex;
+justify-content:center;
+align-items:center;
+min-height:100vh;
+padding:30px;
+}
+
+.card{
+
+width:700px;
+background:white;
+padding:35px;
+border-radius:15px;
+box-shadow:0 10px 25px rgba(0,0,0,.1);
+
+}
+
+h2{
+text-align:center;
+margin-bottom:25px;
+color:#198754;
+}
+
+.row{
+display:flex;
+gap:20px;
+margin-bottom:15px;
+}
+
+.col{
+flex:1;
+}
+
+label{
+display:block;
+margin-bottom:5px;
+font-weight:bold;
+}
+
+input{
+
+width:100%;
+padding:10px;
+border:1px solid #ccc;
+border-radius:6px;
+
+}
+
+button{
+
+width:100%;
+padding:14px;
+background:#198754;
+border:none;
+color:white;
+font-size:16px;
+border-radius:8px;
+cursor:pointer;
+margin-top:20px;
+
+}
+
+button:hover{
+
+background:#157347;
+
+}
+
+.errorlist{
+
+color:red;
+margin-bottom:8px;
+
+}
+
+.login{
+
+margin-top:20px;
+text-align:center;
+
+}
+
+a{
+
+text-decoration:none;
+color:#198754;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="card">
+
+<h2>Company Registration</h2>
+
+<form method="POST">
+
+{% csrf_token %}
+
+{{ form.non_field_errors }}
+
+<div class="row">
+
+<div class="col">
+<label>Company Name</label>
+{{ form.company_name }}
+{{ form.company_name.errors }}
+</div>
+
+<div class="col">
+<label>Owner Name</label>
+{{ form.owner_name }}
+{{ form.owner_name.errors }}
+</div>
+
+</div>
+
+<div class="row">
+
+<div class="col">
+<label>Email</label>
+{{ form.email }}
+{{ form.email.errors }}
+</div>
+
+<div class="col">
+<label>Mobile</label>
+{{ form.mobile }}
+{{ form.mobile.errors }}
+</div>
+
+</div>
+
+<div class="row">
+
+<div class="col">
+<label>Username</label>
+{{ form.username }}
+{{ form.username.errors }}
+</div>
+
+<div class="col">
+<label>Password</label>
+{{ form.password1 }}
+{{ form.password1.errors }}
+</div>
+
+</div>
+
+<div class="row">
+
+<div class="col">
+<label>Confirm Password</label>
+{{ form.password2 }}
+{{ form.password2.errors }}
+</div>
+
+</div>
+
+<button type="submit">
+
+Register Company
+
+</button>
+
+</form>
+
+<div class="login">
+
+Already have an account?
+
+<a href="{% url 'login' %}">
+
+Login
+
+</a>
+
+</div>
+
+</div>
+
+</body>
+
+</html>
