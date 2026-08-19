@@ -37,6 +37,10 @@
          href="{% url 'sale_list' %}">🚚 Sales</a>
       <a class="menu-item {% if request.resolver_match.url_name == 'broker_list' or request.resolver_match.url_name == 'add_broker' or request.resolver_match.url_name == 'broker_report_detail' %}active{% endif %}"
         href="{% url 'broker_list' %}">🧑‍💼 Brokers</a>
+      <a class="menu-item {% if request.resolver_match.url_name == 'customer_list' or request.resolver_match.url_name == 'add_customer' or request.resolver_match.url_name == 'edit_customer' or request.resolver_match.url_name == 'delete_customer' %}active{% endif %}"
+        href="{% url 'customer_list' %}">
+          👥 Customers
+      </a>
 
       <a class="menu-item" href="#">💳 Payments</a>
       <a class="menu-item" href="#">📊 Reports</a>

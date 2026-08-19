@@ -61,6 +61,36 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
 
 
+    path(
+    "customers/",
+    view.customer_list,
+    name="customer_list"
+),
+
+path(
+    "customers/add/",
+    view.add_customer,
+    name="add_customer"
+),
+
+# path(
+#     "customers/<int:customer_id>/",
+#     view.customer_report_detail,
+#     name="customer_report_detail"
+# ),
+
+path(
+    "customers/edit/<int:customer_id>/",
+    view.edit_customer,
+    name="edit_customer"
+),
+
+path(
+    "customers/delete/<int:customer_id>/",
+    view.delete_customer,
+    name="delete_customer"
+),
+
 
 
 ]
