@@ -1,0 +1,371 @@
+{% extends "core/base.html" %}
+
+{% block page_title %}
+Add Customer
+{% endblock %}
+
+{% block content %}
+
+<style>
+    .customer-form-wrapper {
+        max-width: 1000px;
+        margin: 20px auto;
+    }
+
+    .customer-form-card {
+        background: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+    }
+
+    .customer-form-header {
+        background: linear-gradient(135deg, #166534, #15803d);
+        color: white;
+        padding: 24px 30px;
+    }
+
+    .customer-form-header h2 {
+        margin: 0;
+        font-size: 25px;
+        font-weight: 700;
+    }
+
+    .customer-form-header p {
+        margin: 6px 0 0;
+        opacity: 0.9;
+        font-size: 14px;
+    }
+
+    .customer-form-body {
+        padding: 30px;
+    }
+
+    .form-section {
+        margin-bottom: 28px;
+    }
+
+    .form-section-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: #166534;
+        border-bottom: 1px solid #e5e7eb;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 18px 24px;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .form-group.full-width {
+        grid-column: span 2;
+    }
+
+    .form-group label {
+        font-size: 14px;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 7px;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 11px 13px;
+        font-size: 14px;
+        background: #fff;
+        transition: 0.2s ease;
+    }
+
+    .form-group textarea {
+        min-height: 90px;
+        resize: vertical;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: #16a34a;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
+    }
+
+    .helptext {
+        font-size: 12px;
+        color: #6b7280;
+        margin-top: 4px;
+    }
+
+    .errorlist {
+        margin: 5px 0;
+        padding: 0;
+        list-style: none;
+        color: #dc2626;
+        font-size: 13px;
+    }
+
+    .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        padding-top: 20px;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .btn-customer {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 11px 20px;
+        border-radius: 8px;
+        border: none;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .btn-save {
+        background: #16a34a;
+        color: white;
+    }
+
+    .btn-save:hover {
+        background: #15803d;
+    }
+
+    .btn-cancel {
+        background: #f3f4f6;
+        color: #374151;
+    }
+
+    .btn-cancel:hover {
+        background: #e5e7eb;
+    }
+
+    @media (max-width: 700px) {
+        .form-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .form-group.full-width {
+            grid-column: span 1;
+        }
+
+        .customer-form-body {
+            padding: 20px;
+        }
+
+        .form-actions {
+            flex-direction: column;
+        }
+
+        .btn-customer {
+            width: 100%;
+        }
+    }
+</style>
+
+
+<div class="customer-form-wrapper">
+
+    <div class="customer-form-card">
+
+        <!-- HEADER -->
+        <div class="customer-form-header">
+            <h2>👥 Add Customer</h2>
+            <p>Create a customer profile for billing, sales and customer reports.</p>
+        </div>
+
+
+        <div class="customer-form-body">
+
+            <form method="post">
+
+                {% csrf_token %}
+
+
+                <!-- BASIC INFORMATION -->
+                <div class="form-section">
+
+                    <div class="form-section-title">
+                        👤 Basic Information
+                    </div>
+
+                    <div class="form-grid">
+
+                        {% for field in form %}
+
+                            {% if field.name == "customer_name" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
+
+                            {% if field.name == "mobile" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
+
+                            {% if field.name == "email" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
+
+                            {% if field.name == "gst_number" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
+
+                        {% endfor %}
+
+                    </div>
+
+                </div>
+
+
+                <!-- ADDRESS -->
+                <div class="form-section">
+
+                    <div class="form-section-title">
+                        📍 Address Information
+                    </div>
+
+                    <div class="form-grid">
+
+                        {% for field in form %}
+
+                            {% if field.name == "billing_address" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
+
+                            {% if field.name == "shipping_address" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
+
+                            {% if field.name == "city" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
+
+                            {% if field.name == "state" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
+
+                            {% if field.name == "country" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
+
+                            {% if field.name == "pincode" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+                                </div>
+                            {% endif %}
+
+                        {% endfor %}
+
+                    </div>
+
+                </div>
+
+
+                <!-- ACCOUNT -->
+                <div class="form-section">
+
+                    <div class="form-section-title">
+                        💰 Account Information
+                    </div>
+
+                    <div class="form-grid">
+
+                        {% for field in form %}
+
+                            {% if field.name == "opening_balance" %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {{ field }}
+                                    {{ field.errors }}
+
+                                    <small class="helptext">
+                                        Enter the existing customer balance, if any.
+                                    </small>
+                                </div>
+                            {% endif %}
+
+                        {% endfor %}
+
+                    </div>
+
+                </div>
+
+
+                <!-- ACTIONS -->
+                <div class="form-actions">
+
+                    <a
+                        href="{% url 'customer_list' %}"
+                        class="btn-customer btn-cancel">
+                        Cancel
+                    </a>
+
+                    <button
+                        type="submit"
+                        class="btn-customer btn-save">
+                        💾 Save Customer
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

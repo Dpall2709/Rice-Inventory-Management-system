@@ -6,9 +6,9 @@ How to run
 5. pip install -r requirements.txt
 6. Create .env file
 7. copy .env.example .env
-8. python3 manage.py makemigrations
-9. python3 manage.py migrate
-10 . python3 manage.py runserver
+8. python manage.py makemigrations
+9. python manage.py migrate
+10 . python manage.py runserver
 http://127.0.0.1:8000/
 
 

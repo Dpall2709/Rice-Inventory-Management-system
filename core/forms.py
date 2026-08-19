@@ -2,7 +2,8 @@ from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 
-from .models import Company
+from .models import Company, Customer
+
 
 
 # ==========================================
@@ -203,3 +204,92 @@ class CompanyForm(forms.ModelForm):
             raise forms.ValidationError("Company name already exists.")
 
         return company_name
+
+
+class CustomerForm(forms.ModelForm):
+
+    class Meta:
+        model = Customer
+
+        fields = [
+            "customer_name",
+            "mobile",
+            "email",
+            "gst_number",
+            "billing_address",
+            "shipping_address",
+            "city",
+            "state",
+            "country",
+            "pincode",
+            "opening_balance",
+        ]
+
+        widgets = {
+            "customer_name": forms.TextInput(
+                attrs={
+                    "class": "form-control"
+                }
+            ),
+
+            "mobile": forms.TextInput(
+                attrs={
+                    "class": "form-control"
+                }
+            ),
+
+            "email": forms.EmailInput(
+                attrs={
+                    "class": "form-control"
+                }
+            ),
+
+            "gst_number": forms.TextInput(
+                attrs={
+                    "class": "form-control"
+                }
+            ),
+
+            "billing_address": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 3
+                }
+            ),
+            "shipping_address": forms.Textarea(
+                attrs={
+                    "class": "form-control",
+                    "rows": 3
+                }
+            ),
+            "city": forms.TextInput(
+                attrs={
+                    "class": "form-control"
+                }
+            ),
+
+            "state": forms.TextInput(
+                attrs={
+                    "class": "form-control"
+                }
+            ),
+
+            "country": forms.TextInput(
+                attrs={
+                    "class": "form-control"
+                }
+            ),
+
+            "pincode": forms.TextInput(
+                attrs={
+                    "class": "form-control"
+                }
+            ),
+
+            "opening_balance": forms.NumberInput(
+                attrs={
+                    "class": "form-control",
+                    "step": "0.01"
+                }
+            ),
+        }

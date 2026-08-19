@@ -1,0 +1,456 @@
+{% extends "core/base.html" %}
+
+{% block page_title %}
+Customers
+{% endblock %}
+
+{% block content %}
+
+<style>
+
+    .customer-page {
+        padding: 10px 0;
+    }
+
+    .customer-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 22px;
+    }
+
+    .customer-title h2 {
+        margin: 0;
+        font-size: 25px;
+        color: #111827;
+    }
+
+    .customer-title p {
+        margin: 5px 0 0;
+        color: #6b7280;
+        font-size: 14px;
+    }
+
+    .add-customer-btn {
+        background: #16a34a;
+        color: white;
+        text-decoration: none;
+        padding: 11px 18px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 14px;
+        transition: 0.2s;
+    }
+
+    .add-customer-btn:hover {
+        background: #15803d;
+    }
+
+
+    /* SEARCH */
+
+    .customer-search-card {
+        background: white;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.06);
+    }
+
+    .customer-search {
+        display: flex;
+        gap: 10px;
+    }
+
+    .customer-search input {
+        flex: 1;
+        padding: 11px 13px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+    }
+
+    .customer-search input:focus {
+        outline: none;
+        border-color: #16a34a;
+        box-shadow: 0 0 0 3px rgba(22,163,74,0.10);
+    }
+
+    .search-btn {
+        border: none;
+        background: #374151;
+        color: white;
+        padding: 0 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+    .search-btn:hover {
+        background: #1f2937;
+    }
+
+
+    /* TABLE */
+
+    .customer-table-card {
+        background: white;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 5px 22px rgba(0,0,0,0.07);
+    }
+
+    .customer-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .customer-table thead {
+        background: #f3f4f6;
+    }
+
+    .customer-table th {
+        text-align: left;
+        padding: 14px 16px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #374151;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .customer-table td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #f0f0f0;
+        font-size: 14px;
+        color: #374151;
+    }
+
+    .customer-table tbody tr:hover {
+        background: #f9fafb;
+    }
+
+    .customer-name {
+        font-weight: 700;
+        color: #111827;
+    }
+
+    .customer-gst {
+        font-size: 12px;
+        color: #6b7280;
+    }
+
+    .balance {
+        font-weight: 700;
+    }
+
+
+    /* ACTION BUTTONS */
+
+    .action-buttons {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .action-btn {
+        display: inline-block;
+        text-decoration: none;
+        padding: 7px 11px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .view-btn {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .view-btn:hover {
+        background: #bfdbfe;
+    }
+
+    .edit-btn {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .edit-btn:hover {
+        background: #fde68a;
+    }
+
+    .delete-btn {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+    .delete-btn:hover {
+        background: #fecaca;
+    }
+
+
+    /* EMPTY */
+
+    .empty-state {
+        text-align: center;
+        padding: 50px 20px !important;
+        color: #6b7280;
+    }
+
+    .empty-icon {
+        font-size: 40px;
+        margin-bottom: 10px;
+    }
+
+
+    @media(max-width: 800px) {
+
+        .customer-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .add-customer-btn {
+            width: 100%;
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        .customer-search {
+            flex-direction: column;
+        }
+
+        .search-btn {
+            padding: 11px;
+        }
+
+        .customer-table-card {
+            overflow-x: auto;
+        }
+
+        .customer-table {
+            min-width: 850px;
+        }
+
+    }
+
+</style>
+
+
+<div class="customer-page">
+
+
+    <!-- HEADER -->
+
+    <div class="customer-header">
+
+        <div class="customer-title">
+
+            <h2>👥 Customers</h2>
+
+            <p>
+                Manage customers, sales history and outstanding balances.
+            </p>
+
+        </div>
+
+
+        <!-- RIGHT SIDE ADD BUTTON -->
+
+        <a
+            href="{% url 'add_customer' %}"
+            class="add-customer-btn">
+
+            + Add Customer
+
+        </a>
+
+    </div>
+
+
+
+    <!-- SEARCH -->
+
+    <div class="customer-search-card">
+
+        <form method="get">
+
+            <div class="customer-search">
+
+                <input
+                    type="text"
+                    name="q"
+                    value="{{ q }}"
+                    placeholder="Search customer, mobile or GST..."
+                >
+
+                <button
+                    type="submit"
+                    class="search-btn">
+
+                    🔍 Search
+
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+
+
+    <!-- TABLE -->
+
+    <div class="customer-table-card">
+
+        <table class="customer-table">
+
+            <thead>
+
+                <tr>
+
+                    <th>#</th>
+
+                    <th>Customer</th>
+
+                    <th>Mobile</th>
+
+                    <th>GST</th>
+
+                    <th>City</th>
+
+                    <th>Opening Balance</th>
+
+                    <th>Action</th>
+
+                </tr>
+
+            </thead>
+
+
+            <tbody>
+
+                {% for customer in customers %}
+
+                <tr>
+
+                    <td>
+                        {{ forloop.counter }}
+                    </td>
+
+
+                    <td>
+
+                        <div class="customer-name">
+                            {{ customer.customer_name }}
+                        </div>
+
+                        {% if customer.email %}
+                            <div class="customer-gst">
+                                {{ customer.email }}
+                            </div>
+                        {% endif %}
+
+                    </td>
+
+
+                    <td>
+                        {{ customer.mobile|default:"-" }}
+                    </td>
+
+
+                    <td>
+                        {{ customer.gst_number|default:"-" }}
+                    </td>
+
+
+                    <td>
+                        {{ customer.city|default:"-" }}
+                    </td>
+
+
+                    <td class="balance">
+
+                        ₹ {{ customer.opening_balance|default:"0.00" }}
+
+                    </td>
+
+
+                    <td>
+
+                        <div class="action-buttons">
+
+                            <!-- CUSTOMER REPORT -->
+
+                            <a
+                                href="{% url 'customer_report_detail' customer.id %}"
+                                class="action-btn view-btn">
+
+                                👁 View
+
+                            </a>
+
+
+                            <!-- EDIT -->
+
+                            <a
+                                href="{% url 'edit_customer' customer.id %}"
+                                class="action-btn edit-btn">
+
+                                ✏ Edit
+
+                            </a>
+
+
+                            <!-- DELETE -->
+
+                            <a
+                                href="{% url 'delete_customer' customer.id %}"
+                                class="action-btn delete-btn">
+
+                                🗑 Delete
+
+                            </a>
+
+                        </div>
+
+                    </td>
+
+                </tr>
+
+
+                {% empty %}
+
+                <tr>
+
+                    <td
+                        colspan="7"
+                        class="empty-state">
+
+                        <div class="empty-icon">
+                            👥
+                        </div>
+
+                        <strong>No customers found</strong>
+
+                        <div>
+                            Add your first customer using the button above.
+                        </div>
+
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+{% endblock %}

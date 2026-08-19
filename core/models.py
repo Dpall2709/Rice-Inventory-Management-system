@@ -40,6 +40,78 @@ class Company(models.Model):
     def __str__(self):
         return self.company_name
 
+class Customer(models.Model):
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="customers"
+    )
+
+    customer_name = models.CharField(max_length=150)
+
+    mobile = models.CharField(
+        max_length=20,
+        blank=True
+    )
+
+    email = models.EmailField(
+        blank=True
+    )
+
+    gst_number = models.CharField(
+        max_length=20,
+        blank=True
+    )
+
+    billing_address = models.TextField(
+        blank=True
+    )
+
+    shipping_address = models.TextField(
+            blank=True
+        )
+
+    city = models.CharField(
+        max_length=100,
+        blank=True
+    )
+
+    state = models.CharField(
+        max_length=100,
+        blank=True
+    )
+
+    country = models.CharField(
+        max_length=100,
+        default="India"
+    )
+
+    pincode = models.CharField(
+        max_length=10,
+        blank=True
+    )
+
+    opening_balance = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0
+    )
+
+    is_active = models.BooleanField(
+        default=True
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    def __str__(self):
+        return self.customer_name
+
 class Product(models.Model):
     company = models.ForeignKey(
     Company,
