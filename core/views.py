@@ -27,6 +27,8 @@ import qrcode
 from reportlab.lib.utils import ImageReader
 from num2words import num2words
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from .permissions import manager_required, owner_required
+from .tenancy import company_of, tenant_object_or_404
 from .function.add_sale import add_sale
 from .function.sale_invoice_pdf import sale_invoice_pdf  
 from django.contrib.auth.decorators import login_required
@@ -390,6 +392,7 @@ def edit_purchase(request, purchase_id):
         }
     )
 @login_required
+@manager_required
 def delete_purchase(request, purchase_id):
 
     company = request.user.userprofile.company
@@ -498,6 +501,7 @@ def edit_mill(request, mill_id):
     )
 
 @login_required
+@manager_required
 def delete_mill(request, mill_id):
 
     company = request.user.userprofile.company
@@ -599,6 +603,7 @@ def edit_product(request, product_id):
     return render(request, "core/edit_product.html", {"product": product})
 
 @login_required
+@manager_required
 def delete_product(request, product_id):
     company = request.user.userprofile.company
     product = get_object_or_404(Product, id=product_id, company=company,)
@@ -915,11 +920,12 @@ def add_purchase_payment(request, purchase_id):
     )
 @login_required
 def mill_report_excel(request, mill_id):
-    mill = get_object_or_404(Mill, id=mill_id)
+    company = company_of(request)
+    mill = tenant_object_or_404(Mill, request, mill_id)
 
     # reuse same data from your mill_report_detail logic
-    purchases = Purchase.objects.filter(mill=mill).order_by("-purchase_date", "-id")
-    payments = Payment.objects.filter(related_type="purchase", mill=mill).order_by("-payment_date", "-id")
+    purchases = Purchase.objects.for_company(company).filter(mill=mill).order_by("-purchase_date", "-id")
+    payments = Payment.objects.for_company(company).filter(related_type="purchase", mill=mill).order_by("-payment_date", "-id")
 
     total_purchase = purchases.aggregate(s=Sum("total_amount"))["s"] or 0
     total_paid = payments.aggregate(s=Sum("amount"))["s"] or 0
@@ -987,10 +993,11 @@ def mill_report_excel(request, mill_id):
 
 @login_required
 def mill_report_pdf(request, mill_id):
-    mill = get_object_or_404(Mill, id=mill_id)
+    company = company_of(request)
+    mill = tenant_object_or_404(Mill, request, mill_id)
 
-    purchases = Purchase.objects.filter(mill=mill).order_by("purchase_date", "id")
-    payments = Payment.objects.filter(
+    purchases = Purchase.objects.for_company(company).filter(mill=mill).order_by("purchase_date", "id")
+    payments = Payment.objects.for_company(company).filter(
         related_type="purchase",
         mill=mill
     ).order_by("payment_date", "id")
@@ -1324,701 +1331,22 @@ def add_sale_payment(request, sale_id):
         "core/add_sale_payment.html",
         {"sale": sale}
     )
-@login_required
-def generate_sale_invoice_no():
-    # Example: SAL-20260118-0001
-    today = datetime.now().strftime("%Y%m%d")
-    last = Sale.objects.filter(invoice_no__startswith=f"SAL-{today}").order_by("-id").first()
-    if last and last.invoice_no:
-        try:
-            last_seq = int(last.invoice_no.split("-")[-1])
-        except:
-            last_seq = 0
-    else:
-        last_seq = 0
-    return f"SAL-{today}-{last_seq+1:04d}"
+def generate_sale_invoice_no(company=None):
+    """
+    Next sale invoice number.
 
+    Kept as a thin wrapper so older imports keep working; the real logic lives
+    in core/services/invoice_number.py and is per company.
+    """
+    from core.services.invoice_number import next_sale_invoice_no
 
-# def add_sale(request):
-    products = Product.objects.filter(is_active=True).order_by("rice_name")
-    brokers = Broker.objects.all().order_by("broker_name")
+    if company is None:
+        raise ValueError("generate_sale_invoice_no() needs a company.")
 
-    # Purchase stock list for dropdown
-    purchase_items = (
-        PurchaseItem.objects
-        .select_related("purchase", "purchase__mill", "product")
-        .order_by("-purchase__purchase_date", "-id")
-    )
+    return next_sale_invoice_no(company)
 
-    purchase_items_json = json.dumps([
-        {
-            "id": pi.id,
-            "product_id": pi.product_id,
-            "bag_weight": pi.bag_weight,
-            "label": f"{pi.purchase.invoice_no} / {pi.purchase.mill.mill_name} / Buy ₹{pi.purchase_price}/KG / {pi.bag_weight}kg bag",
-        }
-        for pi in purchase_items
-    ])
 
-    # -------------------------
-    # GET → show form
-    # -------------------------
-    if request.method == "GET":
-        return render(request, "core/add_sale.html", {
-            "products": products,
-            "brokers": brokers,
-            "purchase_items_json": purchase_items_json,
-        })
 
-    # -------------------------
-    # POST → review or save
-    # -------------------------
-    # step = request.POST.get("step", "review")  # "review" or "save"
-    step = request.POST.get("step", "review")
-    if step != "review":
-        step = "review"
-    # Common fields
-    sale_date = request.POST.get("sale_date")
-    customer_name = request.POST.get("customer_name")
-    customer_gst = request.POST.get("customer_gst", "")
-    broker_id = request.POST.get("broker_id") or None
-
-    vehicle_number = request.POST.get("vehicle_number")
-    driver_name = request.POST.get("driver_name")
-    transporter_name = request.POST.get("transporter_name")
-
-    # Rice selling fields
-    try:
-        product_id = int(request.POST.get("product_id") or 0)
-    except:
-        product_id = 0
-
-    bag_weight = Decimal(request.POST.get("bag_weight") or "0")
-    total_bags = int(request.POST.get("total_bags") or 0)
-
-    rate_per_kg = Decimal(request.POST.get("rate_per_kg") or "0")
-    gst_percent = Decimal(request.POST.get("gst_percent") or "0")
-    advance_received = Decimal(request.POST.get("advance_received") or "0")
-
-    # Transport fields
-    transport_rate_per_ton = Decimal(request.POST.get("transport_rate_per_ton") or "0")
-    transport_paid_by_dealer = Decimal(request.POST.get("transport_paid_by_dealer") or "0")
-    transport_paid_by_customer = Decimal(request.POST.get("transport_paid_by_customer") or "0")
-
-    # Internal breakup fields
-    purchase_item_ids = request.POST.getlist("purchase_item[]")
-    row_bags_list = request.POST.getlist("row_bags[]")
-
-    # -------------------------
-    # Validations
-    # -------------------------
-    if not sale_date or not customer_name:
-        messages.error(request, "Sale Date and Customer Name are required.")
-        return render(request, "core/add_sale.html", {
-            "products": products,
-            "brokers": brokers,
-            "purchase_items_json": purchase_items_json,
-        })
-
-    if product_id <= 0:
-        messages.error(request, "Please select a Product.")
-        return render(request, "core/add_sale.html", {
-            "products": products,
-            "brokers": brokers,
-            "purchase_items_json": purchase_items_json,
-        })
-
-    if total_bags <= 0 or bag_weight <= 0:
-        messages.error(request, "Total Bags and Bag Weight must be greater than 0.")
-        return render(request, "core/add_sale.html", {
-            "products": products,
-            "brokers": brokers,
-            "purchase_items_json": purchase_items_json,
-        })
-
-    if len(purchase_item_ids) != len(row_bags_list):
-        messages.error(request, "Internal breakup rows are invalid.")
-        return render(request, "core/add_sale.html", {
-            "products": products,
-            "brokers": brokers,
-            "purchase_items_json": purchase_items_json,
-        })
-
-    # count only valid rows (pid + bags>0)
-    valid_rows = 0
-    breakup_sum = 0
-    for pid, bags_str in zip(purchase_item_ids, row_bags_list):
-        bags = int(bags_str or 0)
-        if pid and bags > 0:
-            valid_rows += 1
-            breakup_sum += bags
-
-    if valid_rows == 0:
-        messages.error(request, "Please add at least 1 breakup row (Purchase Stock + Bags).")
-        return render(request, "core/add_sale.html", {
-            "products": products,
-            "brokers": brokers,
-            "purchase_items_json": purchase_items_json,
-        })
-
-    if breakup_sum != total_bags:
-        messages.error(request, f"Internal breakup bags ({breakup_sum}) must match Total Bags ({total_bags}).")
-        return render(request, "core/add_sale.html", {
-            "products": products,
-            "brokers": brokers,
-            "purchase_items_json": purchase_items_json,
-        })
-
-    # -------------------------
-    # Calculations
-    # -------------------------
-    total_kg = Decimal(total_bags) * bag_weight
-
-    taxable_amount = total_kg * rate_per_kg
-    gst_amount = (taxable_amount * gst_percent) / Decimal("100")
-    rice_total = taxable_amount + gst_amount
-
-    rice_due = rice_total - advance_received
-    if rice_due < 0:
-        rice_due = Decimal("0")
-
-    total_ton = total_kg / Decimal("1000")
-    transport_charge = total_ton * transport_rate_per_ton
-
-    transport_due = transport_charge - (transport_paid_by_dealer + transport_paid_by_customer)
-    if transport_due < 0:
-        transport_due = Decimal("0")
-
-    grand_total = rice_total + transport_charge
-
-    # -------------------------
-    # Build breakup rows (for review + save)
-    # -------------------------
-    selected_ids = [int(pid) for pid, bags_str in zip(purchase_item_ids, row_bags_list) if pid and int(bags_str or 0) > 0]
-
-    pi_map = {
-        pi.id: pi
-        for pi in PurchaseItem.objects.select_related("purchase", "purchase__mill", "product").filter(id__in=selected_ids)
-    }
-
-    breakup_rows = []
-    buy_cost_total = Decimal("0")
-
-    for pid, bags_str in zip(purchase_item_ids, row_bags_list):
-        if not pid:
-            continue
-        bags = int(bags_str or 0)
-        if bags <= 0:
-            continue
-
-        pi = pi_map.get(int(pid))
-        if not pi:
-            continue
-
-        if not pi.bag_weight:
-            messages.error(request, "Selected purchase stock has no bag weight.")
-            return render(request, "core/add_sale.html", {
-                "products": products,
-                "brokers": brokers,
-                "purchase_items_json": purchase_items_json,
-            })
-
-        bw = Decimal(str(pi.bag_weight))
-        row_kg = bw * Decimal(bags)
-        buy_rate = Decimal(str(pi.purchase_price or 0))
-        row_amount = row_kg * buy_rate
-
-        buy_cost_total += row_amount
-
-        breakup_rows.append({
-            "purchase_item_id": pi.id,
-            "invoice_no": pi.purchase.invoice_no,
-            "mill_name": pi.purchase.mill.mill_name,
-            "mill_id": pi.purchase.mill_id,
-            "product_name": pi.product.rice_name,
-            "product_id": pi.product_id,
-            "bag_weight": int(pi.bag_weight),
-            "bags": bags,
-            "kg": row_kg,
-            "buy_rate": buy_rate,
-            "amount": row_amount,
-        })
-
-    profit_estimate = rice_total - buy_cost_total
-
-    # -------------------------
-    # REVIEW (no save)
-    # -------------------------
-    if step == "review":
-        return render(request, "core/sale_review.html", {
-            "sale_date": sale_date,
-            "customer_name": customer_name,
-            "customer_gst": customer_gst,
-            "broker_id": broker_id,
-
-            "vehicle_number": vehicle_number,
-            "driver_name": driver_name,
-            "transporter_name": transporter_name,
-
-            "product_id": product_id,
-            "bag_weight": bag_weight,
-            "total_bags": total_bags,
-            "rate_per_kg": rate_per_kg,
-            "gst_percent": gst_percent,
-            "advance_received": advance_received,
-
-            "total_kg": total_kg,
-            "taxable_amount": taxable_amount,
-            "gst_amount": gst_amount,
-            "rice_total": rice_total,
-            "rice_due": rice_due,
-
-            "transport_rate_per_ton": transport_rate_per_ton,
-            "transport_paid_by_dealer": transport_paid_by_dealer,
-            "transport_paid_by_customer": transport_paid_by_customer,
-            "transport_charge": transport_charge,
-            "transport_due": transport_due,
-
-            "grand_total": grand_total,
-            "breakup_rows": breakup_rows,
-            "buy_cost_total": buy_cost_total,
-            "profit_estimate": profit_estimate,
-
-            # used for hidden inputs on confirm
-            "raw_post": request.POST,
-        })
-
-    # -------------------------
-    # SAVE (confirm)
-    # -------------------------
-    invoice_no = generate_sale_invoice_no()
-
-    with transaction.atomic():
-        sale = Sale.objects.create(
-            invoice_no=invoice_no,
-
-            customer_name=customer_name,
-            customer_gst=customer_gst,
-            broker_id=broker_id,
-
-            sale_date=sale_date,
-            vehicle_number=vehicle_number,
-            driver_name=driver_name,
-            transporter_name=transporter_name,
-
-            transport_charge=transport_charge,
-            transport_paid_by_dealer=transport_paid_by_dealer,
-            transport_paid_by_customer=transport_paid_by_customer,
-
-            total_quantity_kg=total_kg,
-            taxable_amount=taxable_amount,
-            gst_percent=gst_percent,
-            gst_amount=gst_amount,
-
-            total_amount=grand_total,
-
-            advance_received=advance_received,
-            balance_amount=rice_due,
-        )
-
-        # ✅ Save breakup as BUY COST rows (NO NULL fields)
-        for row in breakup_rows:
-            SaleItem.objects.create(
-                sale=sale,
-                product_id=row["product_id"],
-                mill_id=row["mill_id"],
-                bag_weight=row["bag_weight"],
-                bag_count=row["bags"],
-                rate_per_kg=row["buy_rate"],
-                total_weight=row["kg"],
-                amount=row["amount"],
-            )
-
-    messages.success(request, f"✅ Sale saved: {invoice_no}")
-    return redirect("sale_detail", sale_id=sale.id)
-
-
-
-
-
-# def _d(v, default="0"):
-#     """Safe Decimal conversion."""
-#     try:
-#         if v is None or str(v).strip() == "":
-#             return Decimal(default)
-#         return Decimal(str(v).strip())
-#     except (InvalidOperation, ValueError, TypeError):
-#         return Decimal(default)
-
-
-# def add_sale(request):
-    products = Product.objects.filter(is_active=True).order_by("rice_name")
-    brokers = Broker.objects.all().order_by("broker_name")
-
-    purchase_items = (
-        PurchaseItem.objects
-        .select_related("purchase", "purchase__mill", "product")
-        .order_by("-purchase__purchase_date", "-id")
-    )
-
-    purchase_items_json = json.dumps([
-        {
-            "id": pi.id,
-            "product_id": pi.product_id,
-            "bag_weight": pi.bag_weight,
-            "label": f"{pi.purchase.invoice_no} / {pi.purchase.mill.mill_name} / Buy ₹{pi.purchase_price}/KG / {pi.bag_weight}kg bag",
-        }
-        for pi in purchase_items
-    ])
-
-    # -------------------------
-    # GET → show form (prefill from session draft)
-    # -------------------------
-    if request.method == "GET":
-        draft = request.session.get("sale_draft") or {}
-        draft_lists = request.session.get("sale_draft_lists") or {}
-
-        return render(request, "core/add_sale.html", {
-            "products": products,
-            "brokers": brokers,
-            "purchase_items_json": purchase_items_json,
-
-            # ✅ Prefill
-            "draft": draft,
-            "draft_purchase_items": draft_lists.get("purchase_item", []),
-            "draft_row_bags": draft_lists.get("row_bags", []),
-        })
-
-    # -------------------------
-    # POST
-    # -------------------------
-    step = request.POST.get("step", "").strip()
-
-    # ✅ Step 2: Confirm & Save (from SESSION, not from hidden inputs)
-    if step == "save":
-        draft = request.session.get("sale_draft") or {}
-        draft_lists = request.session.get("sale_draft_lists") or {}
-
-        if not draft:
-            messages.error(request, "Draft not found. Please fill the sale form again.")
-            return redirect("add_sale")
-
-        # -------- Read scalar fields from draft --------
-        sale_date = draft.get("sale_date") or str(timezone.now().date())
-        customer_name = (draft.get("customer_name") or "").strip()
-        customer_gst = (draft.get("customer_gst") or "").strip()
-        broker_id = draft.get("broker_id") or None
-
-        vehicle_number = (draft.get("vehicle_number") or "").strip()
-        driver_name = (draft.get("driver_name") or "").strip()
-        transporter_name = (draft.get("transporter_name") or "").strip()
-
-        product_id = draft.get("product_id") or None
-        bag_weight = int(draft.get("bag_weight") or 0)
-        total_bags = int(draft.get("total_bags") or 0)
-
-        rate_per_kg = _d(draft.get("rate_per_kg"), "0")
-        gst_percent = int(draft.get("gst_percent") or 0)
-        advance_received = _d(draft.get("advance_received"), "0")
-
-        transport_rate_per_ton = _d(draft.get("transport_rate_per_ton"), "0")
-        transport_paid_by_dealer = _d(draft.get("transport_paid_by_dealer"), "0")
-        transport_paid_by_customer = _d(draft.get("transport_paid_by_customer"), "0")
-
-        # -------- Basic validation --------
-        if not customer_name or not product_id or total_bags <= 0 or bag_weight <= 0:
-            messages.error(request, "Missing required fields in draft. Please edit and try again.")
-            return redirect("add_sale")
-
-        # -------- Compute totals --------
-        total_kg = Decimal(total_bags) * Decimal(bag_weight)
-        taxable_amount = total_kg * rate_per_kg
-        gst_amount = (taxable_amount * Decimal(gst_percent)) / Decimal("100")
-        rice_total = taxable_amount + gst_amount
-
-        rice_due = rice_total - advance_received
-
-        # Transport charge based on ton: (kg / 1000) * rate_per_ton
-        transport_charge = (total_kg / Decimal("1000")) * transport_rate_per_ton
-        transport_due = transport_charge - (transport_paid_by_dealer + transport_paid_by_customer)
-
-        grand_total = rice_total + transport_charge
-
-        # -------- Breakup arrays from session --------
-        purchase_item_ids = draft_lists.get("purchase_item", [])
-        row_bags_list = draft_lists.get("row_bags", [])
-
-        breakup_rows = []
-        buy_cost_total = Decimal("0")
-
-        # Validate arrays length
-        if len(purchase_item_ids) != len(row_bags_list):
-            messages.error(request, "Breakup rows mismatch. Please edit and try again.")
-            return redirect("add_sale")
-
-        # Build breakup rows and compute buy cost
-        for pid, bags_str in zip(purchase_item_ids, row_bags_list):
-            bags = int(bags_str or 0)
-            if bags <= 0:
-                continue
-
-            pi = PurchaseItem.objects.select_related("purchase", "purchase__mill").get(id=int(pid))
-            kg = Decimal(bags) * Decimal(pi.bag_weight)
-            amount = kg * pi.purchase_price
-
-            buy_cost_total += amount
-            breakup_rows.append({
-                "purchase_item": pi,
-                "purchase_item_id": pi.id,
-                "invoice_no": pi.purchase.invoice_no,
-                "mill_name": pi.purchase.mill.mill_name,
-                "bag_weight": pi.bag_weight,
-                "bags": bags,
-                "kg": kg,
-                "buy_rate": pi.purchase_price,
-                "amount": amount,
-            })
-
-        profit_estimate = rice_total - buy_cost_total
-
-        # -------- Save Sale --------
-        broker = Broker.objects.filter(id=broker_id).first() if broker_id else None
-        product = Product.objects.get(id=int(product_id))
-
-        sale = Sale.objects.create(
-            invoice_no=f"SALE-{timezone.now().strftime('%Y%m%d%H%M%S')}",
-            customer_name=customer_name,
-            customer_gst=customer_gst,
-            sale_date=sale_date,
-            vehicle_number=vehicle_number,
-            driver_name=driver_name,
-            transporter_name=transporter_name,
-
-            total_quantity_kg=total_kg,
-            taxable_amount=taxable_amount,
-            gst_percent=gst_percent,
-            gst_amount=gst_amount,
-
-            # ✅ Keep this as RICE total (recommended)
-            total_amount=rice_total,
-
-            advance_received=advance_received,
-            balance_amount=rice_due,
-
-            broker=broker,
-
-            # Transport separate
-            transport_charge=transport_charge,
-            paid_by_dealer=transport_paid_by_dealer,
-            paid_by_customer=transport_paid_by_customer,
-        )
-
-        # Save SaleItems breakup rows
-        # (This assumes your SaleItem has these fields, adjust if different)
-        for r in breakup_rows:
-            SaleItem.objects.create(
-                sale=sale,
-                product=product,
-                mill=r["purchase_item"].purchase.mill,
-                bag_weight=r["bag_weight"],
-                bag_count=r["bags"],
-                rate_per_kg=rate_per_kg,  # selling rate
-                total_weight=r["kg"],
-                amount=(r["kg"] * rate_per_kg),
-            )
-
-        # ✅ Clear draft after successful save
-        request.session.pop("sale_draft", None)
-        request.session.pop("sale_draft_lists", None)
-        request.session.modified = True
-
-        messages.success(request, "Sale saved successfully ✅")
-        return redirect("sale_detail", sale.id)
-
-    # ✅ Step 1: Review (store draft in session + render review)
-    # This runs when POST comes from the form and step != save
-
-    # Save draft to session
-    request.session["sale_draft"] = dict(request.POST.items())
-    request.session["sale_draft_lists"] = {
-        "purchase_item": request.POST.getlist("purchase_item[]"),
-        "row_bags": request.POST.getlist("row_bags[]"),
-    }
-    request.session.modified = True
-
-    # Build review page context from POST (same as before)
-    sale_date = request.POST.get("sale_date") or str(timezone.now().date())
-    customer_name = request.POST.get("customer_name", "")
-    customer_gst = request.POST.get("customer_gst", "")
-    broker_id = request.POST.get("broker_id") or ""
-
-    vehicle_number = request.POST.get("vehicle_number", "")
-    driver_name = request.POST.get("driver_name", "")
-    transporter_name = request.POST.get("transporter_name", "")
-
-    product_id = request.POST.get("product_id") or ""
-    bag_weight = int(request.POST.get("bag_weight") or 0)
-    total_bags = int(request.POST.get("total_bags") or 0)
-
-    rate_per_kg = _d(request.POST.get("rate_per_kg"), "0")
-    gst_percent = int(request.POST.get("gst_percent") or 0)
-    advance_received = _d(request.POST.get("advance_received"), "0")
-
-    transport_rate_per_ton = _d(request.POST.get("transport_rate_per_ton"), "0")
-    transport_paid_by_dealer = _d(request.POST.get("transport_paid_by_dealer"), "0")
-    transport_paid_by_customer = _d(request.POST.get("transport_paid_by_customer"), "0")
-
-    total_kg = Decimal(total_bags) * Decimal(bag_weight)
-    taxable_amount = total_kg * rate_per_kg
-    gst_amount = (taxable_amount * Decimal(gst_percent)) / Decimal("100")
-    rice_total = taxable_amount + gst_amount
-    rice_due = rice_total - advance_received
-
-    transport_charge = (total_kg / Decimal("1000")) * transport_rate_per_ton
-    transport_due = transport_charge - (transport_paid_by_dealer + transport_paid_by_customer)
-
-    grand_total = rice_total + transport_charge
-
-    purchase_item_ids = request.POST.getlist("purchase_item[]")
-    row_bags_list = request.POST.getlist("row_bags[]")
-
-    breakup_rows = []
-    buy_cost_total = Decimal("0")
-
-    if len(purchase_item_ids) == len(row_bags_list):
-        for pid, bags_str in zip(purchase_item_ids, row_bags_list):
-            bags = int(bags_str or 0)
-            if bags <= 0:
-                continue
-            pi = PurchaseItem.objects.select_related("purchase", "purchase__mill").get(id=int(pid))
-            kg = Decimal(bags) * Decimal(pi.bag_weight)
-            amount = kg * pi.purchase_price
-            buy_cost_total += amount
-            breakup_rows.append({
-                "purchase_item_id": pi.id,
-                "invoice_no": pi.purchase.invoice_no,
-                "mill_name": pi.purchase.mill.mill_name,
-                "bag_weight": pi.bag_weight,
-                "bags": bags,
-                "kg": kg,
-                "buy_rate": pi.purchase_price,
-                "amount": amount,
-            })
-
-    profit_estimate = rice_total - buy_cost_total
-
-    return render(request, "core/sale_review.html", {
-        "sale_date": sale_date,
-        "customer_name": customer_name,
-        "customer_gst": customer_gst,
-        "broker_id": broker_id,
-
-        "vehicle_number": vehicle_number,
-        "driver_name": driver_name,
-        "transporter_name": transporter_name,
-
-        "product_id": product_id,
-        "bag_weight": bag_weight,
-        "total_bags": total_bags,
-        "total_kg": total_kg,
-        "rate_per_kg": rate_per_kg,
-
-        "gst_percent": gst_percent,
-        "taxable_amount": taxable_amount,
-        "gst_amount": gst_amount,
-        "rice_total": rice_total,
-        "advance_received": advance_received,
-        "rice_due": rice_due,
-
-        "transport_rate_per_ton": transport_rate_per_ton,
-        "transport_charge": transport_charge,
-        "transport_paid_by_dealer": transport_paid_by_dealer,
-        "transport_paid_by_customer": transport_paid_by_customer,
-        "transport_due": transport_due,
-
-        "breakup_rows": breakup_rows,
-        "buy_cost_total": buy_cost_total,
-        "profit_estimate": profit_estimate,
-        "grand_total": grand_total,
-    })
-
-@login_required
-def sale_review(request):
-    if request.method != "POST":
-        return redirect("add_sale")
-
-    # Get all form data
-    data = request.POST.copy()
-
-    bag_weight = Decimal(data.get("bag_weight") or "0")
-    total_bags = Decimal(data.get("total_bags") or "0")
-    rate_per_kg = Decimal(data.get("rate_per_kg") or "0")
-    gst_percent = Decimal(data.get("gst_percent") or "0")
-    advance = Decimal(data.get("advance_received") or "0")
-
-    total_kg = bag_weight * total_bags
-    taxable = total_kg * rate_per_kg
-    gst_amt = (taxable * gst_percent) / Decimal("100")
-    rice_total = taxable + gst_amt
-    rice_due = rice_total - advance
-
-    total_ton = total_kg / Decimal("1000")
-    transport_rate = Decimal(data.get("transport_rate_per_ton") or "0")
-    transport_charge = total_ton * transport_rate
-
-    transport_due = transport_charge - (
-        Decimal(data.get("transport_paid_by_dealer") or "0") +
-        Decimal(data.get("transport_paid_by_customer") or "0")
-    )
-
-    context = {
-        "data": data,
-        "total_kg": round(total_kg, 2),
-        "taxable": round(taxable, 2),
-        "gst_amt": round(gst_amt, 2),
-        "rice_total": round(rice_total, 2),
-        "rice_due": round(rice_due, 2),
-        "transport_charge": round(transport_charge, 2),
-        "transport_due": round(transport_due, 2),
-    }
-
-    return render(request, "core/sale_review.html", context)
-
-@transaction.atomic
-def sale_confirm_save(request):
-    company = request.user.userprofile.company
-    if request.method != "POST":
-        return redirect("sale_list")
-
-    invoice_no = generate_sale_invoice_no()
-
-    sale = Sale.objects.create(
-        company=company,
-        invoice_no=invoice_no,
-        customer_name=request.POST.get("customer_name"),
-        customer_gst=request.POST.get("customer_gst"),
-        broker_id=request.POST.get("broker_id") or None,
-        sale_date=request.POST.get("sale_date"),
-
-        vehicle_number=request.POST.get("vehicle_number"),
-        driver_name=request.POST.get("driver_name"),
-        transporter_name=request.POST.get("transporter_name"),
-
-        total_quantity_kg=request.POST.get("total_kg"),
-        taxable_amount=request.POST.get("taxable"),
-        gst_percent=request.POST.get("gst_percent"),
-        gst_amount=request.POST.get("gst_amt"),
-
-        transport_charge=request.POST.get("transport_charge"),
-        transport_paid_by_dealer=request.POST.get("transport_paid_by_dealer") or 0,
-        transport_paid_by_customer=request.POST.get("transport_paid_by_customer") or 0,
-
-        advance_received=request.POST.get("advance_received") or 0,
-        total_amount=request.POST.get("rice_total"),
-        balance_amount=request.POST.get("rice_due"),
-    )
-
-    return redirect("sale_print", sale_id=sale.id)
 @login_required
 def sale_print(request, sale_id):
     company = request.user.userprofile.company

@@ -1,6 +1,9 @@
 from ..base_imports import *
+from core.permissions import manager_required
+
 
 @login_required
+@manager_required
 def delete_mill(request, mill_id):
     company = request.user.userprofile.company
 

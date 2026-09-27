@@ -9,6 +9,7 @@ from django.shortcuts import (
 
 from core.models import Customer
 from core.forms import CustomerForm
+from core.permissions import manager_required
 
 
 @login_required
@@ -123,6 +124,7 @@ def edit_customer(request, customer_id):
 
 
 @login_required
+@manager_required
 def delete_customer(request, customer_id):
 
     company = request.user.userprofile.company

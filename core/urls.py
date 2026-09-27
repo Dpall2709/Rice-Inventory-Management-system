@@ -44,8 +44,6 @@ urlpatterns = [
 
     path("sales/", views.sale_list, name="sale_list"),
     path("sales/add/", views.add_sale, name="add_sale"),
-    path("sales/review/", views.sale_review, name="sale_review"),
-    path("sales/confirm-save/", views.sale_confirm_save, name="sale_confirm_save"),
     path("sales/<int:sale_id>/", views.sale_detail, name="sale_detail"),
     path("sales/<int:sale_id>/print/", views.sale_print, name="sale_print"),
     path("sales/<int:sale_id>/payment/add/", views.add_sale_payment, name="add_sale_payment"),

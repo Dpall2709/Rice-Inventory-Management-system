@@ -23,23 +23,42 @@ def _amount_words(n: Decimal):
 def sale_invoice_pdf(request, sale_id):
     company = request.user.userprofile.company
     sale = get_object_or_404(Sale, id=sale_id, company=company)
-    items = SaleItem.objects.filter(sale=sale).select_related("product", "mill")
+    items = SaleItem.objects.for_company(company).filter(sale=sale).select_related("product", "mill")
 
-    # ===== Company =====
-    company_name = getattr(settings, "COMPANY_NAME", "Company Name")
-    company_address = getattr(settings, "COMPANY_ADDRESS", "")
-    company_phone = getattr(settings, "COMPANY_PHONE", "")
-    company_email = getattr(settings, "COMPANY_EMAIL", "")
-    company_gstin = getattr(settings, "COMPANY_GSTIN", "")
-    company_pan = getattr(settings, "COMPANY_PAN", "")
+    # ===== Seller details =====
+    # These come from the logged-in user's OWN company row, so every tenant
+    # prints its own invoice. The settings.py constants are only a fallback for
+    # a company that has not filled a field in yet.
+    def own(field, setting_name, default=""):
+        value = (getattr(company, field, "") or "").strip()
+        if value:
+            return value
+        return getattr(settings, setting_name, default)
+
+    company_name = company.company_name or getattr(settings, "COMPANY_NAME", "Company Name")
+
+    address_parts = [
+        (company.address or "").strip(),
+        (company.city or "").strip(),
+        (company.state or "").strip(),
+        (company.pincode or "").strip(),
+    ]
+    company_address = ", ".join(part for part in address_parts if part)
+    if not company_address:
+        company_address = getattr(settings, "COMPANY_ADDRESS", "")
+
+    company_phone = own("mobile", "COMPANY_PHONE")
+    company_email = own("email", "COMPANY_EMAIL")
+    company_gstin = own("gst_number", "COMPANY_GSTIN")
+    company_pan = own("pan_number", "COMPANY_PAN")
 
     # ===== Bank =====
-    bank_ac_name = getattr(settings, "BANK_ACCOUNT_NAME", company_name)
-    bank_ac_no = getattr(settings, "BANK_ACCOUNT_NO", "")
-    bank_name = getattr(settings, "BANK_NAME", "")
-    bank_ifsc = getattr(settings, "BANK_IFSC", "")
-    bank_branch = getattr(settings, "BANK_BRANCH", "")
-    upi_id = getattr(settings, "UPI_ID", "")
+    bank_ac_name = own("bank_account_name", "BANK_ACCOUNT_NAME", company_name) or company_name
+    bank_ac_no = own("bank_account_no", "BANK_ACCOUNT_NO")
+    bank_name = own("bank_name", "BANK_NAME")
+    bank_ifsc = own("bank_ifsc", "BANK_IFSC")
+    bank_branch = own("bank_branch", "BANK_BRANCH")
+    upi_id = own("upi_id", "UPI_ID")
 
     # ===== Amounts (invoice total = RICE ONLY) =====
     taxable = Decimal(str(sale.taxable_amount or 0))

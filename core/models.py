@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import User
 
+from .tenancy import TenantManager
+
 
 
 # Create your models here.
@@ -21,6 +23,8 @@ class Company(models.Model):
     country = models.CharField(max_length=100, default="India")
     pincode = models.CharField(max_length=10, blank=True)
 
+    pan_number = models.CharField(max_length=20, blank=True)
+
     # Optional Logo
     logo = models.ImageField(
         upload_to="company_logo/",
@@ -28,7 +32,29 @@ class Company(models.Model):
         null=True
     )
 
-    # Subscription
+    # ---------------------------------------------------------------
+    # Invoice identity. These used to live as constants in settings.py,
+    # which meant every tenant printed the same name on their bills.
+    # ---------------------------------------------------------------
+    invoice_prefix = models.CharField(
+        max_length=10,
+        default="SAL",
+        help_text="Shown at the start of every sale invoice number, e.g. SAL-20260927-0001",
+    )
+
+    bank_account_name = models.CharField(max_length=150, blank=True)
+    bank_account_no = models.CharField(max_length=30, blank=True)
+    bank_name = models.CharField(max_length=100, blank=True)
+    bank_ifsc = models.CharField(max_length=20, blank=True)
+    bank_branch = models.CharField(max_length=100, blank=True)
+    upi_id = models.CharField(max_length=100, blank=True)
+
+    invoice_terms = models.TextField(
+        blank=True,
+        help_text="Terms and conditions printed at the bottom of the invoice.",
+    )
+
+    # Subscription (kept in step with the billing app's Subscription row)
     subscription_start = models.DateField()
     subscription_end = models.DateField()
 
@@ -109,6 +135,8 @@ class Customer(models.Model):
         auto_now=True
     )
 
+    objects = TenantManager()
+
     def __str__(self):
         return self.customer_name
 
@@ -122,6 +150,8 @@ class Product(models.Model):
     hsn_code = models.CharField(max_length=20)
     gst_percent = models.IntegerField()
     is_active = models.BooleanField(default=True)
+
+    objects = TenantManager()
 
     def __str__(self):
         return self.rice_name
@@ -140,6 +170,8 @@ class Mill(models.Model):
     opening_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    objects = TenantManager()
+
     def __str__(self):
         return self.mill_name
     
@@ -154,12 +186,20 @@ class Purchase(models.Model):
     purchase_date = models.DateField()
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
 
+    objects = TenantManager()
+
 class PurchaseItem(models.Model):
+    # This model has no company column of its own; it inherits the tenant of
+    # its parent purchase. `company_path` tells TenantManager how to reach it.
+    company_path = "purchase__company"
+
     purchase = models.ForeignKey(Purchase, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     bag_weight = models.IntegerField()   # 20 / 30
     bag_count = models.IntegerField()
     purchase_price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    objects = TenantManager()
 
 class Broker(models.Model):
     company = models.ForeignKey(
@@ -175,6 +215,8 @@ class Broker(models.Model):
     opening_balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    objects = TenantManager()
+
     def __str__(self):
         return self.broker_name
 
@@ -184,7 +226,7 @@ class Sale(models.Model):
     on_delete=models.CASCADE,
     related_name="sales"
     )
-    invoice_no = models.CharField(max_length=30, unique=True, blank=True)
+    invoice_no = models.CharField(max_length=30, blank=True)
 
     customer_name = models.CharField(max_length=100)
     customer_gst = models.CharField(max_length=15, blank=True, null=True)
@@ -215,6 +257,18 @@ class Sale(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    objects = TenantManager()
+
+    class Meta:
+        # Each company runs its own invoice series, so the same number may
+        # legitimately exist in two different companies.
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "invoice_no"],
+                name="unique_sale_invoice_no_per_company",
+            )
+        ]
+
 
 # class SaleItem(models.Model):
 #     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="items")
@@ -239,6 +293,8 @@ class Sale(models.Model):
 #     buy_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
 class SaleItem(models.Model):
+    company_path = "sale__company"
+
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="items")
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
     mill = models.ForeignKey(Mill, on_delete=models.CASCADE)
@@ -253,6 +309,8 @@ class SaleItem(models.Model):
 
     # ✅ BUY amount (bags * bag_weight * rate_per_kg)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    objects = TenantManager()
 
     def __str__(self):
         return f"{self.sale.invoice_no} - {self.mill.mill_name} - {self.product.rice_name}"
@@ -279,6 +337,8 @@ class Payment(models.Model):
     notes = models.TextField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = TenantManager()
 
     def __str__(self):
         return f"{self.related_type} payment - {self.amount}"
@@ -326,3 +386,37 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return self.user.username
+
+class InvoiceSequence(models.Model):
+    """
+    One row per company per number series, used to hand out sale invoice
+    numbers safely when two users save at the same moment.
+
+    The old code did `Sale.objects.filter(...).order_by("-id").first()` across
+    ALL companies, which mixed tenants together and could hand the same number
+    to two people at once.
+    """
+
+    company = models.ForeignKey(
+        Company,
+        on_delete=models.CASCADE,
+        related_name="invoice_sequences",
+    )
+
+    # e.g. "SAL-20260927" - prefix plus the day the series belongs to
+    key = models.CharField(max_length=40)
+
+    last_number = models.PositiveIntegerField(default=0)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "key"],
+                name="unique_invoice_sequence_per_company_key",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.company_id}:{self.key} = {self.last_number}"

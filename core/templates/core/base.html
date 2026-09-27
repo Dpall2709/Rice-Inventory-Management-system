@@ -12,7 +12,7 @@
   <!-- SIDEBAR -->
   <aside class="sidebar" >
     <div class="brand">
-      <div class="brand-logo">🌾 Rice Billing</div>
+      <div class="brand-logo">🌾 {{ request.company.company_name|default:"Rice Billing" }}</div>
     </div>
 
     <nav class="menu">
@@ -42,8 +42,12 @@
           👥 Customers
       </a>
 
-      <a class="menu-item" href="#">💳 Payments</a>
-      <a class="menu-item" href="#">📊 Reports</a>
+      <a class="menu-item {% if request.resolver_match.namespace == 'billing' %}active{% endif %}"
+         href="{% url 'billing:home' %}">💳 Subscription</a>
+
+      {% if request.user.is_staff %}
+        <a class="menu-item" href="{% url 'billing:manage_companies' %}">🛡 All companies</a>
+      {% endif %}
     </nav>
 
     <div class="sidebar-footer">
@@ -67,7 +71,7 @@
         <button class="icon-btn" type="button" title="Notifications">🔔</button>
 
         <div class="user">
-          <div class="user-avatar">S</div>
+          <div class="user-avatar">{{ request.company.company_name|slice:":1"|upper|default:"U" }}</div>
           <div class="user-name">{{ request.user.username }}</div>
         </div>
       </div>
@@ -75,6 +79,25 @@
 
     <!-- PAGE CONTENT -->
     <main class="content">
+
+      {% if request.subscription %}
+        {% if request.read_only %}
+          <div class="msg" style="background:#fef2f2;color:#b91c1c;border-left:4px solid #dc2626;">
+            <strong>Your subscription has ended.</strong>
+            Your data is safe and every report still opens, but nothing new can be saved.
+            <a href="{% url 'billing:home' %}" style="color:#b91c1c;font-weight:700;">Renew now →</a>
+          </div>
+        {% elif request.subscription.needs_warning %}
+          <div class="msg" style="background:#fffbeb;color:#b45309;border-left:4px solid #f59e0b;">
+            {% if request.subscription.in_trial %}
+              Your free trial ends in <strong>{{ request.subscription.days_left }} day{{ request.subscription.days_left|pluralize }}</strong>.
+            {% else %}
+              Your subscription ends in <strong>{{ request.subscription.days_left }} day{{ request.subscription.days_left|pluralize }}</strong>.
+            {% endif %}
+            <a href="{% url 'billing:home' %}" style="color:#b45309;font-weight:700;">Choose a plan →</a>
+          </div>
+        {% endif %}
+      {% endif %}
 
       {% if messages %}
         <div class="msg-wrap">

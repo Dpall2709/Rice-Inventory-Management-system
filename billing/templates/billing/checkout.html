@@ -1,0 +1,72 @@
+{% extends "core/base.html" %}
+{% block page_title %}Pay for {{ plan.name }}{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <div class="list-header">
+    <div class="list-title">{{ plan.name }} plan</div>
+    <div class="card-value">₹ {{ plan.price }}</div>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="info-label">Company</div>
+      <div class="info-value">{{ company.company_name }}</div>
+    </div>
+    <div class="info-card">
+      <div class="info-label">Adds</div>
+      <div class="info-value">{{ plan.duration_days }} days</div>
+    </div>
+  </div>
+
+{% if razorpay_enabled and order_id %}
+
+  <p class="muted">You will pay by UPI, card or netbanking through Razorpay.</p>
+
+  <button id="payBtn" class="btn btn-primary">Pay ₹{{ plan.price }} now</button>
+
+  <form id="resultForm" method="POST" action="{% url 'billing:payment_success' %}">
+    {% csrf_token %}
+    <input type="hidden" name="razorpay_order_id" value="{{ order_id }}">
+    <input type="hidden" name="razorpay_payment_id" id="razorpay_payment_id">
+    <input type="hidden" name="razorpay_signature" id="razorpay_signature">
+  </form>
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+    document.getElementById("payBtn").addEventListener("click", function () {
+      var rzp = new Razorpay({
+        key: "{{ razorpay_key }}",
+        amount: {{ amount_paise }},
+        currency: "INR",
+        name: "Rice Billing App",
+        description: "{{ plan.name }} subscription",
+        order_id: "{{ order_id }}",
+        prefill: { name: "{{ company.owner_name }}", email: "{{ company.email }}", contact: "{{ company.mobile }}" },
+        theme: { color: "#16a34a" },
+        handler: function (response) {
+          document.getElementById("razorpay_payment_id").value = response.razorpay_payment_id;
+          document.getElementById("razorpay_signature").value = response.razorpay_signature;
+          document.getElementById("resultForm").submit();
+        }
+      });
+      rzp.open();
+    });
+  </script>
+
+{% else %}
+
+  <p class="muted">
+    Online payment is not switched on yet. Please send <strong>₹{{ plan.price }}</strong> by UPI or
+    bank transfer and tell us the reference number — we will activate this plan for you.
+    Your request has been recorded as payment #{{ payment.id }}.
+  </p>
+
+  <a class="btn btn-outline" href="{% url 'billing:home' %}">Back to billing</a>
+
+{% endif %}
+
+</div>
+
+{% endblock %}

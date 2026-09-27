@@ -14,6 +14,9 @@ from ..models import (
     Mill
 )
 
+# Project helpers
+from ..services.invoice_number import next_sale_invoice_no
+
 # Python Standard Library
 import json
 
@@ -333,6 +336,7 @@ def add_sale(request):
 
                 pi = (
                     PurchaseItem.objects
+                    .for_company(company)
                     .select_related(
                         "purchase",
                         "purchase__mill"
@@ -757,6 +761,7 @@ def add_sale(request):
 
                 pi = (
                     PurchaseItem.objects
+                    .for_company(company)
                     .select_related(
                         "purchase",
                         "purchase__mill"
@@ -798,6 +803,7 @@ def add_sale(request):
 
         broker = (
             Broker.objects
+            .for_company(company)
             .filter(id=broker_id)
             .first()
             if broker_id else None
@@ -812,10 +818,8 @@ def add_sale(request):
             sale = Sale.objects.create(
                 company=company,
 
-                invoice_no=(
-                    f"SALE-"
-                    f"{timezone.now().strftime('%Y%m%d%H%M%S')}"
-                ),
+                # Per-company series, e.g. SAL-20260927-0003
+                invoice_no=next_sale_invoice_no(company),
 
                 customer_name=customer_name,
                 customer_gst=customer_gst,
@@ -872,7 +876,9 @@ def add_sale(request):
                     continue
 
                 product = (
-                    Product.objects.get(
+                    Product.objects
+                    .for_company(company)
+                    .get(
                         id=int(
                             product_ids[i]
                         )

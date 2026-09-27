@@ -81,26 +81,10 @@
     </table>
   </div>
 
-  <form method="POST" action="{% url 'sale_confirm_save' %}" style="margin-top:16px;">
-    {% csrf_token %}
-
-    {# re-post everything hidden #}
-    {% for k,v in hidden.items %}
-      <input type="hidden" name="{{ k }}" value="{{ v }}">
-    {% endfor %}
-
-    {% for x in hidden_list.purchase_item %}
-      <input type="hidden" name="purchase_item[]" value="{{ x }}">
-    {% endfor %}
-    {% for x in hidden_list.row_bags %}
-      <input type="hidden" name="row_bags[]" value="{{ x }}">
-    {% endfor %}
-
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary">✅ Confirm & Save</button>
-      <button type="button" class="btn btn-outline" onclick="history.back()">✏️ Back to Edit</button>
-    </div>
-  </form>
+  <div class="form-actions">
+    <button type="button" class="btn btn-primary" onclick="window.print()">🖨 Print</button>
+    <a class="btn btn-outline" href="{% url 'sale_detail' sale.id %}">Back to sale</a>
+  </div>
 
 </div>
 {% endblock %}

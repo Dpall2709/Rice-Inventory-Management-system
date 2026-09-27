@@ -1,0 +1,58 @@
+{% extends "core/base.html" %}
+{% block page_title %}All companies (staff){% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <div class="list-header">
+    <div class="list-title">Subscriptions — {{ rows|length }} companies</div>
+    <div class="muted">Today: {{ today|date:"d M Y" }}</div>
+  </div>
+
+  <div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Company</th><th>Owner</th><th>Mobile</th><th>Plan</th>
+        <th>Status</th><th>Valid until</th><th>Days left</th><th>Extend</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td class="bold">{{ row.company.company_name }}</td>
+          <td>{{ row.company.owner_name }}</td>
+          <td>{{ row.company.mobile }}</td>
+          <td>{{ row.subscription.plan.name|default:"—" }}</td>
+          <td>
+            {% if row.subscription.is_expired %}
+              <span class="badge badge-red">Expired</span>
+            {% elif row.subscription.in_trial %}
+              <span class="badge badge-orange">Trial</span>
+            {% else %}
+              <span class="badge badge-green">Active</span>
+            {% endif %}
+          </td>
+          <td>{{ row.subscription.end_date|date:"d-m-Y" }}</td>
+          <td class="{% if row.days_left < 0 %}d{% endif %}">{{ row.days_left }}</td>
+          <td>
+            <form method="POST" action="{% url 'billing:extend_subscription' row.company.id %}">
+              {% csrf_token %}
+              <select name="plan_code" class="input">
+                <option value="">— plan —</option>
+                {% for plan in plans %}
+                  <option value="{{ plan.code }}">{{ plan.name }} ({{ plan.duration_days }}d)</option>
+                {% endfor %}
+              </select>
+              <input class="input" type="number" name="days" placeholder="or days" style="width:90px;">
+              <button class="btn btn-primary" type="submit">Extend</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% endblock %}
