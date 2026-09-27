@@ -11,6 +11,7 @@ These cover the three things that must never break in a multi-company SaaS:
 """
 
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -19,8 +20,29 @@ from django.utils import timezone
 
 from billing.models import Plan, Subscription, SubscriptionPayment
 from billing.services import start_trial, subscription_for
-from core.models import Company, Mill, Product, UserProfile
+from core.models import Company, Mill, Payment, Product, Purchase, PurchaseItem, UserProfile
+from core.services.costing import line_costing, product_costing, purchase_costing
 from core.services.invoice_number import next_sale_invoice_no
+
+
+MILL_POST = {
+    "mill_name": "Test Mill",
+    "owner_name": "Owner",
+    "mobile": "9876543210",
+    "gst_number": "",
+    "address": "",
+    "city": "",
+    "state": "",
+    "opening_balance": "0",
+    "notes": "",
+}
+
+
+def mill_post(**overrides):
+    """Valid POST data for the mill form."""
+    data = dict(MILL_POST)
+    data.update(overrides)
+    return data
 
 
 def make_company(name, username, role="owner"):
@@ -119,14 +141,14 @@ class SubscriptionTests(TestCase):
     def test_expired_company_cannot_write(self):
         self.expire()
         response = self.client.post(
-            reverse("add_mill"), {"mill_name": "Should Not Save", "mobile": "1"}
+            reverse("add_mill"), mill_post(mill_name="Should Not Save")
         )
         self.assertRedirects(response, reverse("billing:home"))
         self.assertFalse(Mill.objects.filter(mill_name="Should Not Save").exists())
 
     def test_active_company_can_write(self):
         response = self.client.post(
-            reverse("add_mill"), {"mill_name": "Should Save", "mobile": "1"}
+            reverse("add_mill"), mill_post(mill_name="Should Save")
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Mill.objects.filter(mill_name="Should Save").exists())
@@ -173,22 +195,30 @@ class RolePermissionTests(TestCase):
 
     def test_staff_cannot_delete(self):
         self.client.login(username="delta_staff", password="TestPass#2026")
-        response = self.client.post(reverse("delete_mill", args=[self.mill.id]))
+        response = self.client.post(
+            reverse("delete_mill", args=[self.mill.id]), {"action": "delete"}
+        )
         self.assertRedirects(response, reverse("dashboard"))
         self.assertTrue(Mill.objects.filter(id=self.mill.id).exists())
 
     def test_staff_can_add(self):
         self.client.login(username="delta_staff", password="TestPass#2026")
         response = self.client.post(
-            reverse("add_mill"), {"mill_name": "Added By Staff", "mobile": "1"}
+            reverse("add_mill"), mill_post(mill_name="Added By Staff")
         )
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Mill.objects.filter(mill_name="Added By Staff").exists())
 
-    def test_owner_can_delete(self):
+    def test_owner_can_delete_an_unused_mill(self):
         self.client.login(username="delta_owner", password="TestPass#2026")
-        self.client.post(reverse("delete_mill", args=[self.mill.id]))
+        self.client.post(reverse("delete_mill", args=[self.mill.id]), {"action": "delete"})
         self.assertFalse(Mill.objects.filter(id=self.mill.id).exists())
+
+    def test_owner_can_deactivate(self):
+        self.client.login(username="delta_owner", password="TestPass#2026")
+        self.client.post(reverse("delete_mill", args=[self.mill.id]), {"action": "deactivate"})
+        self.mill.refresh_from_db()
+        self.assertFalse(self.mill.is_active)
 
     def test_staff_cannot_reach_checkout(self):
         self.client.login(username="delta_staff", password="TestPass#2026")
@@ -260,3 +290,695 @@ class StaffScreenTests(TestCase):
                 company=self.company, status=SubscriptionPayment.PAID
             ).exists()
         )
+
+
+class MillModuleTests(TestCase):
+    """The supplier module: validation, balances, soft delete, restore."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Theta Rice", "theta")
+        self.client.login(username="theta", password="TestPass#2026")
+
+        self.mill = Mill.objects.create(
+            company=self.company,
+            mill_name="Satya Rice Mill",
+            owner_name="Ramesh",
+            mobile="9876543210",
+            opening_balance=1000,
+        )
+
+    # ---------------- form validation ----------------
+
+    def post_mill(self, **overrides):
+        data = {
+            "mill_name": "New Mill",
+            "owner_name": "Owner",
+            "mobile": "9876500000",
+            "gst_number": "",
+            "address": "",
+            "city": "",
+            "state": "",
+            "opening_balance": "0",
+            "notes": "",
+        }
+        data.update(overrides)
+        return self.client.post(reverse("add_mill"), data)
+
+    def test_valid_mill_is_created(self):
+        response = self.post_mill(mill_name="Balaji Mill")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Mill.objects.filter(company=self.company, mill_name="Balaji Mill").exists())
+
+    def test_letters_are_rejected_as_a_mobile_number(self):
+        response = self.post_mill(mobile="not-a-number")
+        self.assertEqual(response.status_code, 200)   # form redisplayed with the error
+        self.assertContains(response, "10-digit mobile")
+        self.assertFalse(Mill.objects.filter(mill_name="New Mill").exists())
+
+    def test_mobile_with_country_code_is_accepted_and_trimmed(self):
+        self.post_mill(mill_name="Prefix Mill", mobile="+91 98765 11111")
+        mill = Mill.objects.get(mill_name="Prefix Mill")
+        self.assertEqual(mill.mobile, "9876511111")
+
+    def test_bad_gst_number_is_rejected(self):
+        response = self.post_mill(gst_number="INVALID123")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "does not look like a GST number")
+
+    def test_good_gst_number_is_stored_uppercase(self):
+        self.post_mill(mill_name="GST Mill", gst_number="10abcde1234f1z5")
+        self.assertEqual(Mill.objects.get(mill_name="GST Mill").gst_number, "10ABCDE1234F1Z5")
+
+    def test_duplicate_name_in_same_company_is_rejected(self):
+        response = self.post_mill(mill_name="satya rice mill")   # different case
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already have a supplier with this name")
+
+    def test_same_name_allowed_in_a_different_company(self):
+        other_company, other_user = make_company("Iota Rice", "iota")
+        self.client.login(username="iota", password="TestPass#2026")
+        response = self.post_mill(mill_name="Satya Rice Mill")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Mill.objects.filter(company=other_company, mill_name="Satya Rice Mill").exists())
+
+    def test_negative_opening_balance_is_rejected(self):
+        response = self.post_mill(opening_balance="-500")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "cannot be negative")
+
+    def test_non_numeric_opening_balance_does_not_crash(self):
+        response = self.post_mill(opening_balance="abcd")
+        self.assertEqual(response.status_code, 200)   # used to be a 500
+
+    # ---------------- balances on the list ----------------
+
+    def test_list_shows_opening_plus_purchases_minus_payments(self):
+        purchase = Purchase.objects.create(
+            company=self.company, mill=self.mill, invoice_no="P-1",
+            purchase_date=timezone.localdate(), total_amount=5000,
+        )
+        Payment.objects.create(
+            company=self.company, related_type="purchase", mill=self.mill,
+            purchase=purchase, amount=2000, payment_mode="Cash",
+            payment_date=timezone.localdate(),
+        )
+
+        from core.view.mill.mill_list import mill_queryset
+
+        row = mill_queryset(self.company).get(pk=self.mill.pk)
+        self.assertEqual(row.purchased, 5000)
+        self.assertEqual(row.paid, 2000)
+        self.assertEqual(row.balance, 4000)      # 1000 opening + 5000 - 2000
+
+        response = self.client.get(reverse("mill_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Satya Rice Mill")
+
+    def test_search_filters_the_list(self):
+        Mill.objects.create(company=self.company, mill_name="Balaji Mill", mobile="9000000000")
+
+        response = self.client.get(reverse("mill_list"), {"q": "balaji"})
+        self.assertContains(response, "Balaji Mill")
+        self.assertNotContains(response, "Satya Rice Mill")
+
+    # ---------------- soft delete ----------------
+
+    def test_mill_with_purchases_cannot_be_deleted(self):
+        Purchase.objects.create(
+            company=self.company, mill=self.mill, invoice_no="P-2",
+            purchase_date=timezone.localdate(), total_amount=100,
+        )
+
+        response = self.client.post(reverse("delete_mill", args=[self.mill.id]), {"action": "delete"})
+
+        self.mill.refresh_from_db()
+        self.assertTrue(Mill.objects.filter(pk=self.mill.pk).exists())
+        self.assertTrue(self.mill.is_active)      # not even deactivated
+        self.assertEqual(response.status_code, 302)
+
+    def test_deactivate_keeps_the_history(self):
+        Purchase.objects.create(
+            company=self.company, mill=self.mill, invoice_no="P-3",
+            purchase_date=timezone.localdate(), total_amount=100,
+        )
+
+        self.client.post(reverse("delete_mill", args=[self.mill.id]), {"action": "deactivate"})
+
+        self.mill.refresh_from_db()
+        self.assertFalse(self.mill.is_active)
+        self.assertEqual(Purchase.objects.filter(mill=self.mill).count(), 1)
+
+    def test_inactive_mill_is_hidden_from_the_list_and_from_the_purchase_form(self):
+        self.mill.is_active = False
+        self.mill.save()
+
+        response = self.client.get(reverse("mill_list"))
+        self.assertNotContains(response, "Satya Rice Mill")
+
+        response = self.client.get(reverse("mill_list"), {"status": "inactive"})
+        self.assertContains(response, "Satya Rice Mill")
+
+        response = self.client.get(reverse("add_purchase"))
+        self.assertNotContains(response, "Satya Rice Mill")
+
+    def test_unused_mill_can_be_deleted(self):
+        response = self.client.post(reverse("delete_mill", args=[self.mill.id]), {"action": "delete"})
+        self.assertRedirects(response, reverse("mill_list"))
+        self.assertFalse(Mill.objects.filter(pk=self.mill.pk).exists())
+
+    def test_restore_brings_a_mill_back(self):
+        self.mill.is_active = False
+        self.mill.save()
+
+        self.client.post(reverse("restore_mill", args=[self.mill.id]))
+
+        self.mill.refresh_from_db()
+        self.assertTrue(self.mill.is_active)
+
+    def test_another_company_cannot_deactivate_my_mill(self):
+        make_company("Kappa Rice", "kappa")
+        self.client.login(username="kappa", password="TestPass#2026")
+
+        response = self.client.post(reverse("delete_mill", args=[self.mill.id]), {"action": "deactivate"})
+        self.assertEqual(response.status_code, 404)
+
+        self.mill.refresh_from_db()
+        self.assertTrue(self.mill.is_active)
+
+    def test_whatsapp_number_adds_the_country_code(self):
+        self.assertEqual(self.mill.whatsapp_number, "919876543210")
+
+
+class PurchaseGstTests(TestCase):
+    """The money maths on a purchase bill."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Lambda Rice", "lambda_user")
+        self.client.login(username="lambda_user", password="TestPass#2026")
+
+        self.mill = Mill.objects.create(
+            company=self.company, mill_name="GST Mill", mobile="9876543210"
+        )
+        self.product = Product.objects.create(
+            company=self.company, rice_name="Basmati", hsn_code="1006", gst_percent=5
+        )
+
+    def bill(self, **overrides):
+        """A valid purchase POST: 200 bags x 50kg at 30/kg = 3,00,000."""
+        data = {
+            "mill": self.mill.id,
+            "invoice_no": "MILL-001",
+            "purchase_date": timezone.localdate().isoformat(),
+            "tax_type": "cgst_sgst",
+            "discount_amount": "0",
+            "transport_amount": "",
+            "labour_amount": "",
+            "expense_other": "",
+            "expense_other_note": "",
+            "notes": "",
+            "amount_paid_now": "",
+            "payment_mode": "",
+            "purchaseitem_set-TOTAL_FORMS": "1",
+            "purchaseitem_set-INITIAL_FORMS": "0",
+            "purchaseitem_set-MIN_NUM_FORMS": "0",
+            "purchaseitem_set-MAX_NUM_FORMS": "1000",
+            "purchaseitem_set-0-product": self.product.id,
+            "purchaseitem_set-0-bag_weight": "50",
+            "purchaseitem_set-0-bag_count": "200",
+            "purchaseitem_set-0-purchase_price": "30",
+            "purchaseitem_set-0-gst_percent": "5",
+        }
+        data.update(overrides)
+        return data
+
+    def test_cgst_sgst_split(self):
+        self.client.post(reverse("add_purchase"), self.bill())
+
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+        self.assertEqual(purchase.goods_amount, Decimal("300000.00"))
+        self.assertEqual(purchase.taxable_amount, Decimal("300000.00"))
+        self.assertEqual(purchase.cgst_amount, Decimal("7500.00"))   # 2.5%
+        self.assertEqual(purchase.sgst_amount, Decimal("7500.00"))   # 2.5%
+        self.assertEqual(purchase.igst_amount, Decimal("0.00"))
+        self.assertEqual(purchase.total_amount, Decimal("315000.00"))
+
+    def test_igst_goes_in_one_line(self):
+        self.client.post(reverse("add_purchase"), self.bill(tax_type="igst"))
+
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+        self.assertEqual(purchase.igst_amount, Decimal("15000.00"))
+        self.assertEqual(purchase.cgst_amount, Decimal("0.00"))
+        self.assertEqual(purchase.total_amount, Decimal("315000.00"))
+
+    def test_no_gst_bill_charges_no_tax(self):
+        self.client.post(reverse("add_purchase"), self.bill(tax_type="none"))
+
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+        self.assertEqual(purchase.gst_amount, Decimal("0.00"))
+        self.assertEqual(purchase.total_amount, Decimal("300000.00"))
+
+        item = purchase.purchaseitem_set.first()
+        self.assertEqual(item.gst_percent, Decimal("0.00"))   # rate cleared too
+
+    def test_discount_is_applied_before_gst(self):
+        self.client.post(reverse("add_purchase"), self.bill(discount_amount="10000"))
+
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+        self.assertEqual(purchase.taxable_amount, Decimal("290000.00"))
+        self.assertEqual(purchase.gst_amount, Decimal("14500.00"))       # 5% of 2,90,000
+        self.assertEqual(purchase.total_amount, Decimal("304500.00"))
+
+    def test_mill_charged_freight_and_labour_are_added_after_gst(self):
+        self.client.post(reverse("add_purchase"), self.bill(
+            transport_amount="5000", transport_by_mill="on",
+            labour_amount="2000", labour_by_mill="on",
+        ))
+
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+        self.assertEqual(purchase.gst_amount, Decimal("15000.00"))       # unchanged by charges
+        self.assertEqual(purchase.total_amount, Decimal("322000.00"))    # 3,15,000 + 7,000
+
+    def test_totals_are_rounded_to_whole_rupees(self):
+        # 7 bags x 50kg x 33.33 = 11,665.50 + 5% = 12,248.775 -> 12,249
+        self.client.post(reverse("add_purchase"), self.bill(**{
+            "purchaseitem_set-0-bag_count": "7",
+            "purchaseitem_set-0-purchase_price": "33.33",
+        }))
+
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+        self.assertEqual(purchase.total_amount, Decimal("12249.00"))
+        self.assertNotEqual(purchase.round_off, Decimal("0.00"))
+
+    def test_line_values_are_stored_on_the_item(self):
+        self.client.post(reverse("add_purchase"), self.bill())
+
+        item = PurchaseItem.objects.get(purchase__invoice_no="MILL-001")
+        self.assertEqual(item.total_kg, Decimal("10000.00"))
+        self.assertEqual(item.taxable_amount, Decimal("300000.00"))
+        self.assertEqual(item.gst_amount, Decimal("15000.00"))
+        self.assertEqual(item.line_total, Decimal("315000.00"))
+
+    def test_two_lines_split_the_discount_by_value(self):
+        second = Product.objects.create(
+            company=self.company, rice_name="Sona", hsn_code="1006", gst_percent=5
+        )
+        self.client.post(reverse("add_purchase"), self.bill(**{
+            "purchaseitem_set-TOTAL_FORMS": "2",
+            "purchaseitem_set-1-product": second.id,
+            "purchaseitem_set-1-bag_weight": "50",
+            "purchaseitem_set-1-bag_count": "100",
+            "purchaseitem_set-1-purchase_price": "30",
+            "purchaseitem_set-1-gst_percent": "5",
+            "discount_amount": "3000",
+        }))
+
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+        first, other = purchase.purchaseitem_set.order_by("id")
+
+        # 3,00,000 and 1,50,000 -> the discount splits 2:1
+        self.assertEqual(first.taxable_amount, Decimal("298000.00"))
+        self.assertEqual(other.taxable_amount, Decimal("149000.00"))
+        self.assertEqual(purchase.taxable_amount, Decimal("447000.00"))
+
+    # ---------------- the bill itself ----------------
+
+    def test_our_own_reference_is_generated(self):
+        self.client.post(reverse("add_purchase"), self.bill())
+
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+        self.assertTrue(purchase.purchase_ref.startswith("PUR-"))
+
+    def test_same_bill_number_from_same_mill_is_refused(self):
+        self.client.post(reverse("add_purchase"), self.bill())
+        response = self.client.post(reverse("add_purchase"), self.bill())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already has bill")
+        self.assertEqual(Purchase.objects.filter(invoice_no="MILL-001").count(), 1)
+
+    def test_same_bill_number_from_a_different_mill_is_fine(self):
+        other_mill = Mill.objects.create(
+            company=self.company, mill_name="Second Mill", mobile="9876500000"
+        )
+        self.client.post(reverse("add_purchase"), self.bill())
+        self.client.post(reverse("add_purchase"), self.bill(mill=other_mill.id))
+
+        self.assertEqual(Purchase.objects.filter(invoice_no="MILL-001").count(), 2)
+
+    def test_future_dated_bill_is_refused(self):
+        future = (timezone.localdate() + timedelta(days=3)).isoformat()
+        response = self.client.post(reverse("add_purchase"), self.bill(purchase_date=future))
+
+        self.assertContains(response, "cannot be in the future")
+        self.assertFalse(Purchase.objects.filter(invoice_no="MILL-001").exists())
+
+    def test_bill_with_no_lines_is_refused(self):
+        response = self.client.post(reverse("add_purchase"), self.bill(**{
+            "purchaseitem_set-0-product": "",
+            "purchaseitem_set-0-bag_count": "",
+            "purchaseitem_set-0-purchase_price": "",
+        }))
+
+        self.assertContains(response, "at least one rice line")
+        self.assertFalse(Purchase.objects.filter(invoice_no="MILL-001").exists())
+
+    def test_letters_in_quantity_do_not_crash(self):
+        response = self.client.post(reverse("add_purchase"), self.bill(**{
+            "purchaseitem_set-0-bag_count": "abc",
+        }))
+        self.assertEqual(response.status_code, 200)     # a form error, not a 500
+
+    def test_payment_entered_with_the_bill_is_recorded(self):
+        self.client.post(reverse("add_purchase"), self.bill(
+            amount_paid_now="50000", payment_mode="UPI"
+        ))
+
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+        payment = Payment.objects.get(purchase=purchase)
+
+        self.assertEqual(payment.amount, Decimal("50000.00"))
+        self.assertEqual(payment.payment_mode, "UPI")
+        self.assertEqual(payment.related_type, "purchase")
+        self.assertEqual(purchase.paid_amount, Decimal("50000.00"))
+        self.assertEqual(purchase.due_amount, Decimal("265000.00"))
+
+    def test_paid_amount_without_a_mode_is_refused(self):
+        response = self.client.post(reverse("add_purchase"), self.bill(amount_paid_now="5000"))
+        self.assertContains(response, "Choose how you paid")
+
+    def test_a_bill_with_payments_cannot_be_deleted(self):
+        self.client.post(reverse("add_purchase"), self.bill(
+            amount_paid_now="1000", payment_mode="Cash"
+        ))
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+
+        self.client.post(reverse("delete_purchase", args=[purchase.id]))
+
+        self.assertTrue(Purchase.objects.filter(pk=purchase.pk).exists())
+
+    def test_another_company_cannot_open_my_bill(self):
+        self.client.post(reverse("add_purchase"), self.bill())
+        purchase = Purchase.objects.get(invoice_no="MILL-001")
+
+        make_company("Mu Rice", "mu_user")
+        self.client.login(username="mu_user", password="TestPass#2026")
+
+        self.assertEqual(
+            self.client.get(reverse("purchase_detail", args=[purchase.id])).status_code, 404
+        )
+        self.assertEqual(
+            self.client.get(reverse("edit_purchase", args=[purchase.id])).status_code, 404
+        )
+
+    def test_stock_comes_from_purchase_lines(self):
+        self.client.post(reverse("add_purchase"), self.bill())
+
+        response = self.client.get(reverse("product_report", args=[self.product.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "200")      # 200 bags now in stock
+
+
+class CostingTests(TestCase):
+    """Landed cost per kg, and the selling price it implies."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Nu Rice", "nu_user")
+        self.company.default_margin_percent = 10
+        self.company.save()
+        self.client.login(username="nu_user", password="TestPass#2026")
+
+        self.mill = Mill.objects.create(
+            company=self.company, mill_name="Cost Mill", mobile="9876543210"
+        )
+        self.product = Product.objects.create(
+            company=self.company, rice_name="Sona Masoori", hsn_code="1006", gst_percent=5
+        )
+
+    def make_bill(self, **overrides):
+        """100 bags x 50kg at 30/kg = 1,50,000 goods, 5000 kg."""
+        data = {
+            "mill": self.mill.id,
+            "invoice_no": "COST-1",
+            "purchase_date": timezone.localdate().isoformat(),
+            "tax_type": "cgst_sgst",
+            "discount_amount": "0",
+            "transport_amount": "",
+            "labour_amount": "",
+            "expense_other": "",
+            "expense_other_note": "",
+            "margin_percent": "10",
+            "notes": "",
+            "amount_paid_now": "",
+            "payment_mode": "",
+            "purchaseitem_set-TOTAL_FORMS": "1",
+            "purchaseitem_set-INITIAL_FORMS": "0",
+            "purchaseitem_set-MIN_NUM_FORMS": "0",
+            "purchaseitem_set-MAX_NUM_FORMS": "1000",
+            "purchaseitem_set-0-product": self.product.id,
+            "purchaseitem_set-0-bag_weight": "50",
+            "purchaseitem_set-0-bag_count": "100",
+            "purchaseitem_set-0-purchase_price": "30",
+            "purchaseitem_set-0-gst_percent": "5",
+        }
+        data.update(overrides)
+        self.client.post(reverse("add_purchase"), data)
+        return Purchase.objects.get(invoice_no="COST-1")
+
+    def test_own_expenses_are_saved_but_not_owed_to_the_mill(self):
+        purchase = self.make_bill(transport_amount="4000", labour_amount="1000")
+
+        # The mill is owed only goods + GST.
+        self.assertEqual(purchase.total_amount, Decimal("157500.00"))
+        self.assertEqual(purchase.own_expense_total, Decimal("5000.00"))
+        self.assertEqual(purchase.expenses.count(), 2)
+
+    def test_cost_per_kg_includes_your_expenses(self):
+        purchase = self.make_bill(transport_amount="4000", labour_amount="1000")
+        costing = purchase_costing(purchase)
+
+        # 1,50,000 goods + 5,000 expenses = 1,55,000 over 5,000 kg
+        self.assertEqual(costing["landed_cost"], Decimal("155000.00"))
+        self.assertEqual(costing["bill_rate_per_kg"], Decimal("30.00"))
+        self.assertEqual(costing["cost_per_kg"], Decimal("31.00"))
+        self.assertEqual(costing["extra_per_kg"], Decimal("1.00"))
+
+    def test_gst_is_left_out_of_the_cost(self):
+        purchase = self.make_bill()
+        costing = purchase_costing(purchase)
+
+        # GST of 7,500 is claimable, so cost stays at the goods value.
+        self.assertEqual(costing["landed_cost"], Decimal("150000.00"))
+        self.assertEqual(costing["cost_per_kg"], Decimal("30.00"))
+        self.assertEqual(costing["gst_excluded"], Decimal("7500.00"))
+
+    def test_suggested_selling_price_uses_the_margin(self):
+        purchase = self.make_bill(transport_amount="5000")
+        costing = purchase_costing(purchase, margin_percent=10)
+
+        self.assertEqual(costing["cost_per_kg"], Decimal("31.00"))
+        self.assertEqual(costing["suggested_per_kg"], Decimal("34.10"))
+        self.assertEqual(costing["suggested_per_bag"], Decimal("1705.00"))   # 50 kg bag
+        self.assertEqual(costing["profit_per_kg"], Decimal("3.10"))
+        self.assertEqual(costing["profit_on_this_bill"], Decimal("15500.00"))
+
+    def test_mill_charges_count_as_cost_too(self):
+        purchase = self.make_bill(
+            transport_amount="2500", transport_by_mill="on",
+            labour_amount="2500", labour_by_mill="on",
+        )
+        costing = purchase_costing(purchase)
+
+        self.assertEqual(costing["mill_charges"], Decimal("5000.00"))
+        self.assertEqual(costing["cost_per_kg"], Decimal("31.00"))
+        # ...and those two ARE owed to the mill, unlike your own expenses
+        self.assertEqual(purchase.total_amount, Decimal("162500.00"))
+
+    def test_expenses_are_shared_between_rice_types_by_value(self):
+        cheap = Product.objects.create(
+            company=self.company, rice_name="Cheap Rice", hsn_code="1006", gst_percent=5
+        )
+        purchase = self.make_bill(**{
+            "transport_amount": "6000",
+            "purchaseitem_set-TOTAL_FORMS": "2",
+            "purchaseitem_set-1-product": cheap.id,
+            "purchaseitem_set-1-bag_weight": "50",
+            "purchaseitem_set-1-bag_count": "100",
+            "purchaseitem_set-1-purchase_price": "10",
+            "purchaseitem_set-1-gst_percent": "5",
+        })
+
+        rows = {row["product"].rice_name: row for row in line_costing(purchase)}
+
+        # 1,50,000 and 50,000 -> the 6,000 transport splits 3:1
+        self.assertEqual(rows["Sona Masoori"]["share_of_expenses"], Decimal("4500.00"))
+        self.assertEqual(rows["Cheap Rice"]["share_of_expenses"], Decimal("1500.00"))
+        self.assertEqual(rows["Sona Masoori"]["cost_per_kg"], Decimal("30.90"))
+        self.assertEqual(rows["Cheap Rice"]["cost_per_kg"], Decimal("10.30"))
+
+    def test_expense_can_be_added_after_the_bill(self):
+        purchase = self.make_bill()
+
+        self.client.post(reverse("add_purchase_expense", args=[purchase.id]), {
+            "category": "transport",
+            "amount": "3000",
+            "paid_to": "Sharma Transport",
+            "expense_date": timezone.localdate().isoformat(),
+        })
+
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.own_expense_total, Decimal("3000.00"))
+        self.assertEqual(purchase_costing(purchase)["cost_per_kg"], Decimal("30.60"))
+
+    def test_expense_can_be_removed(self):
+        purchase = self.make_bill(transport_amount="3000")
+        expense = purchase.expenses.first()
+
+        self.client.post(reverse("delete_purchase_expense", args=[purchase.id, expense.id]))
+
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.own_expense_total, 0)
+
+    def test_product_cost_averages_across_bills(self):
+        self.make_bill(transport_amount="5000")
+        self.make_bill(invoice_no="COST-2", **{
+            "purchaseitem_set-0-purchase_price": "40",
+            "transport_amount": "0",
+        })
+
+        costing = product_costing(self.company, self.product)
+
+        # 5,000 kg at a landed 31.00 and 5,000 kg at 40.00
+        self.assertEqual(costing["total_kg_bought"], Decimal("10000.00"))
+        self.assertEqual(costing["cost_per_kg"], Decimal("35.50"))
+        self.assertEqual(costing["suggested_per_kg"], Decimal("39.05"))
+
+    def test_another_company_cannot_add_an_expense_to_my_bill(self):
+        purchase = self.make_bill()
+        make_company("Xi Rice", "xi_user")
+        self.client.login(username="xi_user", password="TestPass#2026")
+
+        response = self.client.post(reverse("add_purchase_expense", args=[purchase.id]), {
+            "category": "transport", "amount": "1000",
+        })
+
+        self.assertEqual(response.status_code, 404)
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.own_expense_total, 0)
+
+
+class ChargeOwnershipTests(TestCase):
+    """The tick box decides whether a charge is owed to the mill or is your cost."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Omicron Rice", "omicron")
+        self.client.login(username="omicron", password="TestPass#2026")
+
+        self.mill = Mill.objects.create(
+            company=self.company, mill_name="Tick Mill", mobile="9876543210"
+        )
+        self.product = Product.objects.create(
+            company=self.company, rice_name="IR64", hsn_code="1006", gst_percent=0
+        )
+
+    def bill(self, **overrides):
+        """100 bags x 50kg at 20/kg = 1,00,000, no GST for simple numbers."""
+        data = {
+            "mill": self.mill.id,
+            "invoice_no": "TICK-1",
+            "purchase_date": timezone.localdate().isoformat(),
+            "tax_type": "none",
+            "discount_amount": "0",
+            "transport_amount": "",
+            "labour_amount": "",
+            "expense_other": "",
+            "expense_other_note": "",
+            "margin_percent": "10",
+            "notes": "",
+            "amount_paid_now": "",
+            "payment_mode": "",
+            "purchaseitem_set-TOTAL_FORMS": "1",
+            "purchaseitem_set-INITIAL_FORMS": "0",
+            "purchaseitem_set-MIN_NUM_FORMS": "0",
+            "purchaseitem_set-MAX_NUM_FORMS": "1000",
+            "purchaseitem_set-0-product": self.product.id,
+            "purchaseitem_set-0-bag_weight": "50",
+            "purchaseitem_set-0-bag_count": "100",
+            "purchaseitem_set-0-purchase_price": "20",
+            "purchaseitem_set-0-gst_percent": "0",
+        }
+        data.update(overrides)
+        self.client.post(reverse("add_purchase"), data)
+        return Purchase.objects.get(invoice_no=data["invoice_no"])
+
+    def test_unticked_transport_stays_out_of_the_mill_bill(self):
+        purchase = self.bill(transport_amount="6000")
+
+        # The mill is owed the rice only.
+        self.assertEqual(purchase.total_amount, Decimal("100000.00"))
+        self.assertEqual(purchase.freight_charge, Decimal("0.00"))
+
+        # ...but it is recorded as your expense and counted in the cost.
+        self.assertEqual(purchase.own_expense_total, Decimal("6000.00"))
+        self.assertEqual(purchase_costing(purchase)["cost_per_kg"], Decimal("21.20"))
+
+    def test_ticked_transport_is_added_to_the_mill_bill(self):
+        purchase = self.bill(transport_amount="6000", transport_by_mill="on")
+
+        self.assertEqual(purchase.freight_charge, Decimal("6000.00"))
+        self.assertEqual(purchase.total_amount, Decimal("106000.00"))
+        self.assertEqual(purchase.own_expense_total, 0)
+
+        # Either way the rice costs the same to you.
+        self.assertEqual(purchase_costing(purchase)["cost_per_kg"], Decimal("21.20"))
+
+    def test_one_ticked_one_not(self):
+        purchase = self.bill(
+            transport_amount="6000", transport_by_mill="on", labour_amount="2000"
+        )
+
+        self.assertEqual(purchase.total_amount, Decimal("106000.00"))   # rice + mill transport
+        self.assertEqual(purchase.own_expense_total, Decimal("2000.00"))  # your labour
+
+        costing = purchase_costing(purchase)
+        self.assertEqual(costing["mill_charges"], Decimal("6000.00"))
+        self.assertEqual(costing["own_expenses"], Decimal("2000.00"))
+        self.assertEqual(costing["landed_cost"], Decimal("108000.00"))
+        self.assertEqual(costing["cost_per_kg"], Decimal("21.60"))
+
+    def test_editing_can_move_a_charge_from_you_to_the_mill(self):
+        purchase = self.bill(transport_amount="6000")
+        self.assertEqual(purchase.own_expense_total, Decimal("6000.00"))
+
+        item = purchase.purchaseitem_set.first()
+        self.client.post(reverse("edit_purchase", args=[purchase.id]), {
+            "mill": self.mill.id,
+            "invoice_no": "TICK-1",
+            "purchase_date": purchase.purchase_date.isoformat(),
+            "tax_type": "none",
+            "discount_amount": "0",
+            "transport_amount": "6000",
+            "transport_by_mill": "on",
+            "labour_amount": "",
+            "expense_other": "",
+            "expense_other_note": "",
+            "margin_percent": "10",
+            "notes": "",
+            "amount_paid_now": "",
+            "payment_mode": "",
+            "purchaseitem_set-TOTAL_FORMS": "1",
+            "purchaseitem_set-INITIAL_FORMS": "1",
+            "purchaseitem_set-MIN_NUM_FORMS": "0",
+            "purchaseitem_set-MAX_NUM_FORMS": "1000",
+            "purchaseitem_set-0-id": item.id,
+            "purchaseitem_set-0-purchase": purchase.id,
+            "purchaseitem_set-0-product": self.product.id,
+            "purchaseitem_set-0-bag_weight": "50",
+            "purchaseitem_set-0-bag_count": "100",
+            "purchaseitem_set-0-purchase_price": "20",
+            "purchaseitem_set-0-gst_percent": "0",
+        })
+
+        purchase.refresh_from_db()
+        self.assertEqual(purchase.freight_charge, Decimal("6000.00"))
+        self.assertEqual(purchase.total_amount, Decimal("106000.00"))
+        self.assertEqual(purchase.own_expense_total, 0)      # no longer your expense

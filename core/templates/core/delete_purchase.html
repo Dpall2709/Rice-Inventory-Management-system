@@ -1,53 +1,54 @@
 {% extends 'core/base.html' %}
-{% block page_title %}Delete Purchase{% endblock %}
+{% block page_title %}Delete purchase{% endblock %}
 
 {% block content %}
 
-<div class="panel">
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'purchase_list' %}">Purchases</a> ›
+      <a href="{% url 'purchase_detail' purchase.id %}">{{ purchase.invoice_no }}</a> › <span>Delete</span>
+    </div>
+    <h1>Delete bill {{ purchase.invoice_no }}?</h1>
+  </div>
+</div>
 
-  <div class="list-header">
+<div class="card card-narrow">
+
+  <div class="banner {% if can_delete %}is-warning{% else %}is-danger{% endif %}">
+    <span>{% if can_delete %}⚠️{% else %}🔒{% endif %}</span>
     <div>
-      <h2 class="list-title" style="color:#ef4444;">Delete Purchase Invoice</h2>
-      <p class="muted">This action cannot be undone.</p>
-    </div>
-
-    <div class="list-actions">
-      <a href="{% url 'purchase_detail' purchase.id %}" class="btn btn-outline">⬅ Back</a>
-    </div>
-  </div>
-
-  <div class="info-grid">
-    <div class="info-card">
-      <div class="info-label">Invoice No</div>
-      <div class="info-value">{{ purchase.invoice_no }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Mill</div>
-      <div class="info-value">{{ purchase.mill.mill_name }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Total Amount</div>
-      <div class="info-value">₹ {{ purchase.total_amount }}</div>
+      {% if can_delete %}
+        Deleting this bill also removes <strong>{{ purchase.total_bags }} bags</strong> from your stock.
+        This cannot be undone.
+      {% else %}
+        This bill has {{ payment_count }} payment{{ payment_count|pluralize }} recorded against it and
+        <strong>cannot be deleted</strong>. Delete those payments first, or edit the bill instead.
+      {% endif %}
     </div>
   </div>
 
-  <hr class="divider">
+  <dl class="kv">
+    <dt>Mill</dt><dd>{{ purchase.mill.mill_name }}</dd>
+    <dt>Bill date</dt><dd>{{ purchase.purchase_date|date:"d M Y" }}</dd>
+    <dt>Our reference</dt><dd>{{ purchase.purchase_ref|default:"—" }}</dd>
+    <dt>Bill total</dt><dd>₹ {{ purchase.total_amount }}</dd>
+    <dt>Stock added</dt>
+    <dd>
+      {% for item in items %}
+        {{ item.bag_count }} × {{ item.bag_weight }}kg {{ item.product.rice_name }}{% if not forloop.last %}<br>{% endif %}
+      {% empty %}—{% endfor %}
+    </dd>
+  </dl>
 
-  <p style="font-weight:700; margin-bottom:10px;">
-    Are you sure you want to delete this purchase invoice?
-  </p>
-
-  <form method="POST">
+  <form method="POST" class="form-actions">
     {% csrf_token %}
-    <button type="submit" class="btn btn-primary" style="background:#ef4444;">
-      🗑 Yes, Delete Invoice
-    </button>
-
-    <a href="{% url 'purchase_detail' purchase.id %}" class="btn btn-outline">
-      Cancel
-    </a>
+    {% if can_delete %}
+      <button class="btn btn-danger" type="submit"
+              data-confirm="Bill {{ purchase.invoice_no }} and {{ purchase.total_bags }} bags of stock will be removed permanently."
+              data-confirm-title="Delete this purchase?">🗑 Delete permanently</button>
+    {% endif %}
+    <a class="btn btn-ghost" href="{% url 'purchase_detail' purchase.id %}">Cancel</a>
   </form>
 
 </div>

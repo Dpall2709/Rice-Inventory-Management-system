@@ -20,6 +20,7 @@ urlpatterns = [
     path('mills/', view.mill_list, name='mill_list'),
     path('mills/edit/<int:mill_id>/', view.edit_mill, name='edit_mill'),
     path('mills/delete/<int:mill_id>/', view.delete_mill, name='delete_mill'),
+    path('mills/restore/<int:mill_id>/', view.restore_mill, name='restore_mill'),
     
     path('products/', views.product_list, name='product_list'),
     path('products/add/', views.add_product, name='add_product'),
@@ -29,11 +30,13 @@ urlpatterns = [
 
 
 
-    path("purchase/add/", views.add_purchase, name="add_purchase"),
-    path("purchase/list/", views.purchase_list, name="purchase_list"),
-    path("purchase/<int:purchase_id>/", views.purchase_detail, name="purchase_detail"),
-    path("purchase/edit/<int:purchase_id>/", views.edit_purchase, name="edit_purchase"),
-    path("purchase/delete/<int:purchase_id>/", views.delete_purchase, name="delete_purchase"),
+    path("purchase/add/", view.add_purchase, name="add_purchase"),
+    path("purchase/list/", view.purchase_list, name="purchase_list"),
+    path("purchase/<int:purchase_id>/", view.purchase_detail, name="purchase_detail"),
+    path("purchase/edit/<int:purchase_id>/", view.edit_purchase, name="edit_purchase"),
+    path("purchase/delete/<int:purchase_id>/", view.delete_purchase, name="delete_purchase"),
+    path("purchase/<int:purchase_id>/expense/add/", view.add_purchase_expense, name="add_purchase_expense"),
+    path("purchase/<int:purchase_id>/expense/<int:expense_id>/delete/", view.delete_purchase_expense, name="delete_purchase_expense"),
     path("payment/purchase/add/<int:purchase_id>/", views.add_purchase_payment, name="add_purchase_payment"),
 
 

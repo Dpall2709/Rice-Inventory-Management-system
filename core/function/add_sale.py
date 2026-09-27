@@ -49,7 +49,7 @@ def add_sale(request):
     # Only this company's mills
     mills = (
         Mill.objects
-        .filter(company=company)
+        .filter(company=company, is_active=True)
         .order_by("mill_name")
     )
 

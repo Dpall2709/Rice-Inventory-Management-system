@@ -45,7 +45,8 @@ def add_purchase(request):
 
     # Only show this company's mills and products
     mills = Mill.objects.filter(
-        company=company
+        company=company,
+        is_active=True
     ).order_by("mill_name")
 
     products = Product.objects.filter(
@@ -277,7 +278,8 @@ def edit_purchase(request, purchase_id):
 
     # Only company's mills/products
     mills = Mill.objects.filter(
-        company=company
+        company=company,
+        is_active=True
     ).order_by("mill_name")
 
     products = Product.objects.filter(

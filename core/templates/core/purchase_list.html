@@ -1,60 +1,164 @@
 {% extends 'core/base.html' %}
-{% block page_title %}Purchase List{% endblock %}
+{% block page_title %}Purchases{% endblock %}
 
 {% block content %}
-<div class="panel">
 
-  <div class="list-header">
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'dashboard' %}">Dashboard</a> › <span>Purchases</span></div>
+    <h1>Purchases</h1>
+    <p class="muted">{{ count }} bill{{ count|pluralize }} · every line here added stock</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-primary" href="{% url 'add_purchase' %}">➕ Enter a bill</a>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-icon">🧾</div>
     <div>
-      <h2 class="list-title">Purchase List</h2>
-      <p class="muted">All purchases (Bags, KG, Amount)</p>
-    </div>
-
-    <div class="list-actions">
-      <a href="{% url 'add_purchase' %}" class="btn btn-primary">➕ Add Purchase</a>
+      <div class="stat-label">Bills</div>
+      <div class="stat-value">{{ count }}</div>
     </div>
   </div>
+  <div class="stat">
+    <div class="stat-icon">💰</div>
+    <div>
+      <div class="stat-label">Purchase value</div>
+      <div class="stat-value inr" data-value="{{ total_value }}">₹ {{ total_value }}</div>
+      <div class="stat-hint">incl. GST ₹ {{ total_tax }}</div>
+    </div>
+  </div>
+  <div class="stat is-success">
+    <div class="stat-icon">✅</div>
+    <div>
+      <div class="stat-label">Paid</div>
+      <div class="stat-value inr" data-value="{{ total_paid }}">₹ {{ total_paid }}</div>
+    </div>
+  </div>
+  <div class="stat {% if total_due > 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">⏳</div>
+    <div>
+      <div class="stat-label">Still due</div>
+      <div class="stat-value inr" data-value="{{ total_due }}">₹ {{ total_due }}</div>
+    </div>
+  </div>
+</div>
 
+<div class="card">
+  <form class="toolbar" method="GET" data-no-loading>
+    <input class="input" type="search" name="q" value="{{ q }}" placeholder="Bill no, our ref, or mill…" style="min-width:230px;">
+
+    <select class="select" name="mill">
+      <option value="">All mills</option>
+      {% for mill in mills %}
+        <option value="{{ mill.id }}" {% if mill_id == mill.id|stringformat:"s" %}selected{% endif %}>{{ mill.mill_name }}</option>
+      {% endfor %}
+    </select>
+
+    <select class="select" name="status">
+      <option value="">Paid &amp; unpaid</option>
+      <option value="due" {% if status == 'due' %}selected{% endif %}>Only unpaid</option>
+      <option value="paid" {% if status == 'paid' %}selected{% endif %}>Only settled</option>
+    </select>
+
+    <input class="input" type="date" name="from" value="{{ date_from }}" title="From date">
+    <input class="input" type="date" name="to" value="{{ date_to }}" title="To date">
+
+    <button class="btn btn-outline" type="submit">Filter</button>
+    {% if q or mill_id or status or date_from or date_to %}
+      <a class="btn btn-ghost" href="{% url 'purchase_list' %}">Clear</a>
+    {% endif %}
+  </form>
+
+  {% if purchases %}
   <div class="table-wrap">
-    <table class="table">
+    <table class="table table-cards">
       <thead>
         <tr>
-          <th>#</th>
-          <th>Invoice</th>
-          <th>Mill</th>
-          <th>Date</th>
-          <th class="right">Bags</th>
-          <th class="right">KG</th>
-          <th class="right">Total Amount</th>
-          <th>Action</th>
+          <th>Bill</th><th>Mill</th><th>Date</th><th class="right">Bags</th>
+          <th class="right">Taxable</th><th class="right">GST</th><th class="right">Total</th>
+          <th class="right">Due</th><th class="right">Actions</th>
         </tr>
       </thead>
-
       <tbody>
-        {% for p in purchases %}
+        {% for purchase in purchases %}
         <tr>
-          <td>{{ forloop.counter }}</td>
-          <td><b>{{ p.invoice_no }}</b></td>
-          <td>{{ p.mill.mill_name }}</td>
-          <td>{{ p.purchase_date }}</td>
-          <td class="right">{{ p.total_bags|default:"0" }}</td>
-          <td class="right">{{ p.total_kg|default:"0" }}</td>
-          <td class="right">₹ {{ p.total_amount }}</td>
-          <td>
-            <a href="{% url 'purchase_detail' p.id %}" class="btn btn-outline" style="padding:6px 10px;">
-                👁 View
-            </a>
-            </td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="7" style="text-align:center; padding:20px;">No purchases found</td>
+          <td data-label="Bill">
+            <a class="row-title" href="{% url 'purchase_detail' purchase.id %}">{{ purchase.invoice_no }}</a>
+            <div class="row-sub">{{ purchase.purchase_ref|default:"—" }}</div>
+          </td>
+          <td data-label="Mill">
+            <a href="{% url 'mill_report_detail' purchase.mill.id %}">{{ purchase.mill.mill_name }}</a>
+            <div class="row-sub">
+              {% if purchase.tax_type == 'none' %}<span class="badge badge-muted">No GST</span>
+              {% elif purchase.tax_type == 'igst' %}<span class="badge badge-blue">IGST</span>
+              {% else %}<span class="badge badge-blue">CGST+SGST</span>{% endif %}
+            </div>
+          </td>
+          <td data-label="Date" class="nowrap">{{ purchase.purchase_date|date:"d M Y" }}</td>
+          <td data-label="Bags" class="right">{{ purchase.bags }}</td>
+          <td data-label="Taxable" class="right inr" data-value="{{ purchase.taxable_amount }}">₹ {{ purchase.taxable_amount }}</td>
+          <td data-label="GST" class="right inr" data-value="{{ purchase.gst_amount }}">₹ {{ purchase.gst_amount }}</td>
+          <td data-label="Total" class="right bold inr" data-value="{{ purchase.total_amount }}">₹ {{ purchase.total_amount }}</td>
+          <td data-label="Due" class="right">
+            {% if purchase.due > 0 %}
+              <span class="bold text-danger inr" data-value="{{ purchase.due }}">₹ {{ purchase.due }}</span>
+              <div><span class="badge badge-red"><span class="dot"></span>Due</span></div>
+            {% else %}
+              <span class="badge badge-green">Paid</span>
+            {% endif %}
+          </td>
+          <td data-label="Actions">
+            <div class="actions">
+              <a class="btn btn-outline btn-sm" href="{% url 'purchase_detail' purchase.id %}">View</a>
+              {% if purchase.due > 0 %}
+                <a class="btn btn-ghost btn-sm" href="{% url 'add_purchase_payment' purchase.id %}" title="Pay">💳</a>
+              {% endif %}
+              <a class="btn btn-ghost btn-sm" href="{% url 'edit_purchase' purchase.id %}" title="Edit">✏️</a>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
-
     </table>
   </div>
 
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="pagination">
+    <div class="muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+    <div class="pages">
+      <a class="page-link {% if not page_obj.has_previous %}disabled{% endif %}"
+         href="?{{ querystring }}&page={{ page_obj.previous_page_number|default:1 }}">‹</a>
+      {% for num in page_obj.paginator.page_range %}
+        {% if num == page_obj.number %}
+          <span class="page-link active">{{ num }}</span>
+        {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+          <a class="page-link" href="?{{ querystring }}&page={{ num }}">{{ num }}</a>
+        {% endif %}
+      {% endfor %}
+      <a class="page-link {% if not page_obj.has_next %}disabled{% endif %}"
+         href="?{{ querystring }}&page={{ page_obj.next_page_number|default:page_obj.number }}">›</a>
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">🧾</div>
+    <div class="empty-title">{% if q or mill_id or status %}No bill matches this filter{% else %}No purchases yet{% endif %}</div>
+    <p>
+      {% if q or mill_id or status %}Try a wider date range or clear the filters.
+      {% else %}Enter the bills your mills give you — that is what puts rice into your stock.{% endif %}
+    </p>
+    {% if q or mill_id or status %}
+      <a class="btn btn-outline" href="{% url 'purchase_list' %}">Clear filters</a>
+    {% else %}
+      <a class="btn btn-primary" href="{% url 'add_purchase' %}">➕ Enter your first bill</a>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
+
 {% endblock %}

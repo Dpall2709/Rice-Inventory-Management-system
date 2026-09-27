@@ -2,107 +2,187 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Rice Billing App</title>
-    <link rel="stylesheet" href="{% static 'core/style.css' %}">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block browser_title %}{{ request.company.company_name|default:"Rice Billing" }}{% endblock %} · Rice Billing</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'core/style.css' %}?v={{ asset_version }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>">
+
+  {# Apply the saved theme before the first paint so the page never flashes. #}
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+  {% block extra_head %}{% endblock %}
 </head>
 <body class="app">
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" >
+  <div class="drawer-backdrop" data-close-nav></div>
+
+  <!-- ============================ SIDEBAR ============================ -->
+  <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-logo">🌾 {{ request.company.company_name|default:"Rice Billing" }}</div>
+      <span class="brand-mark">🌾</span>
+      <span class="brand-logo">
+        <span>{{ request.company.company_name|default:"Rice Billing" }}</span>
+      </span>
     </div>
 
     <nav class="menu">
       <a class="menu-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"
-         href="{% url 'dashboard' %}">🏠 Dashboard</a>
+         href="{% url 'dashboard' %}">
+        <span class="menu-icon">🏠</span><span>Dashboard</span>
+      </a>
 
-      <!-- ✅ FIXED (single-line if) -->
-      <a class="menu-item {% if request.resolver_match.url_name == 'mill_list' or request.resolver_match.url_name == 'add_mill' or request.resolver_match.url_name == 'mill_report_detail' or request.resolver_match.url_name == 'add_mill_payment' %}active{% endif %}"
+      <div class="menu-label">Buying</div>
+
+      <a class="menu-item {% if request.resolver_match.url_name in 'mill_list,add_mill,edit_mill,delete_mill,mill_report_detail,add_mill_payment' %}active{% endif %}"
          href="{% url 'mill_list' %}">
-        🏭 Mills / Suppliers
+        <span class="menu-icon">🏭</span><span>Mills / Suppliers</span>
       </a>
 
-      <a class="menu-item {% if request.resolver_match.url_name == 'product_list' or request.resolver_match.url_name == 'add_product' %}active{% endif %}"
+      <a class="menu-item {% if request.resolver_match.url_name in 'product_list,add_product,edit_product,delete_product,product_report' %}active{% endif %}"
          href="{% url 'product_list' %}">
-        📦 Products
+        <span class="menu-icon">📦</span><span>Products</span>
       </a>
 
-      <a class="menu-item {% if request.resolver_match.url_name == 'add_purchase' %}active{% endif %}"
-         href="{% url 'add_purchase' %}">🧾 Purchases</a>
-
-      <a class="menu-item {% if request.resolver_match.url_name == 'sale_list' or request.resolver_match.url_name == 'add_sale' or request.resolver_match.url_name == 'sale_detail' %}active{% endif %}"
-         href="{% url 'sale_list' %}">🚚 Sales</a>
-      <a class="menu-item {% if request.resolver_match.url_name == 'broker_list' or request.resolver_match.url_name == 'add_broker' or request.resolver_match.url_name == 'broker_report_detail' %}active{% endif %}"
-        href="{% url 'broker_list' %}">🧑‍💼 Brokers</a>
-      <a class="menu-item {% if request.resolver_match.url_name == 'customer_list' or request.resolver_match.url_name == 'add_customer' or request.resolver_match.url_name == 'edit_customer' or request.resolver_match.url_name == 'delete_customer' %}active{% endif %}"
-        href="{% url 'customer_list' %}">
-          👥 Customers
+      <a class="menu-item {% if request.resolver_match.url_name in 'add_purchase,purchase_list,purchase_detail,edit_purchase,delete_purchase,add_purchase_payment' %}active{% endif %}"
+         href="{% url 'purchase_list' %}">
+        <span class="menu-icon">🧾</span><span>Purchases</span>
       </a>
 
-      <a class="menu-item {% if request.resolver_match.namespace == 'billing' %}active{% endif %}"
-         href="{% url 'billing:home' %}">💳 Subscription</a>
+      <div class="menu-label">Selling</div>
+
+      <a class="menu-item {% if request.resolver_match.url_name in 'sale_list,add_sale,sale_detail,sale_print,add_sale_payment' %}active{% endif %}"
+         href="{% url 'sale_list' %}">
+        <span class="menu-icon">🚚</span><span>Sales</span>
+      </a>
+
+      <a class="menu-item {% if request.resolver_match.url_name in 'customer_list,add_customer,edit_customer,delete_customer' %}active{% endif %}"
+         href="{% url 'customer_list' %}">
+        <span class="menu-icon">👥</span><span>Customers</span>
+      </a>
+
+      <a class="menu-item {% if request.resolver_match.url_name in 'broker_list,add_broker,broker_report_detail' %}active{% endif %}"
+         href="{% url 'broker_list' %}">
+        <span class="menu-icon">🤝</span><span>Brokers</span>
+      </a>
+
+      <div class="menu-label">Account</div>
+
+      <a class="menu-item {% if request.resolver_match.namespace == 'billing' and request.resolver_match.url_name == 'home' %}active{% endif %}"
+         href="{% url 'billing:home' %}">
+        <span class="menu-icon">💳</span><span>Subscription</span>
+      </a>
 
       {% if request.user.is_staff %}
-        <a class="menu-item" href="{% url 'billing:manage_companies' %}">🛡 All companies</a>
+        <a class="menu-item {% if request.resolver_match.url_name == 'manage_companies' %}active{% endif %}"
+           href="{% url 'billing:manage_companies' %}">
+          <span class="menu-icon">🛡</span><span>All companies</span>
+        </a>
       {% endif %}
     </nav>
 
     <div class="sidebar-footer">
-      <!-- <button class="logout-btn" type="button">Logout</button> -->
-       <a href="{% url 'logout' %}" class="logout-btn">
-    Logout
-</a>
+      <a href="{% url 'logout' %}" class="logout-btn">
+        <span class="menu-icon">⏻</span><span>Logout</span>
+      </a>
     </div>
   </aside>
 
-  <!-- MAIN -->
+  <!-- ============================= MAIN ============================== -->
   <div class="main">
 
-    <!-- TOPBAR -->
     <header class="topbar">
       <div class="topbar-left">
-        <h1 class="topbar-title">{% block page_title %}{% endblock %}</h1>
+        <button class="icon-btn nav-toggle" type="button" data-toggle-nav title="Menu">☰</button>
+        <button class="icon-btn" type="button" data-toggle-sidebar title="Collapse menu">⇤</button>
+        <h1 class="topbar-title">{% block page_title %}Dashboard{% endblock %}</h1>
       </div>
 
       <div class="topbar-right">
-        <button class="icon-btn" type="button" title="Notifications">🔔</button>
+        {% block topbar_search %}{% endblock %}
 
-        <div class="user">
-          <div class="user-avatar">{{ request.company.company_name|slice:":1"|upper|default:"U" }}</div>
-          <div class="user-name">{{ request.user.username }}</div>
+        <button class="icon-btn" type="button" data-toggle-theme title="Switch light / dark">🌙</button>
+
+        <div class="user-menu-wrap">
+          <div class="user" data-toggle-user-menu>
+            <div class="user-avatar">{{ request.user.username|slice:":1"|upper|default:"U" }}</div>
+            <div>
+              <div class="user-name">{{ request.user.get_full_name|default:request.user.username }}</div>
+              <div class="user-role">{{ request.user_profile.role|default:"user" }}</div>
+            </div>
+          </div>
+
+          <div class="user-menu" id="userMenu" hidden>
+            <div class="user-menu-head">
+              <div class="bold">{{ request.company.company_name|default:"—" }}</div>
+              <div class="muted">{{ request.user.email|default:request.user.username }}</div>
+            </div>
+            <a href="{% url 'billing:home' %}">💳 Subscription
+              {% if request.subscription %}
+                <span class="badge {% if request.read_only %}badge-red{% elif request.subscription.in_trial %}badge-orange{% else %}badge-green{% endif %}" style="margin-left:auto;">
+                  {{ request.subscription.days_left }}d
+                </span>
+              {% endif %}
+            </a>
+            {% if request.user.is_staff %}
+              <a href="/admin/">🛠 Django admin</a>
+            {% endif %}
+            <a href="{% url 'password_reset' %}">🔑 Change password</a>
+            <div class="divider" style="margin:6px 0;"></div>
+            <a href="{% url 'logout' %}">⏻ Logout</a>
+          </div>
         </div>
       </div>
     </header>
 
-    <!-- PAGE CONTENT -->
     <main class="content">
 
       {% if request.subscription %}
         {% if request.read_only %}
-          <div class="msg" style="background:#fef2f2;color:#b91c1c;border-left:4px solid #dc2626;">
-            <strong>Your subscription has ended.</strong>
-            Your data is safe and every report still opens, but nothing new can be saved.
-            <a href="{% url 'billing:home' %}" style="color:#b91c1c;font-weight:700;">Renew now →</a>
+          <div class="banner is-danger">
+            <span>⛔</span>
+            <div>
+              <strong>Your subscription has ended.</strong>
+              Your data is safe and every report still opens, but nothing new can be saved.
+            </div>
+            <a href="{% url 'billing:home' %}" style="margin-left:auto;">Renew now →</a>
           </div>
         {% elif request.subscription.needs_warning %}
-          <div class="msg" style="background:#fffbeb;color:#b45309;border-left:4px solid #f59e0b;">
-            {% if request.subscription.in_trial %}
-              Your free trial ends in <strong>{{ request.subscription.days_left }} day{{ request.subscription.days_left|pluralize }}</strong>.
-            {% else %}
-              Your subscription ends in <strong>{{ request.subscription.days_left }} day{{ request.subscription.days_left|pluralize }}</strong>.
-            {% endif %}
-            <a href="{% url 'billing:home' %}" style="color:#b45309;font-weight:700;">Choose a plan →</a>
+          <div class="banner is-warning">
+            <span>⏳</span>
+            <div>
+              {% if request.subscription.in_trial %}Your free trial ends{% else %}Your subscription ends{% endif %}
+              in <strong>{{ request.subscription.days_left }} day{{ request.subscription.days_left|pluralize }}</strong>.
+            </div>
+            <a href="{% url 'billing:home' %}" style="margin-left:auto;">Choose a plan →</a>
           </div>
         {% endif %}
       {% endif %}
 
       {% if messages %}
-        <div class="msg-wrap">
+        <div class="msg-wrap" id="toasts">
           {% for message in messages %}
-            <div class="msg success">{{ message }}</div>
+            {# The level tag decides the colour: errors are no longer green. #}
+            <div class="msg {{ message.tags }}">
+              <span>
+                {% if 'error' in message.tags %}⛔
+                {% elif 'warning' in message.tags %}⚠️
+                {% elif 'info' in message.tags or 'debug' in message.tags %}ℹ️
+                {% else %}✅{% endif %}
+              </span>
+              <div>{{ message }}</div>
+              <button class="msg-close" type="button" data-close-toast aria-label="Dismiss">×</button>
+            </div>
           {% endfor %}
         </div>
       {% endif %}
@@ -110,12 +190,25 @@
       {% block content %}{% endblock %}
     </main>
 
-    <!-- FOOTER -->
     <footer class="footer">
-      © 2026 Rice Billing App
+      © {% now "Y" %} {{ request.company.company_name|default:"Rice Billing App" }} · powered by Rice Billing
     </footer>
 
   </div>
 
+  <!-- confirm dialog, used by any [data-confirm] form or link -->
+  <div class="modal-backdrop" id="confirmModal" hidden>
+    <div class="modal">
+      <h3 id="confirmTitle">Are you sure?</h3>
+      <p id="confirmText"></p>
+      <div class="modal-actions">
+        <button class="btn btn-outline" type="button" data-confirm-cancel>Cancel</button>
+        <button class="btn btn-danger" type="button" data-confirm-ok>Yes, continue</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{% static 'core/app.js' %}?v={{ asset_version }}"></script>
+  {% block extra_js %}{% endblock %}
 </body>
 </html>

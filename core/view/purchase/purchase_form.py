@@ -1,0 +1,266 @@
+"""
+Entering and editing a purchase bill.
+
+One screen records: the mill's bill, its rice lines with GST, the bill-level
+charges, and whatever you paid at that moment.
+"""
+
+import json
+
+from django.db import transaction
+from django.utils import timezone
+
+from core.forms import PurchaseForm, PurchaseItemFormSet
+from core.models import Payment, Product, Purchase
+from core.permissions import manager_required
+from core.services.invoice_number import next_purchase_ref
+from core.services.purchase_service import apply_totals, suggested_tax_type
+from core.tenancy import company_of, tenant_object_or_404
+
+from ..base_imports import *
+
+
+def product_tax_map(company):
+    """
+    GST% and HSN of each rice, handed to the page as JSON so choosing a product
+    fills its tax rate in automatically.
+    """
+    products = Product.objects.filter(company=company, is_active=True)
+    return json.dumps({
+        str(p.id): {
+            "gst": float(p.gst_percent or 0),
+            "hsn": p.hsn_code or "",
+            "name": p.rice_name,
+        }
+        for p in products
+    })
+
+
+def split_charges(purchase, form):
+    """
+    Decide where transport and labour belong.
+
+    Each has one amount box and one tick box:
+
+        ticked   - the MILL charged it on its bill, so it is added to the bill
+                   total and you owe it to the mill
+        unticked - YOU paid it (your truck, your labour), so the mill's bill
+                   stays pure rice and the money is recorded as your expense
+
+    Either way it counts towards the cost per kg - it is what the rice cost you.
+    """
+    data = form.cleaned_data
+
+    transport = data.get("transport_amount") or 0
+    labour = data.get("labour_amount") or 0
+
+    purchase.freight_charge = transport if data.get("transport_by_mill") else 0
+    purchase.labour_charge = labour if data.get("labour_by_mill") else 0
+
+    return {
+        "transport": (transport, bool(data.get("transport_by_mill"))),
+        "labour": (labour, bool(data.get("labour_by_mill"))),
+    }
+
+
+def save_own_expenses(purchase, form):
+    """
+    Store what the buyer paid themselves.
+
+    These never touch the mill's balance; they are part of the cost of the
+    goods, which is what the cost-per-kg figure is built from.
+    """
+    from core.models import PurchaseExpense
+
+    PurchaseExpense.objects.filter(purchase=purchase).delete()
+
+    data = form.cleaned_data
+
+    entries = []
+    if not data.get("transport_by_mill"):
+        entries.append((PurchaseExpense.TRANSPORT, data.get("transport_amount"), ""))
+    if not data.get("labour_by_mill"):
+        entries.append((PurchaseExpense.LABOUR, data.get("labour_amount"), ""))
+    entries.append((PurchaseExpense.OTHER, data.get("expense_other"),
+                    data.get("expense_other_note") or ""))
+
+    created = []
+    for category, amount, note in entries:
+        if not amount or amount <= 0:
+            continue
+        created.append(PurchaseExpense.objects.create(
+            purchase=purchase,
+            category=category,
+            amount=amount,
+            notes=note,
+            expense_date=purchase.purchase_date,
+        ))
+
+    return created
+
+
+def record_payment(purchase, amount, mode, company):
+    """A payment made while entering the bill, so the mill ledger is right at once."""
+    if not amount or amount <= 0:
+        return None
+
+    return Payment.objects.create(
+        company=company,
+        related_type="purchase",
+        mill=purchase.mill,
+        purchase=purchase,
+        amount=amount,
+        payment_mode=mode or "Cash",
+        payment_date=purchase.purchase_date,
+        notes="Paid while entering the bill.",
+    )
+
+
+@login_required
+def add_purchase(request):
+    company = company_of(request)
+
+    if request.method == "POST":
+        form = PurchaseForm(request.POST, company=company)
+        formset = PurchaseItemFormSet(request.POST, form_kwargs={"company": company})
+
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                purchase = form.save(commit=False)
+                purchase.company = company
+                purchase.total_amount = 0
+                purchase.purchase_ref = next_purchase_ref(company, purchase.purchase_date)
+                purchase.save()
+
+                items = []
+                for item_form in formset.forms:
+                    if item_form.cleaned_data.get("DELETE"):
+                        continue
+                    if not item_form.cleaned_data.get("product"):
+                        continue
+
+                    item = item_form.save(commit=False)
+                    item.purchase = purchase
+                    items.append(item)
+
+                split_charges(purchase, form)
+
+                apply_totals(
+                    purchase,
+                    items,
+                    tax_type=form.cleaned_data["tax_type"],
+                    discount=form.cleaned_data.get("discount_amount") or 0,
+                    freight=purchase.freight_charge,
+                    labour=purchase.labour_charge,
+                )
+
+                for item in items:
+                    item.save()
+
+                purchase.save()
+
+                save_own_expenses(purchase, form)
+
+                record_payment(
+                    purchase,
+                    form.cleaned_data.get("amount_paid_now") or 0,
+                    form.cleaned_data.get("payment_mode"),
+                    company,
+                )
+
+            messages.success(
+                request,
+                f"Purchase {purchase.purchase_ref} saved · "
+                f"{purchase.total_bags} bags · ₹ {purchase.total_amount}",
+            )
+
+            if request.POST.get("save_and_new"):
+                return redirect("add_purchase")
+
+            return redirect("purchase_detail", purchase_id=purchase.id)
+    else:
+        form = PurchaseForm(
+            company=company,
+            initial={"purchase_date": timezone.localdate()},
+        )
+        formset = PurchaseItemFormSet(form_kwargs={"company": company})
+
+    return render(request, "core/purchase_form.html", {
+        "form": form,
+        "formset": formset,
+        "mode": "add",
+        "product_tax_json": product_tax_map(company),
+    })
+
+
+@login_required
+@manager_required
+def edit_purchase(request, purchase_id):
+    company = company_of(request)
+    purchase = tenant_object_or_404(Purchase, request, purchase_id)
+
+    if request.method == "POST":
+        form = PurchaseForm(request.POST, instance=purchase, company=company)
+        formset = PurchaseItemFormSet(request.POST, instance=purchase, form_kwargs={"company": company})
+
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                purchase = form.save(commit=False)
+
+                formset.save()          # applies edits, additions and deletions
+                items = list(purchase.purchaseitem_set.all())
+
+                split_charges(purchase, form)
+
+                apply_totals(
+                    purchase,
+                    items,
+                    tax_type=form.cleaned_data["tax_type"],
+                    discount=form.cleaned_data.get("discount_amount") or 0,
+                    freight=purchase.freight_charge,
+                    labour=purchase.labour_charge,
+                )
+
+                for item in items:
+                    item.save()
+
+                purchase.save()
+
+                save_own_expenses(purchase, form)
+
+                record_payment(
+                    purchase,
+                    form.cleaned_data.get("amount_paid_now") or 0,
+                    form.cleaned_data.get("payment_mode"),
+                    company,
+                )
+
+            messages.success(request, f"Purchase {purchase.purchase_ref or purchase.invoice_no} updated.")
+            return redirect("purchase_detail", purchase_id=purchase.id)
+    else:
+        from core.models import PurchaseExpense
+
+        existing = {e.category: e for e in purchase.expenses.all()}
+        other = existing.get(PurchaseExpense.OTHER)
+
+        own_transport = getattr(existing.get(PurchaseExpense.TRANSPORT), "amount", None)
+        own_labour = getattr(existing.get(PurchaseExpense.LABOUR), "amount", None)
+
+        form = PurchaseForm(instance=purchase, company=company, initial={
+            "transport_amount": purchase.freight_charge or own_transport,
+            "transport_by_mill": bool(purchase.freight_charge),
+            "labour_amount": purchase.labour_charge or own_labour,
+            "labour_by_mill": bool(purchase.labour_charge),
+            "expense_other": getattr(other, "amount", None),
+            "expense_other_note": getattr(other, "notes", ""),
+            "margin_percent": company.default_margin_percent,
+        })
+        formset = PurchaseItemFormSet(instance=purchase, form_kwargs={"company": company})
+
+    return render(request, "core/purchase_form.html", {
+        "form": form,
+        "formset": formset,
+        "purchase": purchase,
+        "mode": "edit",
+        "product_tax_json": product_tax_map(company),
+    })
