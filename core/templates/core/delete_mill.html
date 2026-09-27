@@ -1,4 +1,7 @@
 {% extends 'core/base.html' %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'mill_list' %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
 {% block page_title %}Deactivate supplier{% endblock %}
 
 {% block content %}
@@ -12,7 +15,7 @@
   </div>
 </div>
 
-<div class="card" style="max-width:640px;">
+<div class="card">
 
   <div class="banner {% if can_delete %}is-warning{% else %}{% endif %}">
     <span>{% if can_delete %}⚠️{% else %}🔒{% endif %}</span>

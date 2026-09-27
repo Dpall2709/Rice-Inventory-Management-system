@@ -1,0 +1,100 @@
+{% extends 'core/base.html' %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% if purchase %}{% url 'purchase_detail' purchase.id %}{% else %}{% url 'mill_report_detail' mill.id %}{% endif %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
+{% block page_title %}{% if purchase %}Pay bill {{ purchase.invoice_no }}{% else %}Pay {{ mill.mill_name }}{% endif %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'mill_list' %}">Mills / Suppliers</a> ›
+      <a href="{% url 'mill_report_detail' mill.id %}">{{ mill.mill_name }}</a> ›
+      {% if purchase %}
+        <a href="{% url 'purchase_detail' purchase.id %}">Bill {{ purchase.invoice_no }}</a> ›
+      {% endif %}
+      <span>Payment</span>
+    </div>
+    <h1>{% if purchase %}Pay bill {{ purchase.invoice_no }}{% else %}Pay {{ mill.mill_name }}{% endif %}</h1>
+    <p class="muted">
+      {% if purchase %}
+        {{ mill.mill_name }} · bill dated {{ purchase.purchase_date|date:"d M Y" }} · total ₹ {{ purchase.total_amount }}
+      {% else %}
+        Money paid to the mill is applied to its oldest unpaid bills first.
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+<div class="card">
+
+  <div class="due-box {% if due > 0 %}is-due{% else %}is-clear{% endif %}">
+    <div>
+      <div class="due-label">{% if purchase %}Still due on this bill{% else %}You owe {{ mill.mill_name }}{% endif %}</div>
+      <div class="due-value inr" data-value="{{ due }}">₹ {{ due }}</div>
+    </div>
+    {% if advance %}
+      <div class="due-side">Advance already with mill: <strong>₹ {{ advance }}</strong></div>
+    {% elif due <= 0 %}
+      <div class="due-side">Nothing is due. Anything paid now becomes an advance.</div>
+    {% endif %}
+  </div>
+
+  <form method="POST" novalidate>
+    {% csrf_token %}
+    <div class="form-grid">
+      <div class="field {% if errors.amount %}has-error{% endif %}">
+        <label for="amount">Amount paid (₹) <span class="req">*</span></label>
+        <input class="input" id="amount" type="number" step="0.01" min="0" name="amount"
+               value="{{ values.amount|default_if_none:'' }}" inputmode="decimal" autofocus>
+        {% if errors.amount %}<div class="field-error">{{ errors.amount }}</div>{% endif %}
+      </div>
+
+      <div class="field {% if errors.payment_mode %}has-error{% endif %}">
+        <label for="mode">Paid by <span class="req">*</span></label>
+        <select class="select" id="mode" name="payment_mode">
+          <option value="">Choose…</option>
+          {% for mode in modes %}
+            <option value="{{ mode }}" {% if values.payment_mode == mode %}selected{% endif %}>{{ mode }}</option>
+          {% endfor %}
+        </select>
+        {% if errors.payment_mode %}<div class="field-error">{{ errors.payment_mode }}</div>{% endif %}
+      </div>
+
+      <div class="field {% if errors.payment_date %}has-error{% endif %}">
+        <label for="date">Date paid</label>
+        <input class="input" id="date" type="date" name="payment_date"
+               value="{% if values.payment_date %}{{ values.payment_date }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}">
+        {% if errors.payment_date %}<div class="field-error">{{ errors.payment_date }}</div>{% endif %}
+      </div>
+
+      <div class="field field-full">
+        <label for="notes">Note / reference</label>
+        <input class="input" id="notes" type="text" name="notes" value="{{ values.notes|default_if_none:'' }}"
+               placeholder="UPI reference, cheque number…">
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">💾 Save payment</button>
+      <a class="btn btn-ghost" href="{% if purchase %}{% url 'purchase_detail' purchase.id %}{% else %}{% url 'mill_report_detail' mill.id %}{% endif %}">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .due-box {
+    display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 16px 18px; border-radius: var(--r-lg); margin-bottom: 20px;
+  }
+  .due-box.is-due { background: var(--danger-soft); color: var(--danger); }
+  .due-box.is-clear { background: var(--success-soft); color: var(--success); }
+  .due-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.85; }
+  .due-value { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .due-side { font-size: 13px; color: var(--text-soft); }
+</style>
+{% endblock %}

@@ -11,6 +11,14 @@ from core.models import Customer
 from core.forms import CustomerForm
 from core.permissions import manager_required
 
+# How the customer form is grouped on screen.
+FORM_SECTIONS = [
+    ("Customer", "customer_name,mobile,email"),
+    ("Tax", "gst_number"),
+    ("Address", "billing_address,shipping_address,city,state,country,pincode"),
+    ("Balance", "opening_balance"),
+]
+
 
 @login_required
 def customer_list(request):
@@ -71,9 +79,11 @@ def add_customer(request):
 
     return render(
         request,
-        "core/add_customer.html",
+        "core/customer_form.html",
         {
-            "form": form
+            "form": form,
+            "mode": "add",
+            "sections": FORM_SECTIONS,
         }
     )
 
@@ -115,10 +125,12 @@ def edit_customer(request, customer_id):
 
     return render(
         request,
-        "core/edit_customer.html",
+        "core/customer_form.html",
         {
             "form": form,
-            "customer": customer
+            "customer": customer,
+            "mode": "edit",
+            "sections": FORM_SECTIONS,
         }
     )
 

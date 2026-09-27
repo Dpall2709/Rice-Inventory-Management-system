@@ -1,4 +1,7 @@
 {% extends 'core/base.html' %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'mill_list' %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
 {% block page_title %}{% if mode == 'edit' %}Edit supplier{% else %}Add supplier{% endif %}{% endblock %}
 {% block browser_title %}{% if mode == 'edit' %}Edit {{ mill.mill_name }}{% else %}Add supplier{% endif %}{% endblock %}
 

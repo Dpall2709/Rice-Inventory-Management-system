@@ -23,6 +23,7 @@ from billing.services import start_trial, subscription_for
 from core.models import Company, Mill, Payment, Product, Purchase, PurchaseItem, UserProfile
 from core.services.costing import line_costing, product_costing, purchase_costing
 from core.services.invoice_number import next_sale_invoice_no
+from core.services.ledger import mill_statement
 
 
 MILL_POST = {
@@ -982,3 +983,404 @@ class ChargeOwnershipTests(TestCase):
         self.assertEqual(purchase.freight_charge, Decimal("6000.00"))
         self.assertEqual(purchase.total_amount, Decimal("106000.00"))
         self.assertEqual(purchase.own_expense_total, 0)      # no longer your expense
+
+
+class PaymentAllocationTests(TestCase):
+    """Money paid to a mill must reach the bills it settles."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Pi Rice", "pi_user")
+        self.client.login(username="pi_user", password="TestPass#2026")
+
+        self.mill = Mill.objects.create(
+            company=self.company, mill_name="Ledger Mill", mobile="9876543210"
+        )
+        self.product = Product.objects.create(
+            company=self.company, rice_name="IR64", hsn_code="1006", gst_percent=0
+        )
+
+    def add_bill(self, invoice_no, amount, days_ago=0):
+        purchase = Purchase.objects.create(
+            company=self.company, mill=self.mill, invoice_no=invoice_no,
+            purchase_date=timezone.localdate() - timedelta(days=days_ago),
+            tax_type="none", goods_amount=amount, taxable_amount=amount,
+            total_amount=amount,
+        )
+        PurchaseItem.objects.create(
+            purchase=purchase, product=self.product, bag_weight=50,
+            bag_count=int(amount / 1000), purchase_price=20,
+            total_kg=int(amount / 1000) * 50, taxable_amount=amount, line_total=amount,
+        )
+        return purchase
+
+    def pay(self, amount, purchase=None):
+        return Payment.objects.create(
+            company=self.company, related_type="purchase", mill=self.mill,
+            purchase=purchase, amount=amount, payment_mode="UPI",
+            payment_date=timezone.localdate(),
+        )
+
+    def test_payment_to_the_mill_reaches_the_oldest_bill(self):
+        old = self.add_bill("OLD-1", Decimal("100000"), days_ago=10)
+        new = self.add_bill("NEW-1", Decimal("50000"), days_ago=1)
+
+        self.pay(Decimal("60000"))          # no bill named
+
+        statement = mill_statement(self.company, self.mill)
+        rows = {row["purchase"].invoice_no: row for row in statement["rows"]}
+
+        self.assertEqual(rows["OLD-1"]["paid"], Decimal("60000"))
+        self.assertEqual(rows["OLD-1"]["due"], Decimal("40000"))
+        self.assertEqual(rows["NEW-1"]["paid"], Decimal("0"))
+        self.assertEqual(rows["NEW-1"]["due"], Decimal("50000"))
+
+    def test_invoice_dues_add_up_to_the_mill_balance(self):
+        self.add_bill("A", Decimal("441000"))
+        self.pay(Decimal("100000"), purchase=Purchase.objects.get(invoice_no="A"))
+        self.pay(Decimal("100000"))         # to the mill, not the bill
+
+        statement = mill_statement(self.company, self.mill)
+
+        self.assertEqual(statement["total_paid"], Decimal("200000"))
+        self.assertEqual(statement["total_due"], Decimal("241000"))
+        self.assertEqual(statement["rows"][0]["paid"], Decimal("200000"))
+        self.assertEqual(statement["rows"][0]["due"], Decimal("241000"))
+        self.assertEqual(
+            sum(row["due"] for row in statement["rows"]), statement["total_due"]
+        )
+
+    def test_opening_balance_is_settled_before_any_bill(self):
+        self.mill.opening_balance = Decimal("30000")
+        self.mill.save()
+        self.add_bill("B", Decimal("50000"))
+
+        self.pay(Decimal("40000"))
+
+        statement = mill_statement(self.company, self.mill)
+        self.assertEqual(statement["opening_paid"], Decimal("30000"))
+        self.assertEqual(statement["opening_due"], Decimal("0"))
+        self.assertEqual(statement["rows"][0]["paid"], Decimal("10000"))
+        self.assertEqual(statement["total_due"], Decimal("40000"))
+
+    def test_paying_more_than_everything_shows_as_advance(self):
+        self.add_bill("C", Decimal("20000"))
+        self.pay(Decimal("50000"))
+
+        statement = mill_statement(self.company, self.mill)
+        self.assertEqual(statement["rows"][0]["due"], Decimal("0"))
+        self.assertEqual(statement["advance"], Decimal("30000"))
+        self.assertEqual(statement["total_due"], Decimal("0"))
+
+    def test_the_ledger_page_shows_the_applied_payment(self):
+        purchase = self.add_bill("D", Decimal("100000"))
+        self.pay(Decimal("40000"))
+
+        response = self.client.get(reverse("mill_report_detail", args=[self.mill.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "on account")
+
+    def test_purchase_detail_counts_on_account_money(self):
+        purchase = self.add_bill("E", Decimal("100000"))
+        self.pay(Decimal("40000"))
+
+        response = self.client.get(reverse("purchase_detail", args=[purchase.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "applied automatically")
+        self.assertContains(response, "Paid directly")
+        self.assertContains(response, "Applied from other payments")
+
+
+class ExportTests(TestCase):
+    """The PDF and Excel statements must build for real data."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Rho Rice", "rho_user")
+        self.client.login(username="rho_user", password="TestPass#2026")
+
+        self.mill = Mill.objects.create(
+            company=self.company, mill_name="Export Mill", mobile="9876543210",
+            owner_name="Owner", gst_number="10ABCDE1234F1Z5", city="Patna",
+        )
+        product = Product.objects.create(
+            company=self.company, rice_name="Basmati", hsn_code="1006", gst_percent=5
+        )
+        purchase = Purchase.objects.create(
+            company=self.company, mill=self.mill, invoice_no="EXP-1",
+            purchase_date=timezone.localdate(), tax_type="cgst_sgst",
+            goods_amount=Decimal("300000"), taxable_amount=Decimal("300000"),
+            cgst_amount=Decimal("7500"), sgst_amount=Decimal("7500"),
+            total_amount=Decimal("315000"),
+        )
+        PurchaseItem.objects.create(
+            purchase=purchase, product=product, bag_weight=50, bag_count=200,
+            purchase_price=30, gst_percent=5, total_kg=10000,
+            taxable_amount=Decimal("300000"), gst_amount=Decimal("15000"),
+            line_total=Decimal("315000"),
+        )
+        Payment.objects.create(
+            company=self.company, related_type="purchase", mill=self.mill,
+            amount=Decimal("100000"), payment_mode="UPI",
+            payment_date=timezone.localdate(),
+        )
+
+    def test_pdf_statement_builds(self):
+        response = self.client.get(reverse("mill_report_pdf", args=[self.mill.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertGreater(len(response.content), 3000)
+
+    def test_excel_statement_builds_with_four_sheets(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        response = self.client.get(reverse("mill_report_excel", args=[self.mill.id]))
+        self.assertEqual(response.status_code, 200)
+
+        workbook = load_workbook(BytesIO(response.content))
+        self.assertEqual(workbook.sheetnames, ["Summary", "Ledger", "Purchase bills", "Payments"])
+
+        summary = {row[0]: row[1] for row in workbook["Summary"].iter_rows(values_only=True) if row[0]}
+        self.assertEqual(summary["Supplier"], "Export Mill")
+        self.assertEqual(summary["Total purchased"], Decimal("315000"))
+        self.assertEqual(summary["Balance due"], Decimal("215000"))
+
+    def test_another_company_cannot_download_my_statement(self):
+        make_company("Sigma Rice", "sigma_user")
+        self.client.login(username="sigma_user", password="TestPass#2026")
+
+        self.assertEqual(
+            self.client.get(reverse("mill_report_pdf", args=[self.mill.id])).status_code, 404
+        )
+        self.assertEqual(
+            self.client.get(reverse("mill_report_excel", args=[self.mill.id])).status_code, 404
+        )
+
+
+class SettlementAndHistoryTests(TestCase):
+    """A settled supplier stays settled, and its history stays visible."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Tau Rice", "tau_user")
+        self.client.login(username="tau_user", password="TestPass#2026")
+        self.mill = Mill.objects.create(
+            company=self.company, mill_name="History Mill", mobile="9876543210"
+        )
+        self.product = Product.objects.create(
+            company=self.company, rice_name="IR64", hsn_code="1006", gst_percent=0
+        )
+
+    def bill(self, invoice_no, amount, days_ago=0):
+        purchase = Purchase.objects.create(
+            company=self.company, mill=self.mill, invoice_no=invoice_no,
+            purchase_date=timezone.localdate() - timedelta(days=days_ago),
+            tax_type="none", goods_amount=amount, taxable_amount=amount, total_amount=amount,
+        )
+        PurchaseItem.objects.create(
+            purchase=purchase, product=self.product, bag_weight=50, bag_count=10,
+            purchase_price=20, total_kg=500, taxable_amount=amount, line_total=amount,
+        )
+        return purchase
+
+    def pay(self, amount, purchase=None, days_ago=0):
+        return Payment.objects.create(
+            company=self.company, related_type="purchase", mill=self.mill,
+            purchase=purchase, amount=amount, payment_mode="Cash",
+            payment_date=timezone.localdate() - timedelta(days=days_ago),
+        )
+
+    # ---------------- the bug from the Deepak Rice Mill data ----------------
+
+    def test_overpaying_one_bill_settles_the_others(self):
+        first = self.bill("01", Decimal("750000"), days_ago=3)
+        second = self.bill("02", Decimal("151200"), days_ago=2)
+        third = self.bill("03", Decimal("315000"), days_ago=1)
+
+        self.pay(Decimal("100000"))                      # on account
+        self.pay(Decimal("1000000"), purchase=second)    # far more than bill 02
+
+        statement = mill_statement(self.company, self.mill)
+        rows = {row["purchase"].invoice_no: row for row in statement["rows"]}
+
+        self.assertEqual(rows["02"]["due"], 0)
+        self.assertEqual(rows["01"]["due"], 0)                     # got the spill-over
+        self.assertEqual(rows["03"]["due"], Decimal("116200"))     # the rest
+        self.assertEqual(statement["total_due"], Decimal("116200"))
+        self.assertEqual(statement["overpaid_on_bills"], Decimal("848800"))
+
+    def test_paying_more_than_everything_becomes_an_advance(self):
+        self.bill("01", Decimal("100000"))
+        self.pay(Decimal("250000"))
+
+        statement = mill_statement(self.company, self.mill)
+        self.assertEqual(statement["total_due"], 0)
+        self.assertEqual(statement["advance"], Decimal("150000"))
+
+    # ---------------- history ----------------
+
+    def test_history_lists_every_bill_and_payment_with_a_running_balance(self):
+        first = self.bill("01", Decimal("100000"), days_ago=5)
+        self.pay(Decimal("40000"), purchase=first, days_ago=4)
+        self.bill("02", Decimal("50000"), days_ago=3)
+        self.pay(Decimal("110000"), days_ago=1)          # settles everything
+
+        history = mill_statement(self.company, self.mill)["history"]
+
+        self.assertEqual([h["kind"] for h in history], ["opening", "bill", "payment", "bill", "payment"])
+        self.assertEqual([h["balance"] for h in history],
+                         [0, Decimal("100000"), Decimal("60000"), Decimal("110000"), Decimal("0")])
+
+    def test_a_settled_supplier_still_shows_its_history(self):
+        first = self.bill("01", Decimal("100000"))
+        self.pay(Decimal("100000"), purchase=first)
+
+        response = self.client.get(reverse("mill_report_detail", args=[self.mill.id]))
+
+        self.assertContains(response, "Account history")
+        self.assertContains(response, "Bill 01")
+        self.assertContains(response, "Fully settled")
+
+    # ---------------- the payment screens ----------------
+
+    def test_bill_payment_is_saved_and_named(self):
+        purchase = self.bill("01", Decimal("100000"))
+        response = self.client.post(reverse("add_purchase_payment", args=[purchase.id]), {
+            "amount": "40000", "payment_mode": "UPI",
+            "payment_date": timezone.localdate().isoformat(), "notes": "ref 123",
+        })
+
+        self.assertRedirects(response, reverse("purchase_detail", args=[purchase.id]))
+        payment = Payment.objects.get(purchase=purchase)
+        self.assertEqual(payment.amount, Decimal("40000"))
+        self.assertEqual(payment.mill, self.mill)
+        self.assertEqual(payment.company, self.company)
+
+    def test_letters_in_the_amount_do_not_crash(self):
+        purchase = self.bill("01", Decimal("100000"))
+        response = self.client.post(reverse("add_purchase_payment", args=[purchase.id]), {
+            "amount": "abc", "payment_mode": "UPI",
+            "payment_date": timezone.localdate().isoformat(),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Enter the amount paid")
+        self.assertFalse(Payment.objects.exists())
+
+    def test_zero_or_future_payments_are_refused(self):
+        purchase = self.bill("01", Decimal("100000"))
+        url = reverse("add_purchase_payment", args=[purchase.id])
+
+        self.client.post(url, {"amount": "0", "payment_mode": "Cash",
+                               "payment_date": timezone.localdate().isoformat()})
+        future = (timezone.localdate() + timedelta(days=2)).isoformat()
+        response = self.client.post(url, {"amount": "100", "payment_mode": "Cash",
+                                          "payment_date": future})
+
+        self.assertContains(response, "cannot be dated in the future")
+        self.assertFalse(Payment.objects.exists())
+
+    def test_nobody_can_pay_into_another_companys_bill(self):
+        purchase = self.bill("01", Decimal("100000"))
+
+        make_company("Upsilon Rice", "upsilon")
+        self.client.login(username="upsilon", password="TestPass#2026")
+
+        response = self.client.post(reverse("add_purchase_payment", args=[purchase.id]), {
+            "amount": "5000", "payment_mode": "Cash",
+            "payment_date": timezone.localdate().isoformat(),
+        })
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Payment.objects.exists())
+
+    def test_mill_payment_page_shows_what_is_owed(self):
+        self.bill("01", Decimal("100000"))
+        response = self.client.get(reverse("add_mill_payment", args=[self.mill.id]))
+        self.assertContains(response, "You owe History Mill")
+
+
+class CustomerPageTests(TestCase):
+    """The customer edit and delete pages used to crash - their templates were missing."""
+
+    def setUp(self):
+        from core.models import Customer
+
+        self.company, self.user = make_company("Phi Rice", "phi_user")
+        self.client.login(username="phi_user", password="TestPass#2026")
+        self.customer = Customer.objects.create(company=self.company, customer_name="Sharma Traders")
+
+    def test_edit_page_opens(self):
+        response = self.client.get(reverse("edit_customer", args=[self.customer.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sharma Traders")
+
+    def test_delete_page_opens_and_deactivates(self):
+        response = self.client.get(reverse("delete_customer", args=[self.customer.id]))
+        self.assertEqual(response.status_code, 200)
+
+        self.client.post(reverse("delete_customer", args=[self.customer.id]))
+        self.customer.refresh_from_db()
+        self.assertFalse(self.customer.is_active)
+
+    def test_add_page_opens(self):
+        self.assertEqual(self.client.get(reverse("add_customer")).status_code, 200)
+
+
+
+class BillPaymentExplanationTests(TestCase):
+    """A bill must separate what was paid against it from money applied to it."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Chi Rice", "chi_user")
+        self.client.login(username="chi_user", password="TestPass#2026")
+        self.mill = Mill.objects.create(company=self.company, mill_name="Explain Mill", mobile="9876543210")
+        self.product = Product.objects.create(company=self.company, rice_name="IR64", hsn_code="1006", gst_percent=0)
+
+    def bill(self, invoice_no, amount):
+        purchase = Purchase.objects.create(
+            company=self.company, mill=self.mill, invoice_no=invoice_no,
+            purchase_date=timezone.localdate(), tax_type="none",
+            goods_amount=amount, taxable_amount=amount, total_amount=amount,
+        )
+        PurchaseItem.objects.create(
+            purchase=purchase, product=self.product, bag_weight=50, bag_count=10,
+            purchase_price=20, total_kg=500, taxable_amount=amount, line_total=amount,
+        )
+        return purchase
+
+    def test_overpayment_on_another_bill_is_named(self):
+        first = self.bill("A1", Decimal("100000"))
+        second = self.bill("B2", Decimal("400000"))
+
+        # 3,00,000 entered against A1, a 1,00,000 bill
+        Payment.objects.create(company=self.company, related_type="purchase", mill=self.mill,
+                               purchase=first, amount=Decimal("300000"), payment_mode="Cash",
+                               payment_date=timezone.localdate())
+        Payment.objects.create(company=self.company, related_type="purchase", mill=self.mill,
+                               purchase=second, amount=Decimal("100000"), payment_mode="Bank",
+                               payment_date=timezone.localdate())
+
+        response = self.client.get(reverse("purchase_detail", args=[second.id]))
+        html = response.content.decode()
+
+        # Paid directly: only what was entered against B2
+        self.assertEqual(response.context["entered_against_bill"], Decimal("100000"))
+        # Applied: the 2,00,000 extra from A1
+        self.assertEqual(response.context["applied_from_account"], Decimal("200000"))
+        self.assertEqual(response.context["paid"], Decimal("300000"))
+        self.assertEqual(response.context["due"], Decimal("100000"))
+
+        self.assertIn("A1", html)                 # the source bill is named
+        self.assertIn("more than bill", html)
+
+    def test_form_pages_are_marked_so_back_skips_them(self):
+        purchase = self.bill("C3", Decimal("50000"))
+
+        form_page = self.client.get(reverse("add_purchase_payment", args=[purchase.id]))
+        self.assertContains(form_page, 'data-nav="form"')
+
+        normal_page = self.client.get(reverse("purchase_detail", args=[purchase.id]))
+        self.assertContains(normal_page, 'data-nav="page"')
+        # and falls back to its parent, the purchase list
+        self.assertContains(normal_page, f'data-back-fallback="{reverse("purchase_list")}"')

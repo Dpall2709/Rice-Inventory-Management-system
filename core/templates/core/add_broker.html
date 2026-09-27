@@ -1,4 +1,7 @@
 {% extends 'core/base.html' %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'broker_list' %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
 {% block page_title %}Add Broker{% endblock %}
 
 {% block content %}

@@ -51,6 +51,93 @@
     paintThemeButton();
   });
 
+  /* ------------------------------------------------------------ back button */
+
+  // The browser's own history is the wrong thing to follow here: after saving a
+  // payment it would take you straight back into the payment form you just
+  // submitted. Instead the app keeps a short trail of the pages you actually
+  // browse (lists, ledgers, bills) and leaves forms out of it, so Back always
+  // lands on a page you would want to see again.
+
+  var TRAIL_KEY = "rb:trail";
+  var isFormPage = body.getAttribute("data-nav") === "form";
+
+  function here() {
+    return window.location.pathname + window.location.search;
+  }
+
+  function readTrail() {
+    try {
+      var saved = JSON.parse(window.sessionStorage.getItem(TRAIL_KEY));
+      return Array.isArray(saved) ? saved : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function writeTrail(trail) {
+    try {
+      window.sessionStorage.setItem(TRAIL_KEY, JSON.stringify(trail.slice(-40)));
+    } catch (e) {}
+  }
+
+  // Record this page, unless it is a form.
+  if (!isFormPage) {
+    var trail = readTrail();
+    var current = here();
+
+    // Reloading, or landing back here after saving a form, changes nothing.
+    if (trail[trail.length - 1] !== current) {
+      var seenAt = trail.lastIndexOf(current);
+      var entry = (window.performance && performance.getEntriesByType)
+        ? performance.getEntriesByType("navigation")[0]
+        : null;
+      var viaBrowserBack = entry && entry.type === "back_forward";
+
+      if (viaBrowserBack && seenAt !== -1) {
+        // The browser's own Back button: step back along the trail.
+        trail = trail.slice(0, seenAt + 1);
+      } else {
+        // Clicked through to a page seen earlier: it is now the latest page,
+        // and the page you came from stays behind it.
+        if (seenAt !== -1) {
+          trail.splice(seenAt, 1);
+        }
+        trail.push(current);
+      }
+      writeTrail(trail);
+    }
+  }
+
+  on("[data-back]", "click", function (e, button) {
+    e.preventDefault();
+
+    var trail = readTrail();
+    var current = here();
+    var at = trail.lastIndexOf(current);
+
+    // Step off the current page (a form page is not on the trail at all, so
+    // the last entry is exactly the page the form was opened from).
+    if (at !== -1) {
+      trail = trail.slice(0, at);
+    }
+
+    var target = trail.length ? trail[trail.length - 1] : button.getAttribute("data-back-fallback") || "/";
+    writeTrail(trail);
+    window.location.href = target;
+  });
+
+  // Alt + ArrowLeft does the same thing from the keyboard.
+  document.addEventListener("keydown", function (e) {
+    if (e.altKey && e.key === "ArrowLeft" && !e.target.matches("input, textarea, select")) {
+      var button = document.querySelector("[data-back]");
+      if (button) {
+        e.preventDefault();
+        button.click();
+      }
+    }
+  });
+
   /* -------------------------------------------------------------- sidebar */
 
   if (read("sidebar") === "collapsed") body.classList.add("sidebar-collapsed");
@@ -197,6 +284,11 @@
 
   document.querySelectorAll(".inr[data-value]").forEach(function (el) {
     el.textContent = "₹ " + formatINR(el.getAttribute("data-value"));
+  });
+
+  // The same, without the sign - for an advance, which is shown as "₹ X adv".
+  document.querySelectorAll(".inr-abs[data-value]").forEach(function (el) {
+    el.textContent = formatINR(Math.abs(Number(el.getAttribute("data-value"))));
   });
 
   /* --------------------------------------------------- submit button state */

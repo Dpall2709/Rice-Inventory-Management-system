@@ -28,508 +28,12 @@ from reportlab.lib.utils import ImageReader
 from num2words import num2words
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from .permissions import manager_required, owner_required
+from .services.ledger import mill_statement
+from .services.mill_report import build_excel, build_pdf
 from .tenancy import company_of, tenant_object_or_404
 from .function.add_sale import add_sale
 from .function.sale_invoice_pdf import sale_invoice_pdf  
 from django.contrib.auth.decorators import login_required
-
-@login_required
-def dashboard(request):
-    return render(request, 'core/dashboard.html')
-
-@login_required
-def add_purchase(request):
-
-    # Get logged-in user's company
-    company = request.user.userprofile.company
-
-    # Only show this company's mills and products
-    mills = Mill.objects.filter(
-        company=company,
-        is_active=True
-    ).order_by("mill_name")
-
-    products = Product.objects.filter(
-        company=company,
-        is_active=True
-    ).order_by("rice_name")
-
-    if request.method == "POST":
-
-        mill_id = request.POST.get("mill")
-        invoice_no = request.POST.get("invoice_no")
-        purchase_date = request.POST.get("purchase_date")
-
-        product_ids = request.POST.getlist("product[]")
-        bag_weights = request.POST.getlist("bag_weight[]")
-        bag_counts = request.POST.getlist("bag_count[]")
-        rates = request.POST.getlist("purchase_price[]")
-
-        total_amount = 0
-
-        # Make sure selected mill belongs to current company
-        mill = get_object_or_404(
-            Mill,
-            id=mill_id,
-            company=company
-        )
-
-        with transaction.atomic():
-
-            purchase = Purchase.objects.create(
-                company=company,       # ⭐ IMPORTANT
-                mill=mill,
-                invoice_no=invoice_no,
-                purchase_date=purchase_date,
-                total_amount=0
-            )
-
-            for i in range(len(product_ids)):
-
-                if not product_ids[i]:
-                    continue
-
-                # Make sure selected product belongs to company
-                product = get_object_or_404(
-                    Product,
-                    id=product_ids[i],
-                    company=company,
-                    is_active=True
-                )
-
-                bw = int(bag_weights[i] or 0)
-                bc = int(bag_counts[i] or 0)
-                rate = float(rates[i] or 0)
-
-                line_total = bc * bw * rate
-
-                total_amount += line_total
-
-                PurchaseItem.objects.create(
-                    purchase=purchase,
-                    product=product,
-                    bag_weight=bw,
-                    bag_count=bc,
-                    purchase_price=rate
-                )
-
-            purchase.total_amount = total_amount
-            purchase.save()
-
-        messages.success(
-            request,
-            "✅ Purchase saved successfully!"
-        )
-
-        return redirect("purchase_list")
-
-    return render(
-        request,
-        "core/add_purchase.html",
-        {
-            "mills": mills,
-            "products": products
-        }
-    )
-
-@login_required
-def purchase_list(request):
-
-    company = request.user.userprofile.company
-
-    purchases = (
-        Purchase.objects
-        .filter(company=company)
-        .select_related("mill")
-        .annotate(
-            total_bags=Sum(
-                "purchaseitem__bag_count"
-            ),
-            total_kg=Sum(
-                ExpressionWrapper(
-                    F("purchaseitem__bag_count") *
-                    F("purchaseitem__bag_weight"),
-                    output_field=FloatField()
-                )
-            )
-        )
-        .order_by("-id")
-    )
-
-    return render(
-        request,
-        "core/purchase_list.html",
-        {
-            "purchases": purchases
-        }
-    )
-@login_required
-def purchase_detail(request, purchase_id):
-
-    company = request.user.userprofile.company
-
-    purchase = get_object_or_404(
-        Purchase.objects.select_related("mill"),
-        id=purchase_id,
-        company=company
-    )
-
-    items = (
-        PurchaseItem.objects
-        .filter(purchase=purchase)
-        .select_related("product")
-    )
-
-    # Build rows with calculations
-    item_rows = []
-
-    total_amount = 0
-
-    for it in items:
-
-        row_kg = (
-            (it.bag_weight or 0) *
-            (it.bag_count or 0)
-        )
-
-        amount = (
-            row_kg *
-            float(it.purchase_price or 0)
-        )
-
-        total_amount += amount
-
-        item_rows.append({
-            "rice_name": it.product.rice_name,
-            "bag_weight": it.bag_weight,
-            "bag_count": it.bag_count,
-            "row_kg": row_kg,
-            "rate_per_kg": it.purchase_price,
-            "amount": amount,
-        })
-
-    invoice_payments = (
-        Payment.objects
-        .filter(
-            company=company,
-            related_type="purchase",
-            purchase=purchase
-        )
-        .order_by(
-            "-payment_date",
-            "-id"
-        )
-    )
-
-    invoice_paid = (
-        invoice_payments
-        .aggregate(
-            s=Sum("amount")
-        )["s"] or 0
-    )
-
-    invoice_due = (
-        float(purchase.total_amount)
-        - float(invoice_paid)
-    )
-
-    total_bags = (
-        items
-        .aggregate(
-            s=Sum("bag_count")
-        )["s"] or 0
-    )
-
-    total_kg = (
-        items
-        .aggregate(
-            s=Sum(
-                F("bag_weight") *
-                F("bag_count")
-            )
-        )["s"] or 0
-    )
-
-    return render(
-        request,
-        "core/purchase_detail.html",
-        {
-            "purchase": purchase,
-            "item_rows": item_rows,
-            "total_bags": total_bags,
-            "total_kg": total_kg,
-            "total_amount": total_amount,
-            "invoice_payments": invoice_payments,
-            "invoice_paid": invoice_paid,
-            "invoice_due": invoice_due,
-        }
-    )
-@login_required
-def edit_purchase(request, purchase_id):
-
-    company = request.user.userprofile.company
-
-    # Only allow editing purchase belonging to this company
-    purchase = get_object_or_404(
-        Purchase,
-        id=purchase_id,
-        company=company
-    )
-
-    # Only company's mills/products
-    mills = Mill.objects.filter(
-        company=company,
-        is_active=True
-    ).order_by("mill_name")
-
-    products = Product.objects.filter(
-        company=company,
-        is_active=True
-    ).order_by("rice_name")
-
-    items = (
-        PurchaseItem.objects
-        .filter(purchase=purchase)
-        .select_related("product")
-    )
-
-    if request.method == "POST":
-
-        mill_id = request.POST.get("mill")
-        invoice_no = request.POST.get("invoice_no")
-        purchase_date = request.POST.get("purchase_date")
-
-        product_ids = request.POST.getlist("product[]")
-        bag_weights = request.POST.getlist("bag_weight[]")
-        bag_counts = request.POST.getlist("bag_count[]")
-        rates = request.POST.getlist("purchase_price[]")
-
-        total_amount = 0
-
-        # Verify selected mill belongs to company
-        mill = get_object_or_404(
-            Mill,
-            id=mill_id,
-            company=company
-        )
-
-        with transaction.atomic():
-
-            # Update purchase header
-            purchase.mill = mill
-            purchase.invoice_no = invoice_no
-            purchase.purchase_date = purchase_date
-
-            purchase.save()
-
-            # Remove old items
-            PurchaseItem.objects.filter(
-                purchase=purchase
-            ).delete()
-
-            # Insert new items
-            for i in range(len(product_ids)):
-
-                if not product_ids[i]:
-                    continue
-
-                # Verify product belongs to company
-                product = get_object_or_404(
-                    Product,
-                    id=product_ids[i],
-                    company=company,
-                    is_active=True
-                )
-
-                bw = int(
-                    bag_weights[i] or 0
-                )
-
-                bc = int(
-                    bag_counts[i] or 0
-                )
-
-                rate = float(
-                    rates[i] or 0
-                )
-
-                line_total = (
-                    bc *
-                    bw *
-                    rate
-                )
-
-                total_amount += line_total
-
-                PurchaseItem.objects.create(
-                    purchase=purchase,
-                    product=product,
-                    bag_weight=bw,
-                    bag_count=bc,
-                    purchase_price=rate
-                )
-
-            purchase.total_amount = total_amount
-
-            purchase.save()
-
-        messages.success(
-            request,
-            "✅ Purchase updated successfully!"
-        )
-
-        return redirect(
-            "purchase_detail",
-            purchase_id=purchase.id
-        )
-
-    return render(
-        request,
-        "core/edit_purchase.html",
-        {
-            "purchase": purchase,
-            "mills": mills,
-            "products": products,
-            "items": items,
-        }
-    )
-@login_required
-@manager_required
-def delete_purchase(request, purchase_id):
-
-    company = request.user.userprofile.company
-
-    purchase = get_object_or_404(
-        Purchase.objects.select_related("mill"),
-        id=purchase_id,
-        company=company
-    )
-
-    if request.method == "POST":
-
-        purchase.delete()
-
-        messages.success(
-            request,
-            "🗑 Purchase invoice deleted successfully!"
-        )
-
-        return redirect("purchase_list")
-
-    return render(
-        request,
-        "core/delete_purchase.html",
-        {
-            "purchase": purchase
-        }
-    )
-
-@login_required
-def add_mill(request):
-    company = request.user.userprofile.company
-    if request.method == "POST":
-        Mill.objects.create(
-            mill_name=request.POST.get("mill_name"),
-            owner_name=request.POST.get("owner_name", ""),
-            mobile=request.POST.get("mobile"),
-            address=request.POST.get("address", ""),
-            gst_number=request.POST.get("gst_number", ""),
-            opening_balance=request.POST.get("opening_balance") or 0,
-            company = company,
-        )
-        messages.success(request, "✅ Mill saved successfully!")
-        return redirect("mill_list")
-
-    return render(request, "core/add_mill.html")
-@login_required
-def mill_list(request):
-
-    company = request.user.userprofile.company
-
-    q = request.GET.get("q", "").strip()
-
-    mills = Mill.objects.filter(
-        company=company
-    ).order_by("-created_at")
-
-    if q:
-        mills = mills.filter(
-            Q(mill_name__icontains=q) |
-            Q(owner_name__icontains=q) |
-            Q(mobile__icontains=q)
-        )
-
-    return render(
-        request,
-        "core/mill_list.html",
-        {
-            "mills": mills
-        }
-    )
-
-@login_required
-def edit_mill(request, mill_id):
-
-    company = request.user.userprofile.company
-
-    mill = get_object_or_404(
-        Mill,
-        id=mill_id,
-        company=company
-    )
-
-    if request.method == "POST":
-
-        mill.mill_name = request.POST.get("mill_name")
-        mill.owner_name = request.POST.get("owner_name", "")
-        mill.mobile = request.POST.get("mobile")
-        mill.address = request.POST.get("address", "")
-        mill.gst_number = request.POST.get("gst_number", "")
-        mill.opening_balance = request.POST.get("opening_balance") or 0
-
-        mill.save()
-
-        messages.success(
-            request,
-            "Mill updated successfully ✅"
-        )
-
-        return redirect("mill_list")
-
-    return render(
-        request,
-        "core/edit_mill.html",
-        {"mill": mill}
-    )
-
-@login_required
-@manager_required
-def delete_mill(request, mill_id):
-
-    company = request.user.userprofile.company
-
-    mill = get_object_or_404(
-        Mill,
-        id=mill_id,
-        company=company
-    )
-
-    if request.method == "POST":
-        mill.delete()
-
-        messages.success(
-            request,
-            "Mill deleted successfully 🗑️"
-        )
-
-        return redirect("mill_list")
-
-    return render(
-        request,
-        "core/delete_mill.html",
-        {"mill": mill}
-    )
-
 
 # @login_required
 # def product_list(request):
@@ -748,64 +252,61 @@ def mill_report_detail(request, mill_id):
         )["s"] or 0
     )
 
-    # Build invoice-wise purchase rows
+    # Money paid to the mill in general is applied to the oldest debt first, so
+    # the invoice rows always add up to the balance shown at the top.
+    statement = mill_statement(company, mill)
+
     purchase_rows = []
 
-    for p in purchases:
+    for entry in reversed(statement["rows"]):
+        purchase = entry["purchase"]
+        items = list(purchase.purchaseitem_set.all())
 
-        items = PurchaseItem.objects.filter(
-            purchase=p
+        total_bags = sum(item.bag_count or 0 for item in items)
+        total_kg = sum(
+            (item.total_kg or (item.bag_weight or 0) * (item.bag_count or 0))
+            for item in items
         )
-
-        total_bags = (
-            items.aggregate(s=Sum("bag_count"))["s"] or 0
-        )
-
-        total_kg = (
-            items.aggregate(
-                s=Sum(
-                    F("bag_weight") * F("bag_count")
-                )
-            )["s"] or 0
-        )
-
-        # Invoice-wise payments
-        paid = (
-            Payment.objects
-            .filter(
-                company=company,
-                related_type="purchase",
-                purchase=p
-            )
-            .aggregate(s=Sum("amount"))["s"] or 0
-        )
-
-        due = float(p.total_amount) - float(paid)
-
-        if due < 0:
-            due = 0
 
         avg_rate = 0
-
         if total_kg:
-            avg_rate = (
-                float(p.total_amount)
-                / float(total_kg)
-            )
+            avg_rate = float(purchase.taxable_amount or purchase.total_amount) / float(total_kg)
+
+        # The rates actually paid, which is what a person checking a bill wants
+        # to see. The average only matters when one bill mixes rates.
+        rates = []
+        for item in items:
+            rate = float(item.purchase_price or 0)
+            if rate not in rates:
+                rates.append(rate)
 
         purchase_rows.append({
-            "id": p.id,
-            "purchase_date": p.purchase_date,
-            "invoice_no": p.invoice_no,
+            "id": purchase.id,
+            "purchase_date": purchase.purchase_date,
+            "invoice_no": purchase.invoice_no,
+            "purchase_ref": purchase.purchase_ref,
+            "tax_type": purchase.tax_type,
+            "gst_amount": purchase.gst_amount,
 
             "total_bags": total_bags,
             "total_kg": total_kg,
             "avg_rate": round(avg_rate, 2),
+            "rates": rates,
+            "single_rate": rates[0] if len(rates) == 1 else None,
 
-            "total_amount": p.total_amount,
-            "paid": paid,
-            "due": round(due, 2),
+            "items": items,
+
+            "total_amount": entry["total"],
+            "paid": entry["paid"],
+            "direct_paid": entry["direct_paid"],
+            "applied_from_account": entry["applied_from_account"],
+            "due": entry["due"],
+            "status": entry["status"],
         })
+
+    total_purchase = statement["total_purchased"]
+    total_paid = statement["total_paid"]
+    balance = statement["total_due"]
 
     return render(
         request,
@@ -824,342 +325,28 @@ def mill_report_detail(request, mill_id):
             "grand_total_kg": grand_total_kg,
 
             "purchase_rows": purchase_rows,
-        }
-    )
-@login_required
-def add_mill_payment(request, mill_id):
-
-    company = request.user.userprofile.company
-
-    # Only allow access to a mill belonging
-    # to the logged-in user's company
-    mill = get_object_or_404(
-        Mill,
-        id=mill_id,
-        company=company
-    )
-
-    if request.method == "POST":
-
-        amount = request.POST.get("amount")
-        payment_mode = request.POST.get("payment_mode")
-        payment_date = request.POST.get("payment_date")
-        notes = request.POST.get("notes", "")
-
-        Payment.objects.create(
-            company=company,          # ✅ IMPORTANT
-            related_type="purchase",
-            mill=mill,
-            purchase=None,
-            sale=None,
-            amount=amount,
-            payment_mode=payment_mode,
-            payment_date=payment_date,
-            notes=notes
-        )
-
-        messages.success(
-            request,
-            "✅ Payment saved successfully!"
-        )
-
-        return redirect(
-            "mill_report_detail",
-            mill_id=mill.id
-        )
-
-    return render(
-        request,
-        "core/add_mill_payment.html",
-        {
-            "mill": mill
-        }
-    )
-
-@login_required
-def add_purchase_payment(request, purchase_id):
-
-    purchase = get_object_or_404(
-        Purchase.objects.select_related("company", "mill"),
-        id=purchase_id
-    )
-
-    if request.method == "POST":
-
-        amount = request.POST.get("amount")
-        payment_mode = request.POST.get("payment_mode")
-        payment_date = request.POST.get("payment_date")
-        notes = request.POST.get("notes", "")
-
-        Payment.objects.create(
-            company=purchase.company,       # ✅ IMPORTANT
-            related_type="purchase",
-            mill=purchase.mill,
-            purchase=purchase,
-            sale=None,
-            amount=amount,
-            payment_mode=payment_mode,
-            payment_date=payment_date,
-            notes=notes,
-        )
-
-        messages.success(
-            request,
-            "✅ Purchase payment added successfully!"
-        )
-
-        return redirect(
-            "purchase_detail",
-            purchase_id=purchase.id
-        )
-
-    return render(
-        request,
-        "core/add_purchase_payment.html",
-        {
-            "purchase": purchase,
+            "statement": statement,
+            "on_account": statement["on_account"],
+            "advance": statement["advance"],
+            "opening_due": statement["opening_due"],
         }
     )
 @login_required
 def mill_report_excel(request, mill_id):
+    """Download the supplier statement as an Excel workbook."""
     company = company_of(request)
     mill = tenant_object_or_404(Mill, request, mill_id)
 
-    # reuse same data from your mill_report_detail logic
-    purchases = Purchase.objects.for_company(company).filter(mill=mill).order_by("-purchase_date", "-id")
-    payments = Payment.objects.for_company(company).filter(related_type="purchase", mill=mill).order_by("-payment_date", "-id")
+    return build_excel(company, mill)
 
-    total_purchase = purchases.aggregate(s=Sum("total_amount"))["s"] or 0
-    total_paid = payments.aggregate(s=Sum("amount"))["s"] or 0
-    balance = float(mill.opening_balance) + float(total_purchase) - float(total_paid)
-
-    all_items = PurchaseItem.objects.filter(purchase__mill=mill)
-    grand_total_bags = all_items.aggregate(s=Sum("bag_count"))["s"] or 0
-    grand_total_kg = all_items.aggregate(s=Sum(F("bag_weight") * F("bag_count")))["s"] or 0
-
-    # Purchase rows (invoice wise)
-    purchase_rows = []
-    for p in purchases:
-        items = PurchaseItem.objects.filter(purchase=p)
-        total_bags = items.aggregate(s=Sum("bag_count"))["s"] or 0
-        total_kg = items.aggregate(s=Sum(F("bag_weight") * F("bag_count")))["s"] or 0
-
-        paid = Payment.objects.filter(related_type="purchase", purchase=p).aggregate(s=Sum("amount"))["s"] or 0
-        due = float(p.total_amount) - float(paid)
-        if due < 0:
-            due = 0
-
-        avg_rate = round(float(p.total_amount) / float(total_kg), 2) if total_kg else 0
-
-        purchase_rows.append([str(p.purchase_date), p.invoice_no, total_bags, total_kg, avg_rate, float(p.total_amount), float(paid), float(due)])
-
-    # Create workbook
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Mill Report"
-
-    # Header
-    ws.append(["Mill Report"])
-    ws.append([f"Mill: {mill.mill_name}"])
-    ws.append([f"Generated: {datetime.now().strftime('%d-%m-%Y %H:%M')}"])
-    ws.append([])
-
-    # Summary
-    ws.append(["Opening Balance", float(mill.opening_balance)])
-    ws.append(["Total Purchase", float(total_purchase)])
-    ws.append(["Total Paid", float(total_paid)])
-    ws.append(["Balance Due", float(balance)])
-    ws.append(["Total Bags Purchased", grand_total_bags])
-    ws.append(["Total KG Purchased", float(grand_total_kg)])
-    ws.append([])
-
-    # Purchases table
-    ws.append(["Date", "Invoice", "Bags", "KG", "Avg Rate/KG", "Amount", "Paid", "Due"])
-    for row in purchase_rows:
-        ws.append(row)
-
-    # Adjust column width
-    for col in range(1, 9):
-        ws.column_dimensions[get_column_letter(col)].width = 18
-
-    # Response
-    # filename = f"Mill_Report_{mill.mill_name.replace(' ', '_')}.xlsx"
-    dt = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"{mill.mill_name.strip().replace(' ', '_')}_{dt}.xlsx"
-    response = HttpResponse(
-        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
-    wb.save(response)
-    return response
 
 @login_required
 def mill_report_pdf(request, mill_id):
+    """The supplier statement as a PDF, ready to send to the mill."""
     company = company_of(request)
     mill = tenant_object_or_404(Mill, request, mill_id)
 
-    purchases = Purchase.objects.for_company(company).filter(mill=mill).order_by("purchase_date", "id")
-    payments = Payment.objects.for_company(company).filter(
-        related_type="purchase",
-        mill=mill
-    ).order_by("payment_date", "id")
-
-    # totals
-    total_purchase = purchases.aggregate(s=Sum("total_amount"))["s"] or 0
-    total_paid = payments.aggregate(s=Sum("amount"))["s"] or 0
-    balance = float(mill.opening_balance) + float(total_purchase) - float(total_paid)
-
-    all_items = PurchaseItem.objects.filter(purchase__mill=mill)
-    grand_total_bags = all_items.aggregate(s=Sum("bag_count"))["s"] or 0
-    grand_total_kg = all_items.aggregate(s=Sum(F("bag_weight") * F("bag_count")))["s"] or 0
-
-    # response
-    dt = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"{mill.mill_name.strip().replace(' ', '_')}_{dt}.pdf"
-    response = HttpResponse(content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
-
-    doc = SimpleDocTemplate(response, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
-    styles = getSampleStyleSheet()
-    elements = []
-
-    # ---------- TITLE ----------
-    elements.append(Paragraph("<b>Maa Bagwati Bhandar</b>", styles["Title"]))
-    elements.append(Spacer(1, 8))
-    elements.append(Paragraph(f"<b>Mill:</b> {mill.mill_name}", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Generated:</b> {datetime.now().strftime('%d-%m-%Y %H:%M')}", styles["Normal"]))
-    elements.append(Spacer(1, 12))
-
-    # ---------- SUMMARY TABLE ----------
-    summary_data = [
-        ["Opening Balance", f"Rs {mill.opening_balance}"],
-        ["Total Purchase", f"Rs {total_purchase}"],
-        ["Total Paid", f"Rs {total_paid}"],
-        ["Balance Due", f"Rs {round(balance, 2)}"],
-        ["Total Bags Purchased", str(grand_total_bags)],
-        ["Total KG Purchased", str(grand_total_kg)],
-    ]
-
-    summary_table = Table(summary_data, colWidths=[220, 250])
-    summary_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.whitesmoke),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 10),
-        ("ALIGN", (1, 0), (1, -1), "RIGHT"),
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-    ]))
-
-    elements.append(Paragraph("<b>Summary</b>", styles["Heading2"]))
-    elements.append(summary_table)
-    elements.append(Spacer(1, 14))
-
-    # ---------- PURCHASES TABLE ----------
-    elements.append(Paragraph("<b>Purchases (Invoice-wise)</b>", styles["Heading2"]))
-
-    purchase_data = [[
-        "Date", "Invoice", "Bags", "KG", "Rate/KG", "Amount", "Paid", "Due"
-    ]]
-
-    for p in purchases:
-        items = PurchaseItem.objects.filter(purchase=p)
-        total_bags = items.aggregate(s=Sum("bag_count"))["s"] or 0
-        total_kg = items.aggregate(s=Sum(F("bag_weight") * F("bag_count")))["s"] or 0
-
-        paid = Payment.objects.filter(related_type="purchase", purchase=p).aggregate(s=Sum("amount"))["s"] or 0
-        due = float(p.total_amount) - float(paid)
-        if due < 0:
-            due = 0
-
-        rate = round(float(p.total_amount) / float(total_kg), 2) if total_kg else 0
-
-        purchase_data.append([
-            str(p.purchase_date),
-            p.invoice_no,
-            str(total_bags),
-            str(total_kg),
-            f"Rs {rate}",
-            f"Rs {p.total_amount}",
-            f"Rs {paid}",
-            f"Rs {round(due, 2)}"
-        ])
-
-        # ✅ Multiple payments under same invoice
-        inv_pays = Payment.objects.filter(related_type="purchase", purchase=p).order_by("payment_date", "id")
-
-        if inv_pays.exists():
-            purchase_data.append(["", "", "", "", "", "", "", ""])  # empty row
-            purchase_data.append(["", "Payments for Invoice:", "", "", "", "", "", ""])
-
-            for pay in inv_pays:
-                purchase_data.append([
-                    "",
-                    f"- {pay.payment_date} ({pay.payment_mode})",
-                    "",
-                    "",
-                    "",
-                    "",
-                    f"Rs {pay.amount}",
-                    pay.notes or ""
-                ])
-
-            purchase_data.append(["", "", "", "", "", "", "", ""])  # separator row
-
-    purchase_table = Table(purchase_data, repeatRows=1, colWidths=[65, 85, 45, 45, 60, 70, 60, 70])
-    purchase_table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ]))
-
-    elements.append(purchase_table)
-    elements.append(Spacer(1, 14))
-
-    # ---------- PAYMENTS TABLE ----------
-    elements.append(PageBreak())
-    elements.append(Paragraph("<b>All Payments (Direct + Invoice-wise)</b>", styles["Heading2"]))
-
-    pay_data = [["Date", "Mode", "Invoice", "Amount"]]
-
-    for pay in payments:
-        invoice_txt = "-"
-        if pay.purchase:
-            invoice_txt = pay.purchase.invoice_no
-
-        pay_data.append([
-            str(pay.payment_date),
-            pay.payment_mode,
-            invoice_txt,
-            f"Rs {pay.amount}"
-        ])
-
-    pay_table = Table(pay_data, repeatRows=1, colWidths=[70, 70, 90, 70, 220])
-    pay_table.setStyle(TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("ALIGN", (3, 1), (3, -1), "RIGHT"),
-    ]))
-
-    elements.append(pay_table)
-
-    # build PDF
-    doc.build(elements)
-    return response
-
-# @login_required
-# def sale_list(request):
-#     q = request.GET.get("q", "")
-#     sales = Sale.objects.all().order_by("-sale_date", "-id")
-
-#     if q:
-#         sales = sales.filter(customer_name__icontains=q)
-
-#     return render(request, "core/sale_list.html", {"sales": sales, "q": q})
+    return build_pdf(company, mill)
 
 
 @login_required

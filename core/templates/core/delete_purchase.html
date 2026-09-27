@@ -1,4 +1,7 @@
 {% extends 'core/base.html' %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'purchase_detail' purchase.id %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
 {% block page_title %}Delete purchase{% endblock %}
 
 {% block content %}

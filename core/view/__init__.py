@@ -20,3 +20,4 @@ from .purchase.purchase_list import (
     purchase_detail,
     purchase_list,
 )
+from .purchase.payments import add_mill_payment, add_purchase_payment

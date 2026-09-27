@@ -12,6 +12,7 @@ from django.shortcuts import get_object_or_404
 
 from core.models import Mill, Payment, Purchase, PurchaseExpense, PurchaseItem
 from core.services.costing import line_costing, purchase_costing
+from core.services.ledger import paid_map_for_purchases, purchase_payment_status
 from core.permissions import manager_required
 from core.tenancy import company_of, tenant_object_or_404
 
@@ -84,6 +85,16 @@ def purchase_list(request):
         request.GET.get("page")
     )
 
+    # Payments made to a mill without naming a bill still count. This applies
+    # them the same way the supplier ledger does, so both screens agree.
+    settled = paid_map_for_purchases(company, page.object_list)
+    for purchase in page.object_list:
+        row = settled.get(purchase.id)
+        if row:
+            purchase.paid = row["paid"]
+            purchase.due = row["due"]
+            purchase.applied_from_account = row["applied_from_account"]
+
     params = request.GET.copy()
     params.pop("page", None)
 
@@ -129,12 +140,29 @@ def purchase_detail(request, purchase_id):
     except (InvalidOperation, TypeError):
         margin = None
 
+    status = purchase_payment_status(company, purchase)
+
+    # Where money that settled this bill came from, when it was not paid
+    # against this bill directly - so the screen can explain the difference.
+    from core.services.ledger import mill_statement
+
+    statement = mill_statement(company, purchase.mill)
+    extra_sources = [
+        (bill, amount) for bill, amount in statement["overpaid_by_bill"]
+        if bill is not None and bill.id != purchase.id
+    ]
+
     return render(request, "core/purchase_detail.html", {
         "purchase": purchase,
         "items": items,
         "payments": payments,
-        "paid": purchase.paid_amount,
-        "due": purchase.due_amount,
+        "paid": status["paid"],
+        "due": status["due"],
+        "direct_paid": status["direct_paid"],
+        "entered_against_bill": status.get("entered_against_bill", status["direct_paid"]),
+        "applied_from_account": status["applied_from_account"],
+        "overpaid_sources": extra_sources,
+        "on_account_total": statement["on_account"],
         "expenses": purchase.expenses.all(),
         "costing": purchase_costing(purchase, margin),
         "line_costs": line_costing(purchase, margin),

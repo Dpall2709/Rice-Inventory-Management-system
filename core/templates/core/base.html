@@ -23,7 +23,7 @@
   </script>
   {% block extra_head %}{% endblock %}
 </head>
-<body class="app">
+<body class="app" data-nav="{% block nav_kind %}page{% endblock %}">
 
   <div class="drawer-backdrop" data-close-nav></div>
 
@@ -105,6 +105,13 @@
       <div class="topbar-left">
         <button class="icon-btn nav-toggle" type="button" data-toggle-nav title="Menu">☰</button>
         <button class="icon-btn" type="button" data-toggle-sidebar title="Collapse menu">⇤</button>
+
+        {% block back_button %}
+          <button class="btn btn-ghost btn-sm back-btn" type="button"
+                  data-back data-back-fallback="{% block back_url %}{% url 'dashboard' %}{% endblock %}" title="Go back">
+            ← Back
+          </button>
+        {% endblock %}
         <h1 class="topbar-title">{% block page_title %}Dashboard{% endblock %}</h1>
       </div>
 
@@ -145,7 +152,7 @@
       </div>
     </header>
 
-    <main class="content">
+    <main class="content {% block content_class %}{% endblock %}">
 
       {% if request.subscription %}
         {% if request.read_only %}

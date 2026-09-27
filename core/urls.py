@@ -37,11 +37,11 @@ urlpatterns = [
     path("purchase/delete/<int:purchase_id>/", view.delete_purchase, name="delete_purchase"),
     path("purchase/<int:purchase_id>/expense/add/", view.add_purchase_expense, name="add_purchase_expense"),
     path("purchase/<int:purchase_id>/expense/<int:expense_id>/delete/", view.delete_purchase_expense, name="delete_purchase_expense"),
-    path("payment/purchase/add/<int:purchase_id>/", views.add_purchase_payment, name="add_purchase_payment"),
+    path("payment/purchase/add/<int:purchase_id>/", view.add_purchase_payment, name="add_purchase_payment"),
 
 
     path("mills/report/<int:mill_id>/", views.mill_report_detail, name="mill_report_detail"),
-    path("payment/mill/add/<int:mill_id>/", views.add_mill_payment, name="add_mill_payment"),
+    path("payment/mill/add/<int:mill_id>/", view.add_mill_payment, name="add_mill_payment"),
     path("mills/<int:mill_id>/export/excel/", views.mill_report_excel, name="mill_report_excel"),
     path("mills/<int:mill_id>/export/pdf/", views.mill_report_pdf, name="mill_report_pdf"),
 

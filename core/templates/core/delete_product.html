@@ -1,4 +1,7 @@
 {% extends 'core/base.html' %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'product_list' %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
 {% block page_title %}Delete Product{% endblock %}
 
 {% block content %}

@@ -1,0 +1,41 @@
+{% extends 'core/base.html' %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'customer_list' %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
+{% block page_title %}Deactivate customer{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'customer_list' %}">Customers</a> › <span>{{ customer.customer_name }}</span>
+    </div>
+    <h1>Deactivate “{{ customer.customer_name }}”?</h1>
+  </div>
+</div>
+
+<div class="card">
+  <div class="banner is-warning">
+    <span>⚠️</span>
+    <div>
+      The customer is hidden from the list and from new sales. Nothing is deleted —
+      their sales and payments stay exactly as they are.
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>Mobile</dt><dd>{{ customer.mobile|default:"—" }}</dd>
+    <dt>GST number</dt><dd>{{ customer.gst_number|default:"—" }}</dd>
+    <dt>City</dt><dd>{{ customer.city|default:"—" }}</dd>
+    <dt>Opening balance</dt><dd>₹ {{ customer.opening_balance }}</dd>
+  </dl>
+
+  <form method="POST" class="form-actions">
+    {% csrf_token %}
+    <button class="btn btn-danger" type="submit">🚫 Deactivate</button>
+    <a class="btn btn-ghost" href="{% url 'customer_list' %}">Cancel</a>
+  </form>
+</div>
+
+{% endblock %}
