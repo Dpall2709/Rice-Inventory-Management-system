@@ -73,7 +73,7 @@ class TruckSettlementTests(TestCase):
     def make_truck(self, **overrides):
         response = self.client.post(reverse("add_sale"), self.truck_post(**overrides))
         self.assertEqual(response.status_code, 302, getattr(response, "context", None) and response.context["form"].errors)
-        return Sale.objects.get(vehicle_number="CG04PX-5695")
+        return Sale.objects.for_company(self.company).order_by("-id").first()
 
     def make_truck_direct(self):
         return self.make_truck(broker="", broker_commission_rate="", cash_discount_percent="0")
@@ -265,3 +265,115 @@ class TruckSettlementTests(TestCase):
         # The broker's usual rate on his own page is untouched.
         self.broker.refresh_from_db()
         self.assertEqual(self.broker.commission_rate, Decimal("10.00"))
+
+    # ---- customer / broker statements (PDF + Excel, by month or range) ----
+
+    def test_period_parsing(self):
+        from datetime import date
+
+        from core.services.party_reports import parse_period
+
+        start, end, label = parse_period({"month": "2026-02"})
+        self.assertEqual((start, end), (date(2026, 2, 1), date(2026, 2, 28)))
+        start, end, _label = parse_period({"from": "2026-09-10", "to": "2026-09-01"})
+        self.assertEqual((start, end), (date(2026, 9, 1), date(2026, 9, 10)))   # swapped into order
+        start, end, _label = parse_period({}, today=date(2026, 10, 2))
+        self.assertEqual((start, end), (date(2026, 10, 1), date(2026, 10, 2)))
+
+    def test_broker_statement_downloads(self):
+        sale = self.settle(self.make_truck())
+        month = sale.sale_date.strftime("%Y-%m")
+        for fmt, marker in (("pdf", b"%PDF"), ("xlsx", b"PK")):
+            with self.subTest(fmt=fmt):
+                response = self.client.get(
+                    reverse("broker_statement_export", args=[self.broker.id, fmt]) + f"?month={month}"
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.content.startswith(marker))
+
+    def test_customer_statement_downloads_and_carries_the_balance_forward(self):
+        from core.services.party_reports import customer_report
+
+        sale = self.settle(self.make_truck_direct())
+        later = sale.sale_date + timedelta(days=1)
+        report = customer_report(self.company, self.customer, later, later + timedelta(days=30))
+        # Nothing happened in that window: the invoice is in the balance brought forward.
+        self.assertEqual(report["entries"], [])
+        self.assertEqual(report["opening"], sale.net_receivable)
+        self.assertEqual(report["closing"], sale.net_receivable)
+
+        for fmt in ("pdf", "xlsx"):
+            response = self.client.get(
+                reverse("customer_statement_export", args=[self.customer.id, fmt])
+                + f"?from={sale.sale_date}&to={sale.sale_date}"
+            )
+            self.assertEqual(response.status_code, 200)
+
+    def test_another_company_cannot_download_statements(self):
+        make_company("Other Rice", "other_rice_user")
+        self.client.logout()
+        self.client.login(username="other_rice_user", password="TestPass#2026")
+        self.assertEqual(self.client.get(reverse("broker_statement_export", args=[self.broker.id, "pdf"])).status_code, 404)
+        self.assertEqual(self.client.get(reverse("customer_statement_export", args=[self.customer.id, "xlsx"])).status_code, 404)
+
+    def test_print_page_shows_the_invoice_pdf(self):
+        sale = self.make_truck()
+        page = self.client.get(reverse("sale_print", args=[sale.id]))
+        self.assertContains(page, reverse("sale_invoice_pdf", args=[sale.id]))
+
+    def test_statement_sent_to_the_party_never_shows_profit(self):
+        from io import BytesIO
+
+        from openpyxl import load_workbook
+
+        sale = self.settle(self.make_truck())
+        url = reverse("broker_statement_export", args=[self.broker.id, "xlsx"]) + f"?month={sale.sale_date:%Y-%m}"
+
+        def headers(response):
+            sheet = load_workbook(BytesIO(response.content))["Trucks"]
+            return [cell.value for cell in sheet[5]]
+
+        self.assertNotIn("Profit / loss", headers(self.client.get(url)))
+        self.assertIn("Profit / loss", headers(self.client.get(url + "&internal=1")))
+
+    def test_invoice_pdf_shows_what_the_party_pays_after_freight(self):
+        sale = self.make_truck()
+        response = self.client.get(reverse("sale_invoice_pdf", args=[sale.id]))
+        self.assertEqual(response.status_code, 200)
+
+    # ---- dashboard advice ----
+
+    def test_dashboard_reminds_to_record_an_old_unloading(self):
+        from core.services.dashboard import mill_dues, receivables
+        from core.services.insights import reminders
+
+        today = timezone.localdate()
+        sale = self.make_truck(sale_date=(today - timedelta(days=4)).isoformat())
+        Sale.objects.filter(pk=sale.pk).update(sale_date=today - timedelta(days=9))
+        items = reminders(self.company, today, receivables(self.company, today), mill_dues(self.company))
+        self.assertIn(f"unload-{sale.id}", [item["id"] for item in items])
+
+    def test_dashboard_compares_brokers_per_kg(self):
+        from core.services.insights import profit_tips
+
+        cheap = Broker.objects.create(company=self.company, broker_name="Ravi Chopra",
+                                      commission_type="per_kg", commission_rate=Decimal("0.10"))
+        for rate, broker in (("29.00", self.broker), ("29.00", self.broker), ("27.00", cheap), ("27.00", cheap)):
+            self.make_truck(**{"broker": broker.id, "items-0-bag_count": "100", "items-0-rate_per_kg": rate,
+                               "vehicle_number": f"T-{broker.id}-{rate}-{Sale.objects.count()}"})
+        today = timezone.localdate()
+        tips = profit_tips(self.company, today - timedelta(days=30), today, today)
+        broker_tip = next(t for t in tips if t["icon"] == "🤝")
+        self.assertIn("Gopal Bajaj", broker_tip["title"])     # better per kg
+        self.assertIn("Ravi Chopra", broker_tip["title"])
+
+    def test_pulse_has_four_lights_and_dashboard_renders(self):
+        from core.services.insights import pulse
+
+        self.settle(self.make_truck())
+        today = timezone.localdate()
+        lights = pulse(self.company, today.replace(day=1), today, today)
+        self.assertEqual([light["key"] for light in lights], ["margin", "collect", "overdue", "stock"])
+        page = self.client.get(reverse("dashboard") + "?period=fy")
+        self.assertContains(page, "Ways to increase profit")
+        self.assertContains(page, "Reminders")

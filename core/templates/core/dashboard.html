@@ -139,6 +139,8 @@
   </nav>
 </div>
 
+{% include "core/partials/dashboard_insights.html" %}
+
 <h2 class="dash-section-title">{% blocktranslate with label=period.label %}{{ label }} at a glance{% endblocktranslate %}</h2>
 <div class="stats">
   <div class="stat">
@@ -201,7 +203,7 @@
     <div>
       <div class="stat-label">{% translate "Customers owe you" %}</div>
       <div class="stat-value inr" data-value="{{ balances.customers_owe }}">₹ {{ balances.customers_owe }}</div>
-      <div class="stat-hint">{% blocktranslate count counter=balances.customers_with_dues %}{{ counter }} customer{% plural %}{{ counter }} customers{% endblocktranslate %}</div>
+      <div class="stat-hint">{% blocktranslate count counter=balances.customers_with_dues %}{{ counter }} party (customers and brokers){% plural %}{{ counter }} parties (customers and brokers){% endblocktranslate %}</div>
     </div>
   </a>
   <a class="stat {% if balances.you_owe_mills > 0 %}is-warning{% else %}is-success{% endif %}" href="{% url 'mill_list' %}" style="color:inherit;">

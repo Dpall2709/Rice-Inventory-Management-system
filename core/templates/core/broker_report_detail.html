@@ -78,6 +78,9 @@
   </div>
 </div>
 
+{% url 'broker_statement_export' broker.id 'pdf' as pdf_url %}{% url 'broker_statement_export' broker.id 'xlsx' as xlsx_url %}
+{% include "core/partials/statement_filter.html" with pdf_url=pdf_url xlsx_url=xlsx_url %}
+
 <div class="card">
   <div class="list-header">
     <div>

@@ -1,0 +1,155 @@
+{% load i18n %}
+{# Business pulse, reminders and profit advice - the first thing the owner sees. #}
+
+<section class="pulse" aria-label="{% translate 'Business pulse' %}">
+  {% for light in pulse %}
+    <div class="pulse-card is-{{ light.tone }}">
+      <div class="pulse-top">
+        <span class="pulse-dot" aria-hidden="true"></span>
+        <span class="pulse-label">{{ light.label }}</span>
+      </div>
+      <div class="pulse-value">{{ light.value }}</div>
+      <div class="pulse-text">{{ light.text }}</div>
+    </div>
+  {% endfor %}
+</section>
+
+<div class="insight-grid">
+  <section class="card" aria-labelledby="remind-title" data-reminders>
+    <div class="list-header">
+      <div>
+        <h2 id="remind-title" class="insight-title">🔔 {% translate "Reminders" %}</h2>
+        <p class="muted small">{% translate "Who to chase, what to record and whom to pay - most urgent first." %}</p>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" data-show-snoozed hidden>{% translate "Show hidden" %}</button>
+    </div>
+
+    {% if reminders %}
+      <ul class="insight-list">
+        {% for item in reminders %}
+          <li class="insight is-{{ item.tone }}" data-reminder="{{ item.id }}">
+            <span class="insight-icon" aria-hidden="true">{{ item.icon }}</span>
+            <div class="insight-body">
+              <div class="insight-head">{{ item.title }}</div>
+              <div class="insight-detail">{{ item.detail }}</div>
+              <div class="insight-actions">
+                {% for button in item.buttons %}
+                  <a class="btn btn-sm {% if button.primary %}btn-primary{% else %}btn-outline{% endif %}" href="{{ button.url }}"
+                     {% if button.external %}target="_blank" rel="noopener"{% endif %}>{{ button.label }}</a>
+                {% endfor %}
+                <button type="button" class="btn btn-ghost btn-sm" data-snooze>{% translate "Remind me tomorrow" %}</button>
+              </div>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+      <p class="muted small" data-all-snoozed hidden>✅ {% translate "Everything is snoozed until tomorrow." %}</p>
+    {% else %}
+      <div class="empty" style="padding:24px;">
+        <div class="empty-icon">✅</div>
+        <div class="empty-title">{% translate "Nothing needs chasing today" %}</div>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="tips-title">
+    <h2 id="tips-title" class="insight-title">💡 {% translate "Ways to increase profit" %}</h2>
+    <p class="muted small" style="margin-bottom:12px;">{% blocktranslate with label=period.label %}Worked out from your own trucks - {{ label }}.{% endblocktranslate %}</p>
+    {% if profit_tips %}
+      <ul class="insight-list">
+        {% for tip in profit_tips %}
+          <li class="insight is-{{ tip.tone }}">
+            <span class="insight-icon" aria-hidden="true">{{ tip.icon }}</span>
+            <div class="insight-body">
+              <div class="insight-head">{{ tip.title }}</div>
+              <div class="insight-detail">{{ tip.detail }}</div>
+              {% if tip.link %}<div class="insight-actions"><a class="btn btn-outline btn-sm" href="{{ tip.link }}">{{ tip.link_label }} →</a></div>{% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">{% translate "Advice appears here once a few trucks with known cost are sold in this period. Try 'This financial year' above." %}</p>
+    {% endif %}
+  </section>
+</div>
+
+<style>
+  .pulse { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  .pulse-card {
+    padding: 12px 14px; border-radius: var(--r-lg); border: 1px solid var(--border);
+    background: var(--surface); border-top: 4px solid var(--border-strong); min-width: 0;
+  }
+  .pulse-card.is-good { border-top-color: var(--success); }
+  .pulse-card.is-warn { border-top-color: var(--warning); }
+  .pulse-card.is-bad  { border-top-color: var(--danger); }
+  .pulse-top { display: flex; align-items: center; gap: 6px; }
+  .pulse-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); flex: 0 0 9px; }
+  .is-good .pulse-dot { background: var(--success); }
+  .is-warn .pulse-dot { background: var(--warning); }
+  .is-bad  .pulse-dot { background: var(--danger); }
+  .pulse-label { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+  .pulse-value { font-size: 22px; font-weight: 700; margin: 4px 0 2px; color: var(--text); }
+  .pulse-text { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+  .insight-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; margin-bottom: 16px; align-items: start; }
+  .insight-title { font-size: 17px; margin-bottom: 2px; }
+  .insight-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+  .insight {
+    display: flex; gap: 12px; padding: 12px; border-radius: var(--r);
+    border: 1px solid var(--border); border-left: 4px solid var(--border-strong); background: var(--surface-2);
+  }
+  .insight.is-bad  { border-left-color: var(--danger); }
+  .insight.is-warn { border-left-color: var(--warning); }
+  .insight.is-good { border-left-color: var(--success); }
+  .insight.is-info { border-left-color: var(--info); }
+  .insight[hidden] { display: none; }
+  .insight-icon { font-size: 20px; line-height: 1.2; flex: 0 0 auto; }
+  .insight-body { min-width: 0; flex: 1 1 auto; }
+  .insight-head { font-weight: 650; color: var(--text); overflow-wrap: anywhere; }
+  .insight-detail { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+  .insight-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  @media (max-width: 1100px) { .insight-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 720px) {
+    .pulse { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .pulse-value { font-size: 18px; }
+  }
+</style>
+
+<script>
+  // "Remind me tomorrow" hides a reminder on this device until tomorrow.
+  (function () {
+    var box = document.querySelector("[data-reminders]");
+    if (!box) return;
+    var KEY = "snoozedReminders";
+    var today = new Date().toISOString().slice(0, 10);
+    function load() {
+      try { return JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { return {}; }
+    }
+    function save(map) {
+      try { localStorage.setItem(KEY, JSON.stringify(map)); } catch (e) {}
+    }
+    function apply() {
+      var map = load(), hidden = 0, items = box.querySelectorAll("[data-reminder]");
+      items.forEach(function (li) {
+        var until = map[li.getAttribute("data-reminder")];
+        li.hidden = !!(until && until > today);
+        if (li.hidden) hidden++;
+      });
+      var showBtn = box.querySelector("[data-show-snoozed]");
+      if (showBtn) showBtn.hidden = hidden === 0;
+      var all = box.querySelector("[data-all-snoozed]");
+      if (all) all.hidden = !(items.length && hidden === items.length);
+    }
+    box.addEventListener("click", function (e) {
+      if (e.target.closest("[data-snooze]")) {
+        var id = e.target.closest("[data-reminder]").getAttribute("data-reminder");
+        var tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+        var map = load(); map[id] = tomorrow; save(map); apply();
+      } else if (e.target.closest("[data-show-snoozed]")) {
+        save({}); apply();
+      }
+    });
+    apply();
+  })();
+</script>

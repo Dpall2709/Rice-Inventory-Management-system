@@ -60,6 +60,8 @@ urlpatterns = [
     path("sales/<int:sale_id>/invoice.pdf", views.sale_invoice_pdf, name="sale_invoice_pdf"),
     path("sales/<int:sale_id>/statement.pdf", views.sale_statement_pdf, name="sale_statement_pdf"),
     path("reports/trucks/", view.trade_register, name="trade_register"),
+    path("customers/<int:customer_id>/statement.<str:fmt>", view.customer_statement_export, name="customer_statement_export"),
+    path("brokers/<int:broker_id>/statement.<str:fmt>", view.broker_statement_export, name="broker_statement_export"),
     path("payments/<int:payment_id>/delete/", view.delete_payment, name="delete_payment"),
 
     path("brokers/", view.broker_list, name="broker_list"),

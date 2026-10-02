@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-02 10:36+0000\n"
+"POT-Creation-Date: 2026-10-02 11:24+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -60,8 +60,6 @@ msgstr "you@example.com"
 #: core/templates/core/delete_mill.html:37
 #: core/templates/core/mill_report_detail.html:404
 #: core/templates/core/mill_report_list.html:28
-#: core/templates/core/sale_print.html:75
-#: core/templates/core/sale_print.html:106
 msgid "Mobile"
 msgstr "मोबाइल"
 
@@ -569,7 +567,6 @@ msgid "Invoice preview"
 msgstr "चालान का प्रीव्यू"
 
 #: accounts/templates/accounts/business_profile.html:175
-#: core/templates/core/sale_print.html:87
 msgid "Invoice no."
 msgstr "चालान नं."
 
@@ -1209,8 +1206,8 @@ msgstr "बचे दिन"
 #: billing/templates/billing/home.html:35
 #: billing/templates/billing/home.html:98
 #: billing/templates/billing/manage_companies.html:18
-#: core/services/trade_register.py:200 core/templates/core/dashboard.html:587
-#: core/templates/core/dashboard.html:602
+#: core/services/trade_register.py:200 core/templates/core/dashboard.html:589
+#: core/templates/core/dashboard.html:604
 #: core/templates/core/mill_report_detail.html:409
 #: core/templates/core/product_list.html:32
 #: core/templates/core/trade_register.html:101
@@ -1273,17 +1270,18 @@ msgstr ""
 msgid "Payment history"
 msgstr "भुगतान इतिहास"
 
-#: billing/templates/billing/home.html:98 core/forms.py:1213
-#: core/services/trade_register.py:194
-#: core/templates/core/broker_report_detail.html:127
-#: core/templates/core/broker_report_detail.html:137
-#: core/templates/core/broker_report_detail.html:166
-#: core/templates/core/broker_report_detail.html:174
-#: core/templates/core/customer_ledger.html:87
-#: core/templates/core/customer_ledger.html:97
-#: core/templates/core/customer_ledger.html:163
-#: core/templates/core/customer_ledger.html:171
-#: core/templates/core/dashboard.html:472
+#: billing/templates/billing/home.html:98 core/forms.py:1218
+#: core/services/party_reports.py:223 core/services/party_reports.py:236
+#: core/services/party_reports.py:263 core/services/trade_register.py:194
+#: core/templates/core/broker_report_detail.html:130
+#: core/templates/core/broker_report_detail.html:140
+#: core/templates/core/broker_report_detail.html:169
+#: core/templates/core/broker_report_detail.html:177
+#: core/templates/core/customer_ledger.html:90
+#: core/templates/core/customer_ledger.html:100
+#: core/templates/core/customer_ledger.html:166
+#: core/templates/core/customer_ledger.html:174
+#: core/templates/core/dashboard.html:474
 #: core/templates/core/mill_report_detail.html:105
 #: core/templates/core/mill_report_detail.html:199
 #: core/templates/core/mill_report_detail.html:362
@@ -1300,13 +1298,12 @@ msgstr "भुगतान इतिहास"
 #: core/templates/core/sale_detail.html:192
 #: core/templates/core/sale_list.html:99
 #: core/templates/core/sale_list.html:123
-#: core/templates/core/sale_print.html:88
 msgid "Date"
 msgstr "तारीख"
 
 #: billing/templates/billing/home.html:98
-#: core/templates/core/broker_report_detail.html:129
-#: core/templates/core/broker_report_detail.html:141
+#: core/templates/core/broker_report_detail.html:132
+#: core/templates/core/broker_report_detail.html:144
 #: core/templates/core/mill_report_detail.html:362
 #: core/templates/core/mill_report_detail.html:372
 #: core/templates/core/partials/scan_review.html:55
@@ -1318,7 +1315,6 @@ msgstr "तारीख"
 #: core/templates/core/sale_detail.html:180
 #: core/templates/core/sale_detail.html:186
 #: core/templates/core/sale_detail.html:194
-#: core/templates/core/sale_print.html:122
 msgid "Amount"
 msgstr "रकम"
 
@@ -1330,13 +1326,13 @@ msgstr "तरीका"
 msgid "Reference"
 msgstr "रेफ़रेंस"
 
-#: billing/templates/billing/home.html:110
-#: core/templates/core/broker_report_detail.html:95
-#: core/templates/core/broker_report_detail.html:106
-#: core/templates/core/broker_report_detail.html:107
-#: core/templates/core/broker_report_detail.html:167
-#: core/templates/core/broker_report_detail.html:180
-#: core/templates/core/customer_ledger.html:106
+#: billing/templates/billing/home.html:110 core/services/party_reports.py:263
+#: core/templates/core/broker_report_detail.html:98
+#: core/templates/core/broker_report_detail.html:109
+#: core/templates/core/broker_report_detail.html:110
+#: core/templates/core/broker_report_detail.html:170
+#: core/templates/core/broker_report_detail.html:183
+#: core/templates/core/customer_ledger.html:109
 #: core/templates/core/customer_list.html:71
 #: core/templates/core/mill_list.html:85
 #: core/templates/core/mill_list.html:114
@@ -1737,7 +1733,7 @@ msgstr "कमीशन दर"
 msgid "Cash discount (CD) % on his sales"
 msgstr "उसकी बिक्री पर नकद छूट (CD) %"
 
-#: core/forms.py:740 core/forms.py:877 core/forms.py:1217
+#: core/forms.py:740 core/forms.py:877 core/forms.py:1222
 #: core/templates/core/broker_form.html:52
 #: core/templates/core/mill_report_detail.html:362
 #: core/templates/core/mill_report_detail.html:371
@@ -1774,9 +1770,10 @@ msgstr "कमीशन माइनस में नहीं हो सकत�
 msgid "Anything to remember about this sale"
 msgstr "इस बिक्री के बारे में जो कुछ भी याद रखना हो"
 
-#: core/forms.py:855 core/services/trade_register.py:196
-#: core/templates/core/broker_report_detail.html:127
-#: core/templates/core/broker_report_detail.html:136
+#: core/forms.py:855 core/services/party_reports.py:236
+#: core/services/trade_register.py:196
+#: core/templates/core/broker_report_detail.html:130
+#: core/templates/core/broker_report_detail.html:139
 #: core/templates/core/customer_list.html:47
 #: core/templates/core/customer_list.html:58
 #: core/templates/core/delete_sale.html:43
@@ -1800,21 +1797,22 @@ msgstr "भुगतान की आख़िरी तारीख"
 msgid "GST on this invoice"
 msgstr "इस चालान पर GST"
 
-#: core/forms.py:859 core/services/trade_register.py:197
-#: core/templates/core/broker_form.html:24
+#: core/forms.py:859 core/services/party_reports.py:236
+#: core/services/trade_register.py:197 core/templates/core/broker_form.html:24
 #: core/templates/core/broker_list.html:58
 #: core/templates/core/broker_list.html:67
-#: core/templates/core/customer_ledger.html:138
-#: core/templates/core/customer_ledger.html:143
+#: core/templates/core/customer_ledger.html:141
+#: core/templates/core/customer_ledger.html:146
 #: core/templates/core/sale_detail.html:282
 #: core/templates/core/trade_register.html:167
 #: core/templates/core/trade_register.html:171
 msgid "Broker"
 msgstr "आढ़तिया"
 
-#: core/forms.py:860 core/templates/core/broker_form.html:38
-#: core/templates/core/broker_report_detail.html:129
-#: core/templates/core/broker_report_detail.html:140
+#: core/forms.py:860 core/services/party_reports.py:262
+#: core/templates/core/broker_form.html:38
+#: core/templates/core/broker_report_detail.html:132
+#: core/templates/core/broker_report_detail.html:143
 msgid "Commission"
 msgstr "कमीशन"
 
@@ -1831,7 +1829,6 @@ msgid "Driver mobile"
 msgstr "ड्राइवर का मोबाइल"
 
 #: core/forms.py:865 core/templates/core/sale_detail.html:224
-#: core/templates/core/sale_print.html:96
 msgid "Transporter"
 msgstr "ट्रांसपोर्टर"
 
@@ -1947,7 +1944,7 @@ msgstr "सीधी बिक्री (बिना आढ़तिया)"
 msgid "The invoice date cannot be in the future."
 msgstr "चालान की तारीख आगे की नहीं हो सकती।"
 
-#: core/forms.py:953 core/forms.py:1046 core/forms.py:1172
+#: core/forms.py:953 core/forms.py:1046 core/forms.py:1177
 msgid "Cannot be negative."
 msgstr "माइनस में नहीं हो सकता।"
 
@@ -1959,7 +1956,7 @@ msgstr "पैसा किस तरीके से प्राप्त ह�
 msgid "The due date cannot be before the invoice date."
 msgstr "भुगतान की आख़िरी तारीख चालान की तारीख से पहले नहीं हो सकती।"
 
-#: core/forms.py:964 core/forms.py:1175
+#: core/forms.py:964 core/forms.py:1180
 msgid "Cannot be more than 100%."
 msgstr "100% से ज़्यादा नहीं हो सकता।"
 
@@ -1979,7 +1976,8 @@ msgstr "इस चालान में कम से कम एक चाव�
 msgid "e.g. moisture, quality claim"
 msgstr "जैसे नमी, क्वालिटी क्लेम"
 
-#: core/forms.py:1134 core/services/trade_register.py:197
+#: core/forms.py:1134 core/services/party_reports.py:237
+#: core/services/trade_register.py:197
 msgid "Unloaded on"
 msgstr "उतराई की तारीख"
 
@@ -2026,28 +2024,28 @@ msgstr "इस ट्रक के लिए जो तय हुआ - यह �
 msgid "As charged on this truck, e.g. 0.10 per kg."
 msgstr "इस ट्रक पर जो लगी, जैसे 0.10 प्रति kg।"
 
-#: core/forms.py:1184
+#: core/forms.py:1189
 msgid "The unloading date cannot be in the future."
 msgstr "उतराई की तारीख भविष्य की नहीं हो सकती।"
 
-#: core/forms.py:1186
+#: core/forms.py:1191
 msgid "The truck cannot be unloaded before it was sent."
 msgstr "ट्रक भेजे जाने से पहले उतारा नहीं जा सकता।"
 
-#: core/forms.py:1192
+#: core/forms.py:1197
 msgid "Enter the weight the party received."
 msgstr "पार्टी को जितना वज़न मिला, वह दर्ज करें।"
 
-#: core/forms.py:1196
+#: core/forms.py:1201
 #, python-format
 msgid "That is more than 5%% over the %(kg)s kg sent - check the slip."
 msgstr "यह भेजे गए %(kg)s kg से 5%% से ज़्यादा है - पर्ची जाँचें।"
 
-#: core/forms.py:1205
+#: core/forms.py:1210
 msgid "Amount (₹)"
 msgstr "रकम (₹)"
 
-#: core/forms.py:1209 core/templates/core/mill_report_detail.html:362
+#: core/forms.py:1214 core/templates/core/mill_report_detail.html:362
 #: core/templates/core/mill_report_detail.html:369
 #: core/templates/core/purchase_detail.html:301
 #: core/templates/core/purchase_detail.html:306
@@ -2057,11 +2055,11 @@ msgstr "रकम (₹)"
 msgid "Mode"
 msgstr "तरीका"
 
-#: core/forms.py:1218
+#: core/forms.py:1223
 msgid "Cheque no., UTR, who paid…"
 msgstr "चेक नंबर, UTR, किसने भुगतान किया…"
 
-#: core/forms.py:1224 core/view/purchase/payments.py:58
+#: core/forms.py:1229 core/view/purchase/payments.py:58
 msgid "A payment cannot be dated in the future."
 msgstr "भुगतान की तारीख आगे की नहीं हो सकती।"
 
@@ -2322,23 +2320,23 @@ msgstr "यह महीना"
 msgid "This financial year"
 msgstr "यह वित्त वर्ष"
 
-#: core/services/dashboard.py:244
+#: core/services/dashboard.py:246
 msgid "0-15 days"
 msgstr "0-15 दिन"
 
-#: core/services/dashboard.py:245
+#: core/services/dashboard.py:247
 msgid "16-30 days"
 msgstr "16-30 दिन"
 
-#: core/services/dashboard.py:246
+#: core/services/dashboard.py:248
 msgid "31-60 days"
 msgstr "31-60 दिन"
 
-#: core/services/dashboard.py:247
+#: core/services/dashboard.py:249
 msgid "Over 60 days"
 msgstr "60 दिन से ज़्यादा"
 
-#: core/services/dashboard.py:605
+#: core/services/dashboard.py:612
 #, python-format
 msgid ""
 "Namaste %(name)s ji, invoice %(invoice)s (%(date)s) ka ₹%(amount)s abhi baaki hai. Kripya jaldi bhugtan kar dein.\n"
@@ -2348,6 +2346,280 @@ msgstr ""
 "नमस्ते %(name)s जी, चालान %(invoice)s (%(date)s) का ₹%(amount)s अभी बकाया है। कृपया जल्दी भुगतान कर दें।\n"
 "प्रिय %(name)s, चालान %(invoice)s दिनांक %(date)s पर ₹%(amount)s बकाया है। कृपया जल्द से जल्द भुगतान की व्यवस्था करें।\n"
 "धन्यवाद - %(company)s"
+
+#: core/services/insights.py:53
+msgid "crore"
+msgstr "करोड़"
+
+#: core/services/insights.py:55
+msgid "lakh"
+msgstr "लाख"
+
+#: core/services/insights.py:79
+msgid "No costed trucks in this period yet."
+msgstr "इस अवधि में अभी तक लागत वाले कोई ट्रक नहीं हैं।"
+
+#: core/services/insights.py:83
+msgid "Profit as a share of what parties pay you."
+msgstr "पार्टियाँ जो भुगतान करती हैं, उसमें मुनाफ़े का हिस्सा।"
+
+#: core/services/insights.py:85
+#, python-format
+msgid "Up from %(before)s%% in the period before."
+msgstr "पिछली अवधि के %(before)s%% से बढ़ा।"
+
+#: core/services/insights.py:87
+#, python-format
+msgid "Down from %(before)s%% in the period before."
+msgstr "पिछली अवधि के %(before)s%% से घटा।"
+
+#: core/services/insights.py:102 core/services/insights.py:130
+#, python-format
+msgid "%(days)s days"
+msgstr "%(days)s दिन"
+
+#: core/services/insights.py:103
+msgid "Average wait from unloading to full payment."
+msgstr "माल उतरने से पूरा भुगतान मिलने तक औसत इंतज़ार।"
+
+#: core/services/insights.py:105
+msgid "Shown once a few trucks are fully paid."
+msgstr "कुछ ट्रकों का पूरा भुगतान होने पर दिखेगा।"
+
+#: core/services/insights.py:118
+#, python-format
+msgid "%(late)s of %(owed)s owed to you is over %(days)s days old."
+msgstr ""
+"आपके बकाया %(owed)s में से %(late)s, %(days)s दिन से ज़्यादा पुराना है।"
+
+#: core/services/insights.py:121
+msgid "Nobody owes you money right now."
+msgstr "अभी किसी पर आपका पैसा बकाया नहीं है।"
+
+#: core/services/insights.py:131
+msgid "Average age of the stock in your godown."
+msgstr "आपके गोदाम में स्टॉक की औसत उम्र।"
+
+#: core/services/insights.py:133
+msgid "No stock in the godown."
+msgstr "गोदाम में कोई स्टॉक नहीं है।"
+
+#: core/services/insights.py:136
+msgid "Profit margin"
+msgstr "मुनाफ़ा मार्जिन"
+
+#: core/services/insights.py:137
+msgid "Getting paid"
+msgstr "भुगतान मिलने में समय"
+
+#: core/services/insights.py:138
+msgid "Money stuck with parties"
+msgstr "पार्टियों के पास फँसा पैसा"
+
+#: core/services/insights.py:139
+msgid "Stock age"
+msgstr "स्टॉक की उम्र"
+
+#: core/services/insights.py:157
+#, python-format
+msgid ""
+"Namaste %(name)s ji, aapke khaate mein %(trucks)s gaadi ka ₹%(amount)s baaki hai (sabse purana %(since)s se). Kripya jaldi bhugtan kar dein.\n"
+"Dear %(name)s, ₹%(amount)s is pending on your account for %(trucks)s truck(s), the oldest since %(since)s. Kindly arrange the payment at the earliest.\n"
+"Dhanyavaad / Thank you - %(company)s"
+msgstr ""
+"नमस्ते %(name)s जी, आपके खाते में %(trucks)s गाड़ी का ₹%(amount)s बाकी है (सबसे पुराना %(since)s से)। कृपया जल्दी भुगतान कर दें।\n"
+"Dear %(name)s, ₹%(amount)s is pending on your account for %(trucks)s truck(s), the oldest since %(since)s. Kindly arrange the payment at the earliest.\n"
+"धन्यवाद / Thank you - %(company)s"
+
+#: core/services/insights.py:179
+#, python-format
+msgid "Truck %(truck)s to %(party)s: unloading not recorded"
+msgstr "ट्रक %(truck)s, %(party)s को: माल उतरना दर्ज नहीं"
+
+#: core/services/insights.py:181
+#, python-format
+msgid ""
+"Sent %(days)s days ago. Enter the weight they received so the bill is final."
+msgstr ""
+"%(days)s दिन पहले भेजा। उन्हें मिला वज़न दर्ज करें ताकि बिल पक्का हो जाए।"
+
+#: core/services/insights.py:183 core/templates/core/sale_detail.html:34
+msgid "Record unloading"
+msgstr "उतराई दर्ज करें"
+
+#: core/services/insights.py:220
+#, python-format
+msgid "oldest unpaid truck is %(days)s days old"
+msgstr "सबसे पुराना बिना भुगतान वाला ट्रक %(days)s दिन पुराना है"
+
+#: core/services/insights.py:222
+#, python-format
+msgid "%(pct)s%% of all money owed to you"
+msgstr "आपके कुल बकाया पैसे का %(pct)s%%"
+
+#: core/services/insights.py:224 core/templates/core/customer_ledger.html:28
+#: core/templates/core/customer_ledger.html:114
+#: core/templates/core/customer_list.html:78
+#: core/templates/core/dashboard.html:89
+#: core/templates/core/receipt_form.html:6
+#: core/templates/core/sale_detail.html:176
+#: core/templates/core/sale_list.html:146
+msgid "Receive payment"
+msgstr "भुगतान प्राप्त करें"
+
+#: core/services/insights.py:232 core/templates/core/dashboard.html:275
+#: core/templates/core/mill_list.html:105
+msgid "Call"
+msgstr "कॉल करें"
+
+#: core/services/insights.py:236 core/services/insights.py:268
+msgid "Open account"
+msgstr "खाता खोलें"
+
+#: core/services/insights.py:243
+#, python-format
+msgid "%(name)s owes you %(amount)s"
+msgstr "%(name)s पर आपका %(amount)s बकाया है"
+
+#: core/services/insights.py:257
+msgid "No payment recorded yet."
+msgstr "अभी तक कोई भुगतान दर्ज नहीं।"
+
+#: core/services/insights.py:259
+msgid "Last payment today."
+msgstr "आख़िरी भुगतान आज।"
+
+#: core/services/insights.py:261
+#, python-format
+msgid "Last payment %(days)s days ago."
+msgstr "आख़िरी भुगतान %(days)s दिन पहले।"
+
+#: core/services/insights.py:264
+#, python-format
+msgid "You owe %(mill)s %(amount)s"
+msgstr "आपको %(mill)s को %(amount)s देना है"
+
+#: core/services/insights.py:267 core/templates/core/dashboard.html:298
+#: core/templates/core/dashboard.html:375
+#: core/templates/core/mill_list.html:131
+#: core/templates/core/mill_report_detail.html:277
+#: core/templates/core/purchase_detail.html:27
+#: core/templates/core/purchase_list.html:119
+#: core/templates/core/receipt_form.html:23
+msgid "Pay"
+msgstr "भुगतान करें"
+
+#: core/services/insights.py:314
+#, python-format
+msgid "%(n)s truck(s) made a loss of %(amount)s"
+msgstr "%(n)s ट्रक में %(amount)s का घाटा हुआ"
+
+#: core/services/insights.py:315
+msgid ""
+"Check the selling rate, shortage and freight on these trucks before the next"
+" deal with the same party."
+msgstr ""
+"उसी पार्टी से अगला सौदा करने से पहले इन ट्रकों की बिक्री दर, कमी और भाड़ा "
+"जाँच लें।"
+
+#: core/services/insights.py:317
+msgid "See the trucks"
+msgstr "ट्रक देखें"
+
+#: core/services/insights.py:326
+#, python-format
+msgid ""
+"Trucks through %(best)s earn ₹%(b)s/kg, through %(worst)s only ₹%(w)s/kg"
+msgstr ""
+"%(best)s के ज़रिए ट्रकों पर ₹%(b)s/kg कमाई, %(worst)s के ज़रिए सिर्फ़ "
+"₹%(w)s/kg"
+
+#: core/services/insights.py:328
+msgid ""
+"Give more trucks to the better broker, or ask the other for a lower "
+"brokerage or CD."
+msgstr "बेहतर आढ़तिया को ज़्यादा ट्रक दें, या दूसरे से कम आढ़त या CD माँगें।"
+
+#: core/services/insights.py:330 core/services/insights.py:344
+#, python-format
+msgid "Open %(name)s"
+msgstr "%(name)s खोलें"
+
+#: core/services/insights.py:339
+#, python-format
+msgid "%(best)s gives you ₹%(b)s/kg, %(worst)s only ₹%(w)s/kg"
+msgstr "%(best)s से आपको ₹%(b)s/kg मिलता है, %(worst)s से सिर्फ़ ₹%(w)s/kg"
+
+#: core/services/insights.py:341
+#, python-format
+msgid ""
+"Quote %(worst)s a little higher, or offer the stock to your better-paying "
+"parties first."
+msgstr ""
+"%(worst)s को थोड़ा ऊँचा भाव बताएँ, या स्टॉक पहले अच्छा भुगतान करने वाली "
+"पार्टियों को दें।"
+
+#: core/services/insights.py:356
+#, python-format
+msgid "Shortage in transit cost you about %(amount)s (%(kg)s kg, %(pct)s%%)"
+msgstr ""
+"रास्ते में कमी से आपको लगभग %(amount)s का नुकसान हुआ (%(kg)s kg, %(pct)s%%)"
+
+#: core/services/insights.py:358
+msgid ""
+"Weigh trucks at loading and compare transporters - a few kg per truck adds "
+"up over a season."
+msgstr ""
+"लोडिंग पर ट्रक तौलें और ट्रांसपोर्टरों की तुलना करें - हर ट्रक के कुछ kg "
+"पूरे सीज़न में बड़ी रकम बन जाते हैं।"
+
+#: core/services/insights.py:368
+#, python-format
+msgid "CD and brokerage took %(amount)s - %(pct)s%% of your sales"
+msgstr "CD और आढ़त में %(amount)s गए - आपकी बिक्री का %(pct)s%%"
+
+#: core/services/insights.py:370
+msgid ""
+"Direct sales (no broker, no CD) keep this money - worth it for parties who "
+"pay on time."
+msgstr ""
+"सीधी बिक्री (बिना आढ़तिया, बिना CD) में यह पैसा बचता है - समय पर भुगतान करने"
+" वाली पार्टियों के लिए फ़ायदेमंद।"
+
+#: core/services/insights.py:379
+#, python-format
+msgid "Freight cost you ₹%(per_kg)s per kg (%(amount)s in all)"
+msgstr "भाड़ा आपको ₹%(per_kg)s प्रति kg पड़ा (कुल %(amount)s)"
+
+#: core/services/insights.py:381
+msgid ""
+"Compare it with your margin per kg - on far routes, quote the freight into "
+"your selling rate."
+msgstr ""
+"इसे अपने प्रति kg मार्जिन से मिलाएँ - दूर के रास्तों पर भाड़ा बिक्री दर में "
+"जोड़कर भाव बताएँ।"
+
+#: core/services/insights.py:407
+#, python-format
+msgid "%(product)s is ₹%(gap)s/kg cheaper from %(cheap)s than from %(dear)s"
+msgstr "%(product)s, %(dear)s के मुक़ाबले %(cheap)s से ₹%(gap)s/kg सस्ता है"
+
+#: core/services/insights.py:410
+msgid ""
+"Average buying rate over the last 90 days. Buying from the cheaper mill adds"
+" this straight to your margin."
+msgstr ""
+"पिछले 90 दिनों की औसत खरीद दर। सस्ती मिल से खरीदने पर यह सीधे आपके मार्जिन "
+"में जुड़ता है।"
+
+#: core/services/insights.py:423
+#, python-format
+msgid "%(product)s earns you the most: ₹%(per_kg)s per kg"
+msgstr "%(product)s से आपको सबसे ज़्यादा कमाई: ₹%(per_kg)s प्रति kg"
+
+#: core/services/insights.py:425
+msgid "Keep it in stock - check the low-stock list below."
+msgstr "इसे स्टॉक में रखें - नीचे कम स्टॉक की सूची देखें।"
 
 #: core/services/ledger.py:219
 msgid "rice"
@@ -2367,6 +2639,201 @@ msgstr "बिल %(no)s"
 #, python-format
 msgid "Payment (%(mode)s) - %(against)s"
 msgstr "भुगतान (%(mode)s) - %(against)s"
+
+#: core/services/party_reports.py:195
+msgid "Customer statement"
+msgstr "ग्राहक का खाता विवरण"
+
+#: core/services/party_reports.py:195
+msgid "Broker statement"
+msgstr "आढ़तिया का खाता विवरण"
+
+#: core/services/party_reports.py:197 core/templates/core/dashboard.html:135
+msgid "Period"
+msgstr "अवधि"
+
+#: core/services/party_reports.py:221 core/templates/core/base.html:87
+msgid "Account"
+msgstr "अकाउंट"
+
+#: core/services/party_reports.py:221 core/templates/core/broker_list.html:60
+#: core/templates/core/broker_list.html:76
+#: core/templates/core/broker_report_detail.html:58
+msgid "He owes you"
+msgstr "उसका आपको बकाया"
+
+#: core/services/party_reports.py:223 core/services/party_reports.py:263
+#: core/templates/core/broker_report_detail.html:169
+#: core/templates/core/broker_report_detail.html:178
+#: core/templates/core/customer_ledger.html:166
+#: core/templates/core/customer_ledger.html:175
+#: core/templates/core/mill_report_detail.html:106
+msgid "Particulars"
+msgstr "विवरण"
+
+#: core/services/party_reports.py:223
+#: core/templates/core/customer_ledger.html:167
+#: core/templates/core/customer_ledger.html:179
+msgid "Billed"
+msgstr "बिल किया"
+
+#: core/services/party_reports.py:223 core/services/trade_register.py:199
+#: core/services/trade_register.py:235
+#: core/templates/core/customer_ledger.html:47
+#: core/templates/core/customer_ledger.html:91
+#: core/templates/core/customer_ledger.html:104
+#: core/templates/core/customer_ledger.html:167
+#: core/templates/core/customer_ledger.html:180
+#: core/templates/core/sale_detail.html:70
+#: core/templates/core/sale_list.html:45
+#: core/templates/core/sale_list.html:101
+#: core/templates/core/sale_list.html:129
+#: core/templates/core/trade_register.html:39
+#: core/templates/core/trade_register.html:99
+#: core/templates/core/trade_register.html:134
+msgid "Received"
+msgstr "प्राप्त"
+
+#: core/services/party_reports.py:223
+#: core/templates/core/customer_ledger.html:168
+#: core/templates/core/customer_ledger.html:181
+#: core/templates/core/mill_list.html:86
+#: core/templates/core/mill_list.html:116
+#: core/templates/core/mill_report_detail.html:109
+msgid "Balance"
+msgstr "शेष"
+
+#: core/services/party_reports.py:224 core/services/party_reports.py:264
+msgid "Balance brought forward"
+msgstr "पिछला शेष"
+
+#: core/services/party_reports.py:228 core/services/party_reports.py:268
+msgid "Closing balance"
+msgstr "अंतिम शेष"
+
+#: core/services/party_reports.py:235 core/services/trade_register.py:232
+#: core/templates/core/trade_register.html:23
+#: core/templates/core/trade_register.html:167
+#: core/templates/core/trade_register.html:172
+#: core/templates/core/trade_register.html:186
+#: core/templates/core/trade_register.html:191
+msgid "Trucks"
+msgstr "ट्रक"
+
+#: core/services/party_reports.py:236 core/services/trade_register.py:194
+#: core/templates/core/broker_report_detail.html:130
+#: core/templates/core/broker_report_detail.html:138
+#: core/templates/core/customer_ledger.html:90
+#: core/templates/core/customer_ledger.html:98
+#: core/templates/core/product_report.html:47
+#: core/templates/core/sale_detail.html:88
+#: core/templates/core/sale_list.html:99
+#: core/templates/core/sale_list.html:108
+msgid "Invoice"
+msgstr "चालान"
+
+#: core/services/party_reports.py:236 core/services/trade_register.py:194
+msgid "Truck no"
+msgstr "ट्रक नं."
+
+#: core/services/party_reports.py:236 core/services/trade_register.py:195
+#: core/templates/core/broker_list.html:59
+#: core/templates/core/broker_list.html:75
+#: core/templates/core/broker_report_detail.html:131
+#: core/templates/core/broker_report_detail.html:141
+#: core/templates/core/customer_ledger.html:90
+#: core/templates/core/customer_ledger.html:102
+#: core/templates/core/dashboard.html:474
+#: core/templates/core/delete_sale.html:46
+#: core/templates/core/mill_report_detail.html:292
+#: core/templates/core/partials/scan_review.html:55
+#: core/templates/core/product_report.html:50
+#: core/templates/core/purchase_detail.html:37
+#: core/templates/core/purchase_detail.html:79
+#: core/templates/core/purchase_detail.html:90
+#: core/templates/core/purchase_detail.html:213
+#: core/templates/core/purchase_detail.html:222
+#: core/templates/core/purchase_form.html:87
+#: core/templates/core/purchase_form.html:110
+#: core/templates/core/purchase_form.html:150
+#: core/templates/core/purchase_list.html:82
+#: core/templates/core/purchase_list.html:103
+#: core/templates/core/sale_detail.html:54
+#: core/templates/core/sale_detail.html:114
+#: core/templates/core/sale_detail.html:125
+#: core/templates/core/sale_detail.html:250
+#: core/templates/core/sale_detail.html:261
+#: core/templates/core/sale_form.html:123
+#: core/templates/core/sale_form.html:147
+#: core/templates/core/sale_form.html:189
+#: core/templates/core/sale_list.html:100
+#: core/templates/core/sale_list.html:127
+msgid "Bags"
+msgstr "बोरी"
+
+#: core/services/party_reports.py:237
+msgid "Weight sent (kg)"
+msgstr "भेजा गया वज़न (kg)"
+
+#: core/services/party_reports.py:237
+msgid "Weight received (kg)"
+msgstr "पहुँचा वज़न (kg)"
+
+#: core/services/party_reports.py:237 core/services/trade_register.py:197
+msgid "Shortage (kg)"
+msgstr "कमी (kg)"
+
+#: core/services/party_reports.py:238
+#: core/templates/core/broker_report_detail.html:131
+#: core/templates/core/broker_report_detail.html:142
+#: core/templates/core/customer_ledger.html:141
+#: core/templates/core/customer_ledger.html:147
+#: core/templates/core/delete_sale.html:45
+#: core/templates/core/partials/truck_account.html:14
+#: core/templates/core/sale_detail.html:62
+#: core/templates/core/sale_detail.html:159
+#: core/templates/core/sale_form.html:289
+msgid "Invoice total"
+msgstr "चालान कुल"
+
+#: core/services/party_reports.py:238 core/services/trade_register.py:199
+msgid "Cash discount"
+msgstr "नकद छूट"
+
+#: core/services/party_reports.py:238 core/services/trade_register.py:199
+#: core/templates/core/trade_register.html:167
+#: core/templates/core/trade_register.html:173
+msgid "Brokerage"
+msgstr "आढ़त"
+
+#: core/services/party_reports.py:238 core/services/trade_register.py:199
+#: core/templates/core/trade_register.html:98
+#: core/templates/core/trade_register.html:130
+msgid "Party owes"
+msgstr "पार्टी पर बकाया"
+
+#: core/services/party_reports.py:240 core/services/trade_register.py:200
+#: core/templates/core/trade_register.html:100
+#: core/templates/core/trade_register.html:138
+msgid "Profit / loss"
+msgstr "मुनाफ़ा / घाटा"
+
+#: core/services/party_reports.py:256
+msgid "Total profit"
+msgstr "कुल मुनाफ़ा"
+
+#: core/services/party_reports.py:263
+#: core/templates/core/broker_report_detail.html:170
+#: core/templates/core/broker_report_detail.html:182
+msgid "Earned"
+msgstr "कमाया"
+
+#: core/services/party_reports.py:263
+#: core/templates/core/broker_report_detail.html:171
+#: core/templates/core/broker_report_detail.html:184
+#: core/templates/core/mill_list.html:45
+msgid "You owe"
+msgstr "आपको देना है"
 
 #: core/services/sale_service.py:273
 #, python-format
@@ -2433,23 +2900,6 @@ msgid "S. No"
 msgstr "क्र. सं."
 
 #: core/services/trade_register.py:194
-#: core/templates/core/broker_report_detail.html:127
-#: core/templates/core/broker_report_detail.html:135
-#: core/templates/core/customer_ledger.html:87
-#: core/templates/core/customer_ledger.html:95
-#: core/templates/core/product_report.html:47
-#: core/templates/core/sale_detail.html:88
-#: core/templates/core/sale_list.html:99
-#: core/templates/core/sale_list.html:108
-#: core/templates/core/sale_print.html:86
-msgid "Invoice"
-msgstr "चालान"
-
-#: core/services/trade_register.py:194
-msgid "Truck no"
-msgstr "ट्रक नं."
-
-#: core/services/trade_register.py:194
 #: core/templates/core/delete_purchase.html:43
 #: core/templates/core/product_report.html:48
 #: core/templates/core/purchase_list.html:82
@@ -2462,41 +2912,6 @@ msgstr "मिल"
 #: core/services/trade_register.py:194
 msgid "Purchase rate × bags"
 msgstr "खरीद दर × बोरी"
-
-#: core/services/trade_register.py:195 core/templates/core/broker_list.html:59
-#: core/templates/core/broker_list.html:75
-#: core/templates/core/broker_report_detail.html:128
-#: core/templates/core/broker_report_detail.html:138
-#: core/templates/core/customer_ledger.html:87
-#: core/templates/core/customer_ledger.html:99
-#: core/templates/core/dashboard.html:472
-#: core/templates/core/delete_sale.html:46
-#: core/templates/core/mill_report_detail.html:292
-#: core/templates/core/partials/scan_review.html:55
-#: core/templates/core/product_report.html:50
-#: core/templates/core/purchase_detail.html:37
-#: core/templates/core/purchase_detail.html:79
-#: core/templates/core/purchase_detail.html:90
-#: core/templates/core/purchase_detail.html:213
-#: core/templates/core/purchase_detail.html:222
-#: core/templates/core/purchase_form.html:87
-#: core/templates/core/purchase_form.html:110
-#: core/templates/core/purchase_form.html:150
-#: core/templates/core/purchase_list.html:82
-#: core/templates/core/purchase_list.html:103
-#: core/templates/core/sale_detail.html:54
-#: core/templates/core/sale_detail.html:114
-#: core/templates/core/sale_detail.html:125
-#: core/templates/core/sale_detail.html:250
-#: core/templates/core/sale_detail.html:261
-#: core/templates/core/sale_form.html:123
-#: core/templates/core/sale_form.html:147
-#: core/templates/core/sale_form.html:189
-#: core/templates/core/sale_list.html:100
-#: core/templates/core/sale_list.html:127
-#: core/templates/core/sale_print.html:120
-msgid "Bags"
-msgstr "बोरी"
 
 #: core/services/trade_register.py:195
 msgid "Weight (kg)"
@@ -2527,56 +2942,19 @@ msgid "Party weight (kg)"
 msgstr "पार्टी वज़न (kg)"
 
 #: core/services/trade_register.py:197
-msgid "Shortage (kg)"
-msgstr "कमी (kg)"
-
-#: core/services/trade_register.py:197
 msgid "Party value"
 msgstr "पार्टी राशि"
-
-#: core/services/trade_register.py:199
-msgid "Cash discount"
-msgstr "नकद छूट"
-
-#: core/services/trade_register.py:199
-#: core/templates/core/trade_register.html:167
-#: core/templates/core/trade_register.html:173
-msgid "Brokerage"
-msgstr "आढ़त"
-
-#: core/services/trade_register.py:199
-#: core/templates/core/trade_register.html:98
-#: core/templates/core/trade_register.html:130
-msgid "Party owes"
-msgstr "पार्टी पर बकाया"
-
-#: core/services/trade_register.py:199 core/services/trade_register.py:235
-#: core/templates/core/customer_ledger.html:47
-#: core/templates/core/customer_ledger.html:88
-#: core/templates/core/customer_ledger.html:101
-#: core/templates/core/customer_ledger.html:164
-#: core/templates/core/customer_ledger.html:177
-#: core/templates/core/sale_detail.html:70
-#: core/templates/core/sale_list.html:45
-#: core/templates/core/sale_list.html:101
-#: core/templates/core/sale_list.html:129
-#: core/templates/core/sale_print.html:163
-#: core/templates/core/trade_register.html:39
-#: core/templates/core/trade_register.html:99
-#: core/templates/core/trade_register.html:134
-msgid "Received"
-msgstr "प्राप्त"
 
 #: core/services/trade_register.py:199
 msgid "Last payment"
 msgstr "आख़िरी भुगतान"
 
 #: core/services/trade_register.py:200
-#: core/templates/core/broker_report_detail.html:95
-#: core/templates/core/broker_report_detail.html:107
-#: core/templates/core/customer_ledger.html:89
-#: core/templates/core/customer_ledger.html:102
+#: core/templates/core/broker_report_detail.html:98
+#: core/templates/core/broker_report_detail.html:110
+#: core/templates/core/customer_ledger.html:92
 #: core/templates/core/customer_ledger.html:105
+#: core/templates/core/customer_ledger.html:108
 #: core/templates/core/mill_list.html:120
 #: core/templates/core/mill_report_detail.html:204
 #: core/templates/core/purchase_list.html:84
@@ -2591,21 +2969,6 @@ msgstr "आख़िरी भुगतान"
 #: core/templates/core/trade_register.html:193
 msgid "Due"
 msgstr "बकाया"
-
-#: core/services/trade_register.py:200
-#: core/templates/core/trade_register.html:100
-#: core/templates/core/trade_register.html:138
-msgid "Profit / loss"
-msgstr "मुनाफ़ा / घाटा"
-
-#: core/services/trade_register.py:232
-#: core/templates/core/trade_register.html:23
-#: core/templates/core/trade_register.html:167
-#: core/templates/core/trade_register.html:172
-#: core/templates/core/trade_register.html:186
-#: core/templates/core/trade_register.html:191
-msgid "Trucks"
-msgstr "ट्रक"
 
 #: core/services/trade_register.py:233
 #: core/templates/core/trade_register.html:31
@@ -2829,10 +3192,10 @@ msgstr "मिल / सप्लायर"
 msgid "Products"
 msgstr "उत्पाद"
 
-#: core/templates/core/base.html:60 core/templates/core/dashboard.html:155
-#: core/templates/core/dashboard.html:424
-#: core/templates/core/dashboard.html:433
-#: core/templates/core/dashboard.html:443
+#: core/templates/core/base.html:60 core/templates/core/dashboard.html:157
+#: core/templates/core/dashboard.html:426
+#: core/templates/core/dashboard.html:435
+#: core/templates/core/dashboard.html:445
 #: core/templates/core/delete_mill.html:38
 #: core/templates/core/delete_purchase.html:13
 #: core/templates/core/mill_report_detail.html:85
@@ -2851,11 +3214,11 @@ msgstr "बिक्री करें"
 
 #: core/templates/core/base.html:67 core/templates/core/broker_list.html:59
 #: core/templates/core/broker_list.html:74
-#: core/templates/core/dashboard.html:147
-#: core/templates/core/dashboard.html:423
-#: core/templates/core/dashboard.html:432
-#: core/templates/core/dashboard.html:443
-#: core/templates/core/dashboard.html:472
+#: core/templates/core/dashboard.html:149
+#: core/templates/core/dashboard.html:425
+#: core/templates/core/dashboard.html:434
+#: core/templates/core/dashboard.html:445
+#: core/templates/core/dashboard.html:474
 #: core/templates/core/delete_sale.html:13
 #: core/templates/core/receipt_form.html:17
 #: core/templates/core/sale_detail.html:12
@@ -2883,7 +3246,7 @@ msgstr "ग्राहक"
 #: core/templates/core/broker_list.html:10
 #: core/templates/core/broker_list.html:22
 #: core/templates/core/broker_report_detail.html:12
-#: core/templates/core/dashboard.html:173
+#: core/templates/core/dashboard.html:175
 #: core/templates/core/receipt_form.html:14
 msgid "Brokers"
 msgstr "आढ़तिये"
@@ -2891,10 +3254,6 @@ msgstr "आढ़तिये"
 #: core/templates/core/base.html:80
 msgid "Reports"
 msgstr "रिपोर्ट"
-
-#: core/templates/core/base.html:87
-msgid "Account"
-msgstr "अकाउंट"
 
 #: core/templates/core/base.html:99 core/templates/core/base.html:155
 msgid "Subscription"
@@ -2922,7 +3281,7 @@ msgstr "पीछे जाएँ"
 
 #: core/templates/core/base.html:128 core/templates/core/edit_product.html:18
 #: core/templates/core/product_report.html:15
-#: core/templates/core/sale_print.html:58
+#: core/templates/core/sale_print.html:21
 msgid "Back"
 msgstr "वापस"
 
@@ -3099,12 +3458,6 @@ msgstr "फ़िल्टर"
 msgid "Usual commission"
 msgstr "सामान्य कमीशन"
 
-#: core/templates/core/broker_list.html:60
-#: core/templates/core/broker_list.html:76
-#: core/templates/core/broker_report_detail.html:58
-msgid "He owes you"
-msgstr "उसका आपको बकाया"
-
 #: core/templates/core/broker_list.html:61
 #: core/templates/core/broker_list.html:79
 msgid "Commission owed"
@@ -3112,8 +3465,8 @@ msgstr "बकाया कमीशन"
 
 #: core/templates/core/broker_list.html:61
 #: core/templates/core/broker_list.html:83
-#: core/templates/core/customer_ledger.html:89
-#: core/templates/core/customer_ledger.html:108
+#: core/templates/core/customer_ledger.html:92
+#: core/templates/core/customer_ledger.html:111
 #: core/templates/core/mill_list.html:87
 #: core/templates/core/mill_list.html:128
 #: core/templates/core/purchase_list.html:84
@@ -3124,7 +3477,7 @@ msgid "Actions"
 msgstr "कार्य"
 
 #: core/templates/core/broker_list.html:85
-#: core/templates/core/customer_ledger.html:110
+#: core/templates/core/customer_ledger.html:113
 #: core/templates/core/customer_list.html:76
 #: core/templates/core/purchase_list.html:117
 #: core/templates/core/sale_list.html:144
@@ -3141,7 +3494,7 @@ msgstr "कमीशन दें"
 #: core/templates/core/broker_report_detail.html:26
 #: core/templates/core/customer_ledger.html:27
 #: core/templates/core/customer_list.html:80
-#: core/templates/core/dashboard.html:396
+#: core/templates/core/dashboard.html:398
 #: core/templates/core/mill_list.html:132
 #: core/templates/core/mill_report_detail.html:33
 #: core/templates/core/mill_report_detail.html:319
@@ -3188,7 +3541,7 @@ msgid "Activate"
 msgstr "सक्रिय करें"
 
 #: core/templates/core/broker_report_detail.html:38
-#: core/templates/core/dashboard.html:271
+#: core/templates/core/dashboard.html:273
 #: core/templates/core/receipt_form.html:23
 #: core/templates/core/sale_detail.html:37
 msgid "Receive"
@@ -3227,11 +3580,11 @@ msgid_plural "%(counter)s trucks with known cost"
 msgstr[0] "%(counter)s ट्रक जिसकी लागत पता है"
 msgstr[1] "%(counter)s ट्रक जिनकी लागत पता है"
 
-#: core/templates/core/broker_report_detail.html:84
+#: core/templates/core/broker_report_detail.html:87
 msgid "Trucks he collects for"
 msgstr "ट्रक जिनका पैसा वह वसूलता है"
 
-#: core/templates/core/broker_report_detail.html:85
+#: core/templates/core/broker_report_detail.html:88
 msgid ""
 "He takes the money from the party, keeps his brokerage, cuts the CD and pays"
 " you the rest."
@@ -3239,122 +3592,90 @@ msgstr ""
 "वह पार्टी से पैसा लेता है, अपनी आढ़त रखता है, CD काटता है और बाकी आपको देता "
 "है।"
 
-#: core/templates/core/broker_report_detail.html:87
+#: core/templates/core/broker_report_detail.html:90
 #: core/templates/core/receipt_form.html:6
 msgid "Receive from broker"
 msgstr "आढ़तिया से प्राप्त करें"
 
-#: core/templates/core/broker_report_detail.html:94
-#: core/templates/core/broker_report_detail.html:101
-#: core/templates/core/customer_ledger.html:138
-#: core/templates/core/customer_ledger.html:142
+#: core/templates/core/broker_report_detail.html:97
+#: core/templates/core/broker_report_detail.html:104
+#: core/templates/core/customer_ledger.html:141
+#: core/templates/core/customer_ledger.html:145
 #: core/templates/core/trade_register.html:92
 #: core/templates/core/trade_register.html:107
 msgid "Truck"
 msgstr "ट्रक"
 
-#: core/templates/core/broker_report_detail.html:94
-#: core/templates/core/broker_report_detail.html:103
+#: core/templates/core/broker_report_detail.html:97
+#: core/templates/core/broker_report_detail.html:106
 #: core/templates/core/trade_register.html:96
 #: core/templates/core/trade_register.html:121
 msgid "Party"
 msgstr "पार्टी"
 
-#: core/templates/core/broker_report_detail.html:94
-#: core/templates/core/broker_report_detail.html:104
+#: core/templates/core/broker_report_detail.html:97
+#: core/templates/core/broker_report_detail.html:107
 msgid "Unloaded"
 msgstr "उतारा गया"
 
-#: core/templates/core/broker_report_detail.html:95
-#: core/templates/core/broker_report_detail.html:105
+#: core/templates/core/broker_report_detail.html:98
+#: core/templates/core/broker_report_detail.html:108
 msgid "He owes"
 msgstr "उस पर बकाया"
 
-#: core/templates/core/broker_report_detail.html:104
+#: core/templates/core/broker_report_detail.html:107
 #: core/templates/core/trade_register.html:128
 msgid "Record"
 msgstr "दर्ज करें"
 
-#: core/templates/core/broker_report_detail.html:114
+#: core/templates/core/broker_report_detail.html:117
 msgid "No trucks where he collects the money."
 msgstr "ऐसा कोई ट्रक नहीं जिसका पैसा वह वसूलता हो।"
 
-#: core/templates/core/broker_report_detail.html:120
+#: core/templates/core/broker_report_detail.html:123
 msgid "Sales he brought"
 msgstr "उसकी लाई बिक्री"
 
-#: core/templates/core/broker_report_detail.html:128
-#: core/templates/core/broker_report_detail.html:139
-#: core/templates/core/customer_ledger.html:138
-#: core/templates/core/customer_ledger.html:144
-#: core/templates/core/delete_sale.html:45
-#: core/templates/core/partials/truck_account.html:14
-#: core/templates/core/sale_detail.html:62
-#: core/templates/core/sale_detail.html:159
-#: core/templates/core/sale_form.html:289
-#: core/templates/core/sale_print.html:162
-msgid "Invoice total"
-msgstr "चालान कुल"
-
-#: core/templates/core/broker_report_detail.html:129
-#: core/templates/core/broker_report_detail.html:142
-#: core/templates/core/customer_ledger.html:138
-#: core/templates/core/customer_ledger.html:145
+#: core/templates/core/broker_report_detail.html:132
+#: core/templates/core/broker_report_detail.html:145
+#: core/templates/core/customer_ledger.html:141
+#: core/templates/core/customer_ledger.html:148
 msgid "Your profit"
 msgstr "आपका मुनाफ़ा"
 
-#: core/templates/core/broker_report_detail.html:151
+#: core/templates/core/broker_report_detail.html:154
 msgid "No sales through this broker yet"
 msgstr "इस आढ़तिया से अभी कोई बिक्री नहीं"
 
-#: core/templates/core/broker_report_detail.html:152
+#: core/templates/core/broker_report_detail.html:155
 msgid "Choose him in the Broker box when you make a sale."
 msgstr "बिक्री करते समय आढ़तिया वाले बॉक्स में उसे चुनें।"
 
-#: core/templates/core/broker_report_detail.html:159
+#: core/templates/core/broker_report_detail.html:162
 msgid "Commission account"
 msgstr "कमीशन खाता"
 
-#: core/templates/core/broker_report_detail.html:160
+#: core/templates/core/broker_report_detail.html:163
 msgid "Commission earned and paid, in date order"
 msgstr "कमाया और दिया गया कमीशन, तारीख़ के क्रम में"
 
-#: core/templates/core/broker_report_detail.html:166
-#: core/templates/core/broker_report_detail.html:175
-#: core/templates/core/customer_ledger.html:163
-#: core/templates/core/customer_ledger.html:172
-#: core/templates/core/mill_report_detail.html:106
-msgid "Particulars"
-msgstr "विवरण"
-
-#: core/templates/core/broker_report_detail.html:167
-#: core/templates/core/broker_report_detail.html:179
-msgid "Earned"
-msgstr "कमाया"
-
-#: core/templates/core/broker_report_detail.html:168
-#: core/templates/core/broker_report_detail.html:181
-#: core/templates/core/mill_list.html:45
-msgid "You owe"
-msgstr "आपको देना है"
-
-#: core/templates/core/broker_report_detail.html:186
-#: core/templates/core/customer_ledger.html:183
+#: core/templates/core/broker_report_detail.html:189
+#: core/templates/core/customer_ledger.html:186
 #: core/templates/core/sale_detail.html:198
 msgid "Delete payment"
 msgstr "भुगतान हटाएँ"
 
-#: core/templates/core/broker_report_detail.html:187
+#: core/templates/core/broker_report_detail.html:190
 msgid "This commission payment will be removed."
 msgstr "यह कमीशन भुगतान हटा दिया जाएगा।"
 
-#: core/templates/core/broker_report_detail.html:188
-#: core/templates/core/customer_ledger.html:185
+#: core/templates/core/broker_report_detail.html:191
+#: core/templates/core/customer_ledger.html:188
 #: core/templates/core/sale_detail.html:200
 msgid "Delete this payment?"
 msgstr "यह भुगतान हटाएँ?"
 
-#: core/templates/core/broker_report_detail.html:197
+#: core/templates/core/broker_report_detail.html:200
 #: core/templates/core/purchase_detail.html:140
 #: core/templates/core/sale_detail.html:166
 msgid "Note:"
@@ -3407,20 +3728,10 @@ msgid ""
 "Namaste %(name)s, your outstanding balance with %(company)s is ₹ %(due)s."
 msgstr "नमस्ते %(name)s, %(company)s के साथ आपका बकाया शेष ₹ %(due)s है।"
 
-#: core/templates/core/customer_ledger.html:28
-#: core/templates/core/customer_ledger.html:111
-#: core/templates/core/customer_list.html:78
-#: core/templates/core/dashboard.html:89
-#: core/templates/core/receipt_form.html:6
-#: core/templates/core/sale_detail.html:176
-#: core/templates/core/sale_list.html:146
-msgid "Receive payment"
-msgstr "भुगतान प्राप्त करें"
-
 #: core/templates/core/customer_ledger.html:30
 #: core/templates/core/dashboard.html:86
 #: core/templates/core/dashboard.html:125
-#: core/templates/core/dashboard.html:412 core/templates/core/sale_form.html:5
+#: core/templates/core/dashboard.html:414 core/templates/core/sale_form.html:5
 #: core/templates/core/sale_form.html:6 core/templates/core/sale_list.html:21
 #: core/templates/core/trade_register.html:15
 msgid "New sale"
@@ -3431,7 +3742,7 @@ msgid "Total billed"
 msgstr "कुल बिल"
 
 #: core/templates/core/customer_ledger.html:41
-#: core/templates/core/dashboard.html:554
+#: core/templates/core/dashboard.html:556
 #: core/templates/core/mill_report_detail.html:44
 #: core/templates/core/sale_list.html:31
 #, python-format
@@ -3443,7 +3754,6 @@ msgstr[1] "%(counter)s चालान"
 #: core/templates/core/customer_ledger.html:54
 #: core/templates/core/customer_list.html:51
 #: core/templates/core/customer_list.html:67
-#: core/templates/core/sale_print.html:164
 msgid "Balance due"
 msgstr "बकाया शेष"
 
@@ -3462,18 +3772,18 @@ msgstr "इस ग्राहक पर आपका मुनाफ़ा"
 msgid "Advance with you"
 msgstr "आपके पास जमा अग्रिम"
 
-#: core/templates/core/customer_ledger.html:78
+#: core/templates/core/customer_ledger.html:81
 msgid "Invoices"
 msgstr "चालान"
 
-#: core/templates/core/customer_ledger.html:79
+#: core/templates/core/customer_ledger.html:82
 msgid "Money received on account is applied to the oldest invoice first"
 msgstr "खाते पर मिली रकम पहले सबसे पुराने चालान में लगाई जाती है"
 
-#: core/templates/core/customer_ledger.html:88
-#: core/templates/core/customer_ledger.html:100
-#: core/templates/core/dashboard.html:253
-#: core/templates/core/dashboard.html:457
+#: core/templates/core/customer_ledger.html:91
+#: core/templates/core/customer_ledger.html:103
+#: core/templates/core/dashboard.html:255
+#: core/templates/core/dashboard.html:459
 #: core/templates/core/mill_report_detail.html:329
 #: core/templates/core/purchase_list.html:83
 #: core/templates/core/purchase_list.html:106
@@ -3482,63 +3792,50 @@ msgstr "खाते पर मिली रकम पहले सबसे प
 msgid "Total"
 msgstr "कुल"
 
-#: core/templates/core/customer_ledger.html:98
+#: core/templates/core/customer_ledger.html:101
 #: core/templates/core/mill_report_detail.html:153
 #: core/templates/core/sale_list.html:125
 msgid "due"
 msgstr "बकाया"
 
-#: core/templates/core/customer_ledger.html:105
+#: core/templates/core/customer_ledger.html:108
 #: core/templates/core/sale_list.html:134
 msgid "Overdue"
 msgstr "अतिदेय"
 
-#: core/templates/core/customer_ledger.html:105
+#: core/templates/core/customer_ledger.html:108
 #: core/templates/core/sale_list.html:135
 msgid "Partial"
 msgstr "आंशिक"
 
-#: core/templates/core/customer_ledger.html:122
+#: core/templates/core/customer_ledger.html:125
 msgid "No invoices yet"
 msgstr "अभी कोई चालान नहीं"
 
-#: core/templates/core/customer_ledger.html:123
+#: core/templates/core/customer_ledger.html:126
 msgid "Make the first sale"
 msgstr "पहली बिक्री करें"
 
-#: core/templates/core/customer_ledger.html:132
+#: core/templates/core/customer_ledger.html:135
 msgid "Bought through brokers"
 msgstr "आढ़तियों के ज़रिए खरीदा"
 
-#: core/templates/core/customer_ledger.html:133
+#: core/templates/core/customer_ledger.html:136
 msgid ""
 "The broker collects the money for these trucks, so what is due is in the "
 "broker's account."
 msgstr ""
 "इन ट्रकों का पैसा आढ़तिया वसूलता है, इसलिए बकाया आढ़तिया के खाते में है।"
 
-#: core/templates/core/customer_ledger.html:156
+#: core/templates/core/customer_ledger.html:159
 msgid "Account statement"
 msgstr "खाता विवरण"
 
-#: core/templates/core/customer_ledger.html:157
+#: core/templates/core/customer_ledger.html:160
 msgid "Every invoice and receipt in date order"
 msgstr "हर चालान और रसीद, तारीख़ के क्रम में"
 
-#: core/templates/core/customer_ledger.html:164
-#: core/templates/core/customer_ledger.html:176
-msgid "Billed"
-msgstr "बिल किया"
-
-#: core/templates/core/customer_ledger.html:165
-#: core/templates/core/customer_ledger.html:178
-#: core/templates/core/mill_list.html:86
-#: core/templates/core/mill_list.html:116
-#: core/templates/core/mill_report_detail.html:109
-msgid "Balance"
-msgstr "शेष"
-
-#: core/templates/core/customer_ledger.html:184
+#: core/templates/core/customer_ledger.html:187
 msgid "This receipt will be removed from the ledger."
 msgstr "यह रसीद खाते से हटा दी जाएगी।"
 
@@ -3552,7 +3849,7 @@ msgid "Add Customer"
 msgstr "ग्राहक जोड़ें"
 
 #: core/templates/core/customer_list.html:29
-#: core/templates/core/dashboard.html:202
+#: core/templates/core/dashboard.html:204
 #: core/templates/core/sale_list.html:52
 msgid "Customers owe you"
 msgstr "ग्राहकों पर आपका बकाया"
@@ -3636,7 +3933,7 @@ msgstr "जल्दी के काम"
 
 #: core/templates/core/dashboard.html:87
 #: core/templates/core/dashboard.html:113
-#: core/templates/core/dashboard.html:617
+#: core/templates/core/dashboard.html:619
 msgid "Enter purchase"
 msgstr "खरीद दर्ज करें"
 
@@ -3695,23 +3992,19 @@ msgstr "बिक्री करें"
 msgid "Make the invoice - bags come out of stock and profit is worked out."
 msgstr "चालान बनाएँ - बोरियाँ स्टॉक से निकलेंगी और मुनाफ़ा निकाला जाएगा।"
 
-#: core/templates/core/dashboard.html:135
-msgid "Period"
-msgstr "अवधि"
-
-#: core/templates/core/dashboard.html:142
+#: core/templates/core/dashboard.html:144
 #, python-format
 msgid "%(label)s at a glance"
 msgstr "%(label)s एक नज़र में"
 
-#: core/templates/core/dashboard.html:149
+#: core/templates/core/dashboard.html:151
 #, python-format
 msgid "%(counter)s invoice · %(bags)s bags"
 msgid_plural "%(counter)s invoices · %(bags)s bags"
 msgstr[0] "%(counter)s चालान · %(bags)s बोरी"
 msgstr[1] "%(counter)s चालान · %(bags)s बोरी"
 
-#: core/templates/core/dashboard.html:157
+#: core/templates/core/dashboard.html:159
 #: core/templates/core/mill_report_detail.html:329
 #: core/templates/core/purchase_list.html:11
 #, python-format
@@ -3720,206 +4013,191 @@ msgid_plural "%(counter)s bills"
 msgstr[0] "%(counter)s बिल"
 msgstr[1] "%(counter)s बिल"
 
-#: core/templates/core/dashboard.html:163
+#: core/templates/core/dashboard.html:165
 msgid "Received from customers"
 msgstr "ग्राहकों से प्राप्त"
 
-#: core/templates/core/dashboard.html:165
+#: core/templates/core/dashboard.html:167
 msgid "advances + payments"
 msgstr "एडवांस + भुगतान"
 
-#: core/templates/core/dashboard.html:171
+#: core/templates/core/dashboard.html:173
 msgid "Paid to mills"
 msgstr "मिलों को भुगतान"
 
-#: core/templates/core/dashboard.html:179
+#: core/templates/core/dashboard.html:181
 msgid "Gross profit"
 msgstr "सकल मुनाफ़ा"
 
-#: core/templates/core/dashboard.html:182
-#: core/templates/core/dashboard.html:527
+#: core/templates/core/dashboard.html:184
+#: core/templates/core/dashboard.html:529
 #, python-format
 msgid "%(margin)s%% margin"
 msgstr "%(margin)s%% मार्जिन"
 
-#: core/templates/core/dashboard.html:183
+#: core/templates/core/dashboard.html:185
 #, python-format
 msgid "%(counter)s sale has no cost data"
 msgid_plural "%(counter)s sales have no cost data"
 msgstr[0] "%(counter)s बिक्री का लागत डेटा नहीं है"
 msgstr[1] "%(counter)s बिक्री का लागत डेटा नहीं है"
 
-#: core/templates/core/dashboard.html:190
+#: core/templates/core/dashboard.html:192
 msgid "GST to pay"
 msgstr "देय GST"
 
-#: core/templates/core/dashboard.html:190
+#: core/templates/core/dashboard.html:192
 msgid "GST credit left"
 msgstr "बचा हुआ GST क्रेडिट"
 
-#: core/templates/core/dashboard.html:192
+#: core/templates/core/dashboard.html:194
 msgid "on sales"
 msgstr "बिक्री पर"
 
-#: core/templates/core/dashboard.html:192
+#: core/templates/core/dashboard.html:194
 msgid "on purchases"
 msgstr "खरीद पर"
 
-#: core/templates/core/dashboard.html:197
+#: core/templates/core/dashboard.html:199
 msgid "Balances right now"
 msgstr "अभी का शेष"
 
-#: core/templates/core/dashboard.html:204
+#: core/templates/core/dashboard.html:206
 #, python-format
-msgid "%(counter)s customer"
-msgid_plural "%(counter)s customers"
-msgstr[0] "%(counter)s ग्राहक"
-msgstr[1] "%(counter)s ग्राहक"
+msgid "%(counter)s party (customers and brokers)"
+msgid_plural "%(counter)s parties (customers and brokers)"
+msgstr[0] "%(counter)s पार्टी (ग्राहक और आढ़तिया)"
+msgstr[1] "%(counter)s पार्टियाँ (ग्राहक और आढ़तिया)"
 
-#: core/templates/core/dashboard.html:210
+#: core/templates/core/dashboard.html:212
 msgid "You owe mills"
 msgstr "मिलों का बकाया (आपको देना है)"
 
-#: core/templates/core/dashboard.html:212
+#: core/templates/core/dashboard.html:214
 #, python-format
 msgid "%(counter)s mill"
 msgid_plural "%(counter)s mills"
 msgstr[0] "%(counter)s मिल"
 msgstr[1] "%(counter)s मिल"
 
-#: core/templates/core/dashboard.html:218
+#: core/templates/core/dashboard.html:220
 msgid "Broker commission owed"
 msgstr "आढ़तिया का बकाया कमीशन"
 
-#: core/templates/core/dashboard.html:225
+#: core/templates/core/dashboard.html:227
 msgid "Stock value at cost"
 msgstr "लागत पर स्टॉक की कीमत"
 
-#: core/templates/core/dashboard.html:227
+#: core/templates/core/dashboard.html:229
 #, python-format
 msgid "%(counter)s bag in godown"
 msgid_plural "%(counter)s bags in godown"
 msgstr[0] "गोदाम में %(counter)s बोरी"
 msgstr[1] "गोदाम में %(counter)s बोरी"
 
-#: core/templates/core/dashboard.html:233
+#: core/templates/core/dashboard.html:235
 msgid "Cash in − out"
 msgstr "नकद आया − गया"
 
-#: core/templates/core/dashboard.html:235
+#: core/templates/core/dashboard.html:237
 #, python-format
 msgid "received − paid to mills, %(label)s"
 msgstr "प्राप्त − मिलों को भुगतान, %(label)s"
 
-#: core/templates/core/dashboard.html:243
+#: core/templates/core/dashboard.html:245
 msgid "Do this today"
 msgstr "आज यह करें"
 
-#: core/templates/core/dashboard.html:244
+#: core/templates/core/dashboard.html:246
 #, python-format
 msgid "%(counter)s thing to do"
 msgid_plural "%(counter)s things to do"
 msgstr[0] "%(counter)s काम बाकी"
 msgstr[1] "%(counter)s काम बाकी"
 
-#: core/templates/core/dashboard.html:252
+#: core/templates/core/dashboard.html:254
 msgid "Collect late payments"
 msgstr "देर वाले भुगतान वसूलें"
 
-#: core/templates/core/dashboard.html:263
+#: core/templates/core/dashboard.html:265
 #, python-format
 msgid "%(counter)s day overdue"
 msgid_plural "%(counter)s days overdue"
 msgstr[0] "%(counter)s दिन से अतिदेय"
 msgstr[1] "%(counter)s दिन से अतिदेय"
 
-#: core/templates/core/dashboard.html:265
+#: core/templates/core/dashboard.html:267
 #, python-format
 msgid "%(counter)s day old, no due date"
 msgid_plural "%(counter)s days old, no due date"
 msgstr[0] "%(counter)s दिन पुराना, कोई नियत तारीख नहीं"
 msgstr[1] "%(counter)s दिन पुराने, कोई नियत तारीख नहीं"
 
-#: core/templates/core/dashboard.html:272
+#: core/templates/core/dashboard.html:274
 msgid "WhatsApp reminder"
 msgstr "WhatsApp रिमाइंडर"
 
-#: core/templates/core/dashboard.html:273
-#: core/templates/core/mill_list.html:105
-msgid "Call"
-msgstr "कॉल करें"
-
-#: core/templates/core/dashboard.html:279
+#: core/templates/core/dashboard.html:281
 #, python-format
 msgid "See all %(counter)s late invoice"
 msgid_plural "See all %(counter)s late invoices"
 msgstr[0] "सभी %(counter)s देर वाला चालान देखें"
 msgstr[1] "सभी %(counter)s देर वाले चालान देखें"
 
-#: core/templates/core/dashboard.html:286
+#: core/templates/core/dashboard.html:288
 msgid "Mills you owe the most"
 msgstr "जिन मिलों का सबसे ज़्यादा बकाया है"
 
-#: core/templates/core/dashboard.html:296
-#: core/templates/core/dashboard.html:373
-#: core/templates/core/mill_list.html:131
-#: core/templates/core/mill_report_detail.html:277
-#: core/templates/core/purchase_detail.html:27
-#: core/templates/core/purchase_list.html:119
-#: core/templates/core/receipt_form.html:23
-msgid "Pay"
-msgstr "भुगतान करें"
-
-#: core/templates/core/dashboard.html:306
+#: core/templates/core/dashboard.html:308
 msgid "Low stock - buy more"
 msgstr "कम स्टॉक - और खरीदें"
 
-#: core/templates/core/dashboard.html:311
-#: core/templates/core/dashboard.html:345
+#: core/templates/core/dashboard.html:313
+#: core/templates/core/dashboard.html:347
 #, python-format
 msgid "%(rice)s (%(weight)s kg bags)"
 msgstr "%(rice)s (%(weight)s kg बोरी)"
 
-#: core/templates/core/dashboard.html:314
+#: core/templates/core/dashboard.html:316
 #, python-format
 msgid "was selling %(per_day)s bags a day"
 msgstr "रोज़ %(per_day)s बोरी बिक रही थीं"
 
-#: core/templates/core/dashboard.html:316
+#: core/templates/core/dashboard.html:318
 #, python-format
 msgid "selling %(per_day)s bags a day · about %(counter)s day left"
 msgid_plural "selling %(per_day)s bags a day · about %(counter)s days left"
 msgstr[0] "रोज़ %(per_day)s बोरी बिक रही हैं · लगभग %(counter)s दिन बचा"
 msgstr[1] "रोज़ %(per_day)s बोरी बिक रही हैं · लगभग %(counter)s दिन बचे"
 
-#: core/templates/core/dashboard.html:318
+#: core/templates/core/dashboard.html:320
 msgid "no sales in the last 30 days"
 msgstr "पिछले 30 दिनों में कोई बिक्री नहीं"
 
-#: core/templates/core/dashboard.html:323
+#: core/templates/core/dashboard.html:325
 msgid "Out of stock"
 msgstr "स्टॉक खत्म"
 
-#: core/templates/core/dashboard.html:324
+#: core/templates/core/dashboard.html:326
 #, python-format
 msgid "%(counter)s bag left"
 msgid_plural "%(counter)s bags left"
 msgstr[0] "%(counter)s बोरी बची"
 msgstr[1] "%(counter)s बोरी बचीं"
 
-#: core/templates/core/dashboard.html:327
+#: core/templates/core/dashboard.html:329
 msgid "Buy more"
 msgstr "और खरीदें"
 
-#: core/templates/core/dashboard.html:338
+#: core/templates/core/dashboard.html:340
 msgid "Slow-moving stock"
 msgstr "धीमा बिकने वाला स्टॉक"
 
-#: core/templates/core/dashboard.html:339
+#: core/templates/core/dashboard.html:341
 msgid "Money stuck"
 msgstr "फँसा हुआ पैसा"
 
-#: core/templates/core/dashboard.html:348
+#: core/templates/core/dashboard.html:350
 #, python-format
 msgid "%(bags)s bags, bought %(counter)s day ago, no sale in 30 days"
 msgid_plural "%(bags)s bags, bought %(counter)s days ago, no sale in 30 days"
@@ -3928,34 +4206,34 @@ msgstr[0] ""
 msgstr[1] ""
 "%(bags)s बोरी, %(counter)s दिन पहले खरीदी, 30 दिनों में कोई बिक्री नहीं"
 
-#: core/templates/core/dashboard.html:353
+#: core/templates/core/dashboard.html:355
 msgid "Sell"
 msgstr "बेचें"
 
-#: core/templates/core/dashboard.html:363
+#: core/templates/core/dashboard.html:365
 msgid "Broker commission to pay"
 msgstr "आढ़तिया को देना कमीशन"
 
-#: core/templates/core/dashboard.html:384
+#: core/templates/core/dashboard.html:386
 msgid "Sales without cost data"
 msgstr "बिना लागत डेटा वाली बिक्री"
 
-#: core/templates/core/dashboard.html:385
+#: core/templates/core/dashboard.html:387
 msgid "Edit them and pick the stock lot, so their profit can be worked out."
 msgstr "इन्हें बदलें और स्टॉक लॉट चुनें, ताकि इनका मुनाफ़ा निकाला जा सके।"
 
-#: core/templates/core/dashboard.html:402
+#: core/templates/core/dashboard.html:404
 #, python-format
 msgid "%(counter)s sale in all"
 msgid_plural "%(counter)s sales in all"
 msgstr[0] "कुल %(counter)s बिक्री"
 msgstr[1] "कुल %(counter)s बिक्री"
 
-#: core/templates/core/dashboard.html:410
+#: core/templates/core/dashboard.html:412
 msgid "All clear"
 msgstr "सब ठीक है"
 
-#: core/templates/core/dashboard.html:411
+#: core/templates/core/dashboard.html:413
 msgid ""
 "No late payments, no urgent bills and stock looks fine. Good time to make a "
 "sale!"
@@ -3963,13 +4241,13 @@ msgstr ""
 "कोई देर वाला भुगतान नहीं, कोई ज़रूरी बिल नहीं और स्टॉक ठीक है। बिक्री करने "
 "का अच्छा समय है!"
 
-#: core/templates/core/dashboard.html:421
+#: core/templates/core/dashboard.html:423
 msgid "Last 6 months"
 msgstr "पिछले 6 महीने"
 
-#: core/templates/core/dashboard.html:425
-#: core/templates/core/dashboard.html:434
-#: core/templates/core/dashboard.html:443
+#: core/templates/core/dashboard.html:427
+#: core/templates/core/dashboard.html:436
+#: core/templates/core/dashboard.html:445
 #: core/templates/core/partials/truck_account.html:39
 #: core/templates/core/trade_register.html:167
 #: core/templates/core/trade_register.html:175
@@ -3978,120 +4256,121 @@ msgstr "पिछले 6 महीने"
 msgid "Profit"
 msgstr "मुनाफ़ा"
 
-#: core/templates/core/dashboard.html:442
+#: core/templates/core/dashboard.html:444
 msgid "Sales, purchases and profit for the last 6 months"
 msgstr "पिछले 6 महीनों की बिक्री, खरीद और मुनाफ़ा"
 
-#: core/templates/core/dashboard.html:443
+#: core/templates/core/dashboard.html:445
+#: core/templates/core/partials/statement_filter.html:11
 msgid "Month"
 msgstr "महीना"
 
-#: core/templates/core/dashboard.html:448
+#: core/templates/core/dashboard.html:450
 msgid "Profit counts only sales whose stock lot is known."
 msgstr "मुनाफ़ा सिर्फ़ उन्हीं बिक्री का गिना जाता है जिनका स्टॉक लॉट पता है।"
 
-#: core/templates/core/dashboard.html:450
+#: core/templates/core/dashboard.html:452
 msgid "No sales or purchases in the last 6 months."
 msgstr "पिछले 6 महीनों में कोई बिक्री या खरीद नहीं।"
 
-#: core/templates/core/dashboard.html:456
+#: core/templates/core/dashboard.html:458
 msgid "Sales, last 14 days"
 msgstr "बिक्री, पिछले 14 दिन"
 
-#: core/templates/core/dashboard.html:463
+#: core/templates/core/dashboard.html:465
 #: core/templates/core/sale_form.html:351
 #: core/templates/core/trade_register.html:116
 msgid "bags"
 msgstr "बोरी"
 
-#: core/templates/core/dashboard.html:471
+#: core/templates/core/dashboard.html:473
 msgid "Sales for each of the last 14 days"
 msgstr "पिछले 14 दिनों में हर दिन की बिक्री"
 
-#: core/templates/core/dashboard.html:478
+#: core/templates/core/dashboard.html:480
 msgid "No sales in the last 14 days."
 msgstr "पिछले 14 दिनों में कोई बिक्री नहीं।"
 
-#: core/templates/core/dashboard.html:487
+#: core/templates/core/dashboard.html:489
 msgid "Top customers"
 msgstr "सबसे बड़े ग्राहक"
 
-#: core/templates/core/dashboard.html:499
+#: core/templates/core/dashboard.html:501
 #, python-format
 msgid "%(counter)s bag"
 msgid_plural "%(counter)s bags"
 msgstr[0] "%(counter)s बोरी"
 msgstr[1] "%(counter)s बोरी"
 
-#: core/templates/core/dashboard.html:500
+#: core/templates/core/dashboard.html:502
 msgid "owes"
 msgstr "बकाया"
 
-#: core/templates/core/dashboard.html:501
+#: core/templates/core/dashboard.html:503
 msgid "nothing due"
 msgstr "कुछ बकाया नहीं"
 
-#: core/templates/core/dashboard.html:507
-#: core/templates/core/dashboard.html:536
+#: core/templates/core/dashboard.html:509
+#: core/templates/core/dashboard.html:538
 msgid "No sales in this period."
 msgstr "इस अवधि में कोई बिक्री नहीं।"
 
-#: core/templates/core/dashboard.html:513
+#: core/templates/core/dashboard.html:515
 msgid "Top rice"
 msgstr "सबसे ज़्यादा बिकने वाला चावल"
 
-#: core/templates/core/dashboard.html:525
+#: core/templates/core/dashboard.html:527
 #, python-format
 msgid "%(counter)s bag sold"
 msgid_plural "%(counter)s bags sold"
 msgstr[0] "%(counter)s बोरी बिकी"
 msgstr[1] "%(counter)s बोरी बिकीं"
 
-#: core/templates/core/dashboard.html:528
+#: core/templates/core/dashboard.html:530
 #, python-format
 msgid "%(bags)s bags without cost"
 msgstr "%(bags)s बोरी बिना लागत के"
 
-#: core/templates/core/dashboard.html:534
+#: core/templates/core/dashboard.html:536
 msgid "Profit before broker commission."
 msgstr "आढ़तिया कमीशन से पहले का मुनाफ़ा।"
 
-#: core/templates/core/dashboard.html:542
+#: core/templates/core/dashboard.html:544
 msgid "Money due, by age"
 msgstr "बकाया पैसा, समय के अनुसार"
 
-#: core/templates/core/dashboard.html:543
+#: core/templates/core/dashboard.html:545
 msgid "all customers"
 msgstr "सभी ग्राहक"
 
-#: core/templates/core/dashboard.html:559
+#: core/templates/core/dashboard.html:561
 msgid "Unpaid opening balances are counted as over 60 days."
 msgstr "न चुकाए गए प्रारंभिक शेष 60 दिन से ज़्यादा पुराने गिने जाते हैं।"
 
-#: core/templates/core/dashboard.html:562
+#: core/templates/core/dashboard.html:564
 msgid "No customer owes you anything."
 msgstr "किसी ग्राहक पर आपका कुछ बकाया नहीं है।"
 
-#: core/templates/core/dashboard.html:571
+#: core/templates/core/dashboard.html:573
 msgid "Stock in godown"
 msgstr "गोदाम में स्टॉक"
 
-#: core/templates/core/dashboard.html:572
+#: core/templates/core/dashboard.html:574
 #: core/templates/core/trade_register.html:25
 #, python-format
 msgid "%(bags)s bags · %(kg)s kg"
 msgstr "%(bags)s बोरी · %(kg)s kg"
 
-#: core/templates/core/dashboard.html:572
+#: core/templates/core/dashboard.html:574
 msgid "value at cost"
 msgstr "लागत पर मूल्य"
 
-#: core/templates/core/dashboard.html:574
+#: core/templates/core/dashboard.html:576
 msgid "All rice"
 msgstr "सभी चावल"
 
-#: core/templates/core/dashboard.html:581
-#: core/templates/core/dashboard.html:593
+#: core/templates/core/dashboard.html:583
+#: core/templates/core/dashboard.html:595
 #: core/templates/core/mill_report_detail.html:292
 #: core/templates/core/purchase_detail.html:79
 #: core/templates/core/purchase_detail.html:87
@@ -4110,63 +4389,63 @@ msgstr "सभी चावल"
 msgid "Rice"
 msgstr "चावल"
 
-#: core/templates/core/dashboard.html:582
-#: core/templates/core/dashboard.html:597
+#: core/templates/core/dashboard.html:584
+#: core/templates/core/dashboard.html:599
 msgid "Bags left"
 msgstr "बची बोरी"
 
-#: core/templates/core/dashboard.html:583
-#: core/templates/core/dashboard.html:598
+#: core/templates/core/dashboard.html:585
+#: core/templates/core/dashboard.html:600
 #: core/templates/core/purchase_detail.html:213
 #: core/templates/core/purchase_detail.html:223
 msgid "Kg"
 msgstr "Kg"
 
-#: core/templates/core/dashboard.html:584
-#: core/templates/core/dashboard.html:599
+#: core/templates/core/dashboard.html:586
+#: core/templates/core/dashboard.html:601
 msgid "Value at cost"
 msgstr "लागत पर मूल्य"
 
-#: core/templates/core/dashboard.html:585
-#: core/templates/core/dashboard.html:600
+#: core/templates/core/dashboard.html:587
+#: core/templates/core/dashboard.html:602
 msgid "Avg cost / kg"
 msgstr "औसत लागत / kg"
 
-#: core/templates/core/dashboard.html:586
-#: core/templates/core/dashboard.html:601
+#: core/templates/core/dashboard.html:588
+#: core/templates/core/dashboard.html:603
 #: core/templates/core/purchase_detail.html:215
 #: core/templates/core/purchase_detail.html:227
 msgid "Sell at / kg"
 msgstr "बिक्री दर / kg"
 
-#: core/templates/core/dashboard.html:595
+#: core/templates/core/dashboard.html:597
 #, python-format
 msgid "%(weight)s kg bags"
 msgstr "%(weight)s kg की बोरी"
 
-#: core/templates/core/dashboard.html:595
+#: core/templates/core/dashboard.html:597
 #, python-format
 msgid "%(bags)s sold in 30 days"
 msgstr "30 दिनों में %(bags)s बिकी"
 
-#: core/templates/core/dashboard.html:603
+#: core/templates/core/dashboard.html:605
 msgid "Out"
 msgstr "खत्म"
 
-#: core/templates/core/dashboard.html:604
+#: core/templates/core/dashboard.html:606
 msgid "Low"
 msgstr "कम"
 
-#: core/templates/core/dashboard.html:605
+#: core/templates/core/dashboard.html:607
 msgid "OK"
 msgstr "ठीक"
 
-#: core/templates/core/dashboard.html:612
+#: core/templates/core/dashboard.html:614
 #, python-format
 msgid "\"Sell at\" is your average landed cost plus your %(margin)s%% margin."
 msgstr "\"बेचें इस दर पर\" आपकी औसत पहुँच लागत और आपका %(margin)s%% मार्जिन है।"
 
-#: core/templates/core/dashboard.html:616
+#: core/templates/core/dashboard.html:618
 msgid "No stock yet"
 msgstr "अभी कोई स्टॉक नहीं"
 
@@ -4791,7 +5070,6 @@ msgstr "बोरी वज़न"
 #: core/templates/core/sale_form.html:128
 #: core/templates/core/sale_form.html:158
 #: core/templates/core/sale_form.html:194
-#: core/templates/core/sale_print.html:121
 msgid "Taxable"
 msgstr "कर योग्य"
 
@@ -4897,6 +5175,53 @@ msgstr "रिपोर्ट देखें"
 msgid "No mills found"
 msgstr "कोई मिल नहीं मिली"
 
+#: core/templates/core/partials/dashboard_insights.html:4
+msgid "Business pulse"
+msgstr "व्यापार की नब्ज़"
+
+#: core/templates/core/partials/dashboard_insights.html:21
+msgid "Reminders"
+msgstr "याद दिलाना"
+
+#: core/templates/core/partials/dashboard_insights.html:22
+msgid "Who to chase, what to record and whom to pay - most urgent first."
+msgstr ""
+"किससे वसूली करनी है, क्या दर्ज करना है और किसे भुगतान करना है - सबसे ज़रूरी "
+"पहले।"
+
+#: core/templates/core/partials/dashboard_insights.html:24
+msgid "Show hidden"
+msgstr "छिपे हुए दिखाएँ"
+
+#: core/templates/core/partials/dashboard_insights.html:40
+msgid "Remind me tomorrow"
+msgstr "कल याद दिलाएँ"
+
+#: core/templates/core/partials/dashboard_insights.html:46
+msgid "Everything is snoozed until tomorrow."
+msgstr "सब कुछ कल तक के लिए टाल दिया गया है।"
+
+#: core/templates/core/partials/dashboard_insights.html:50
+msgid "Nothing needs chasing today"
+msgstr "आज किसी से वसूली की ज़रूरत नहीं"
+
+#: core/templates/core/partials/dashboard_insights.html:56
+msgid "Ways to increase profit"
+msgstr "मुनाफ़ा बढ़ाने के तरीके"
+
+#: core/templates/core/partials/dashboard_insights.html:57
+#, python-format
+msgid "Worked out from your own trucks - %(label)s."
+msgstr "आपके अपने ट्रकों से निकाला गया - %(label)s।"
+
+#: core/templates/core/partials/dashboard_insights.html:72
+msgid ""
+"Advice appears here once a few trucks with known cost are sold in this "
+"period. Try 'This financial year' above."
+msgstr ""
+"इस अवधि में लागत वाले कुछ ट्रक बिकने के बाद यहाँ सलाह दिखेगी। ऊपर 'यह "
+"वित्तीय वर्ष' चुनकर देखें।"
+
 #: core/templates/core/partials/language_switch.html:4
 msgid "Language"
 msgstr "भाषा"
@@ -4999,6 +5324,47 @@ msgstr "फ़ॉर्म से मेल खाता है"
 #: core/templates/core/partials/scan_review.html:95
 msgid "form total differs by"
 msgstr "फ़ॉर्म का कुल इतना अलग है"
+
+#: core/templates/core/partials/statement_filter.html:6
+msgid "Statement"
+msgstr "खाता विवरण"
+
+#: core/templates/core/partials/statement_filter.html:7
+msgid "Choose a month, or a from-to range, then download it as PDF or Excel."
+msgstr ""
+"महीना चुनें, या कब से कब तक की तारीख़ें, फिर PDF या Excel में डाउनलोड करें।"
+
+#: core/templates/core/partials/statement_filter.html:13
+msgid "or"
+msgstr "या"
+
+#: core/templates/core/partials/statement_filter.html:14
+#: core/templates/core/purchase_detail.html:17
+msgid "From"
+msgstr "से"
+
+#: core/templates/core/partials/statement_filter.html:16
+#: core/templates/core/sale_detail.html:18
+#: core/templates/core/sale_detail.html:19
+msgid "To"
+msgstr "प्रति"
+
+#: core/templates/core/partials/statement_filter.html:18
+msgid "For your own records only"
+msgstr "सिर्फ़ आपके अपने रिकॉर्ड के लिए"
+
+#: core/templates/core/partials/statement_filter.html:20
+msgid "My copy (with profit)"
+msgstr "मेरी कॉपी (मुनाफ़े के साथ)"
+
+#: core/templates/core/partials/statement_filter.html:21
+msgid "Leave unticked for the copy you send - it never shows your profit."
+msgstr ""
+"भेजने वाली कॉपी के लिए ख़ाली छोड़ें - उसमें आपका मुनाफ़ा कभी नहीं दिखता।"
+
+#: core/templates/core/partials/statement_filter.html:26
+msgid "Leave both empty for this month."
+msgstr "इस महीने के लिए दोनों ख़ाली छोड़ दें।"
 
 #: core/templates/core/partials/truck_account.html:6
 msgid "What the party pays"
@@ -5222,10 +5588,6 @@ msgstr "कोई खरीद नहीं मिली"
 msgid "Purchase %(ref)s"
 msgstr "खरीद %(ref)s"
 
-#: core/templates/core/purchase_detail.html:17
-msgid "From"
-msgstr "से"
-
 #: core/templates/core/purchase_detail.html:19
 msgid "our ref"
 msgstr "हमारा संदर्भ"
@@ -5279,7 +5641,6 @@ msgstr "इन्हीं लाइनों से स्टॉक बढ़�
 #: core/templates/core/purchase_detail.html:92
 #: core/templates/core/sale_detail.html:115
 #: core/templates/core/sale_detail.html:127
-#: core/templates/core/sale_print.html:121
 msgid "Rate/kg"
 msgstr "दर/kg"
 
@@ -5297,7 +5658,6 @@ msgstr "छूट"
 #: core/templates/core/purchase_form.html:256
 #: core/templates/core/sale_detail.html:146
 #: core/templates/core/sale_form.html:281
-#: core/templates/core/sale_print.html:157
 msgid "Taxable amount"
 msgstr "कर योग्य रकम"
 
@@ -5331,7 +5691,6 @@ msgstr "मज़दूरी"
 #: core/templates/core/purchase_form.html:266
 #: core/templates/core/sale_detail.html:155
 #: core/templates/core/sale_form.html:285
-#: core/templates/core/sale_print.html:161
 msgid "Round off"
 msgstr "पूर्णांकन"
 
@@ -5700,7 +6059,6 @@ msgstr "बिल सारांश"
 
 #: core/templates/core/purchase_form.html:252
 #: core/templates/core/sale_form.html:279
-#: core/templates/core/sale_print.html:156
 msgid "Total bags"
 msgstr "कुल बोरी"
 
@@ -6069,11 +6427,6 @@ msgstr "रसीद सहेजें"
 msgid "Invoice %(no)s"
 msgstr "चालान %(no)s"
 
-#: core/templates/core/sale_detail.html:18
-#: core/templates/core/sale_detail.html:19
-msgid "To"
-msgstr "प्रति"
-
 #: core/templates/core/sale_detail.html:22
 #, python-format
 msgid "Unloaded %(date)s"
@@ -6093,21 +6446,18 @@ msgid "Invoice PDF"
 msgstr "चालान PDF"
 
 #: core/templates/core/sale_detail.html:28
-#: core/templates/core/sale_print.html:60
+#: core/templates/core/sale_print.html:24
 msgid "Print"
 msgstr "प्रिंट"
 
 #: core/templates/core/sale_detail.html:29
+#: core/templates/core/sale_print.html:23
 msgid "Settlement statement"
 msgstr "हिसाब विवरण"
 
 #: core/templates/core/sale_detail.html:34
 msgid "Edit settlement"
 msgstr "हिसाब बदलें"
-
-#: core/templates/core/sale_detail.html:34
-msgid "Record unloading"
-msgstr "उतराई दर्ज करें"
 
 #: core/templates/core/sale_detail.html:46
 #, python-format
@@ -6132,18 +6482,15 @@ msgstr "ग्राहक को क्या दिखता है"
 
 #: core/templates/core/sale_detail.html:94
 #: core/templates/core/sale_form.html:88
-#: core/templates/core/sale_print.html:102
 msgid "Bill to"
 msgstr "बिल किसे"
 
 #: core/templates/core/sale_detail.html:101
-#: core/templates/core/sale_print.html:90
 msgid "Place of supply"
 msgstr "आपूर्ति का स्थान"
 
 #: core/templates/core/sale_detail.html:105
 #: core/templates/core/sale_form.html:99
-#: core/templates/core/sale_print.html:109
 msgid "Ship to"
 msgstr "माल किसे भेजें"
 
@@ -6182,12 +6529,10 @@ msgid "Truck & transport"
 msgstr "ट्रक & भाड़ा"
 
 #: core/templates/core/sale_detail.html:222
-#: core/templates/core/sale_print.html:94
 msgid "Vehicle"
 msgstr "वाहन"
 
 #: core/templates/core/sale_detail.html:223
-#: core/templates/core/sale_print.html:95
 msgid "Driver"
 msgstr "ड्राइवर"
 
@@ -6532,76 +6877,9 @@ msgstr ""
 msgid "Make your first sale"
 msgstr "अपनी पहली बिक्री करें"
 
-#: core/templates/core/sale_print.html:66
-msgid "Original for recipient"
-msgstr "प्राप्तकर्ता के लिए मूल प्रति"
-
-#: core/templates/core/sale_print.html:67
-msgid "TAX INVOICE"
-msgstr "टैक्स चालान"
-
-#: core/templates/core/sale_print.html:67
-msgid "BILL OF SUPPLY"
-msgstr "बिल ऑफ़ सप्लाई"
-
-#: core/templates/core/sale_print.html:89
-msgid "Due date"
-msgstr "बकाया तारीख"
-
-#: core/templates/core/sale_print.html:93
-msgid "Transport"
-msgstr "भाड़ा"
-
-#: core/templates/core/sale_print.html:119
-msgid "Description"
-msgstr "विवरण"
-
-#: core/templates/core/sale_print.html:120
-msgid "Qty (kg)"
-msgstr "मात्रा (kg)"
-
-#: core/templates/core/sale_print.html:145
-msgid "Amount in words"
-msgstr "रकम शब्दों में"
-
-#: core/templates/core/sale_print.html:147
-msgid "Bank details"
-msgstr "बैंक विवरण"
-
-#: core/templates/core/sale_print.html:171
-#, python-format
-msgid ""
-"Freight (for information, not included above): %(ton)s ton × ₹ %(rate)s = ₹ "
-"%(freight)s · still due to the truck ₹ %(due)s"
-msgstr ""
-"भाड़ा (जानकारी के लिए, ऊपर शामिल नहीं): %(ton)s टन × ₹ %(rate)s = ₹ "
-"%(freight)s · ट्रक का अभी भी बकाया ₹ %(due)s"
-
-#: core/templates/core/sale_print.html:179
-msgid "Terms"
-msgstr "शर्तें"
-
-#: core/templates/core/sale_print.html:183
-msgid "Goods once sold will not be taken back."
-msgstr "बिका हुआ माल वापस नहीं लिया जाएगा।"
-
-#: core/templates/core/sale_print.html:184
-#, python-format
-msgid "Interest @ 18%% p.a. will be charged if payment is delayed."
-msgstr "भुगतान में देरी होने पर 18%% सालाना ब्याज लगेगा।"
-
-#: core/templates/core/sale_print.html:185
-msgid "Subject to local jurisdiction only."
-msgstr "सिर्फ़ स्थानीय न्यायालय के अधीन।"
-
-#: core/templates/core/sale_print.html:189
-#, python-format
-msgid "For %(name)s"
-msgstr "%(name)s के लिए"
-
-#: core/templates/core/sale_print.html:191
-msgid "Authorised signatory"
-msgstr "अधिकृत हस्ताक्षरकर्ता"
+#: core/templates/core/sale_print.html:22
+msgid "Download PDF"
+msgstr "PDF डाउनलोड करें"
 
 #: core/templates/core/sale_settle.html:5
 msgid "Unloading & settlement"
@@ -7001,17 +7279,17 @@ msgstr "सप्लायर नहीं जोड़ा जा सका: %(e
 msgid "Truck register %(start)s to %(end)s"
 msgstr "ट्रक रजिस्टर %(start)s से %(end)s"
 
-#: core/view/sale/sale_views.py:263
+#: core/view/sale/sale_views.py:262
 #, python-format
 msgid "Invoice %(no)s saved · %(bags)s bags · ₹ %(total)s"
 msgstr "चालान %(no)s सहेजा गया · %(bags)s बोरी · ₹ %(total)s"
 
-#: core/view/sale/sale_views.py:304
+#: core/view/sale/sale_views.py:303
 #, python-format
 msgid "Invoice %(no)s updated."
 msgstr "चालान %(no)s अपडेट हुआ।"
 
-#: core/view/sale/sale_views.py:338
+#: core/view/sale/sale_views.py:337
 #, python-format
 msgid ""
 "Invoice %(no)s dated %(date)s\n"
@@ -7024,12 +7302,12 @@ msgstr ""
 "बकाया: ₹ %(due)s\n"
 "- %(company)s"
 
-#: core/view/sale/sale_views.py:389
+#: core/view/sale/sale_views.py:390
 #, python-format
 msgid "Invoice %(no)s deleted. Its bags are back in stock."
 msgstr "चालान %(no)s हटाया गया। इसकी बोरियाँ स्टॉक में वापस आ गईं।"
 
-#: core/view/sale/sale_views.py:441
+#: core/view/sale/sale_views.py:442
 #, python-format
 msgid ""
 "Invoice %(no)s is settled. The extra ₹ %(extra)s is applied to %(broker)s's "
@@ -7038,7 +7316,7 @@ msgstr ""
 "चालान %(no)s का हिसाब पूरा हुआ। अतिरिक्त ₹ %(extra)s %(broker)s के दूसरे "
 "बिना भुगतान वाले ट्रकों में लगाया गया है (या एडवांस के रूप में रखा गया है)।"
 
-#: core/view/sale/sale_views.py:449
+#: core/view/sale/sale_views.py:450
 #, python-format
 msgid ""
 "Invoice %(no)s is settled. The extra ₹ %(extra)s is applied to "
@@ -7047,12 +7325,12 @@ msgstr ""
 "चालान %(no)s चुकता हो गया। अतिरिक्त ₹ %(extra)s %(customer)s के दूसरे बकाया "
 "चालानों में लगाया गया है (या एडवांस रखा गया है)।"
 
-#: core/view/sale/sale_views.py:457
+#: core/view/sale/sale_views.py:458
 #, python-format
 msgid "₹ %(amount)s received against invoice %(no)s."
 msgstr "₹ %(amount)s चालान %(no)s के लिए प्राप्त हुआ।"
 
-#: core/view/sale/sale_views.py:506
+#: core/view/sale/sale_views.py:507
 #, python-format
 msgid ""
 "₹ %(amount)s saved. That is ₹ %(extra)s more than %(customer)s owed, so it "
@@ -7061,7 +7339,7 @@ msgstr ""
 "₹ %(amount)s सहेजा गया। यह %(customer)s के बकाया से ₹ %(extra)s ज़्यादा है, "
 "इसलिए इसे एडवांस रखा गया है।"
 
-#: core/view/sale/sale_views.py:514
+#: core/view/sale/sale_views.py:515
 #, python-format
 msgid ""
 "₹ %(amount)s received from %(customer)s. It is applied to the oldest unpaid "
@@ -7070,12 +7348,12 @@ msgstr ""
 "₹ %(amount)s %(customer)s से प्राप्त हुआ। इसे सबसे पुराने बकाया चालानों में "
 "पहले लगाया गया है।"
 
-#: core/view/sale/sale_views.py:561
+#: core/view/sale/sale_views.py:562
 #, python-format
 msgid "Payment of ₹ %(amount)s deleted."
 msgstr "₹ %(amount)s का भुगतान हटाया गया।"
 
-#: core/view/sale/sale_views.py:592
+#: core/view/sale/sale_views.py:593
 #, python-format
 msgid "Truck %(no)s settled · %(kg)s kg received · party owes ₹ %(net)s"
 msgstr ""

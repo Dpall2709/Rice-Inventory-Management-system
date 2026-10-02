@@ -73,6 +73,9 @@
   </div>
 </div>
 
+{% url 'customer_statement_export' customer.id 'pdf' as pdf_url %}{% url 'customer_statement_export' customer.id 'xlsx' as xlsx_url %}
+{% include "core/partials/statement_filter.html" with pdf_url=pdf_url xlsx_url=xlsx_url %}
+
 <div class="card">
   <div class="list-header">
     <div class="list-title">{% translate "Invoices" %}</div>

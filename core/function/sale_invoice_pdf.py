@@ -17,7 +17,7 @@ Layout (A4, 12 mm margins all round):
     bill to                | ship to
     item lines (one row per rice line)
     amount in words, bank, QR | taxable, CGST/SGST or IGST, total, received, due
-    freight note (information only - not part of the invoice total)
+    TRANSPORT / FREIGHT box: what we paid the driver, what you pay (not in the total)
     terms                  | for <company> / authorised signatory
 """
 
@@ -161,6 +161,87 @@ def _box(rows, col_widths, extra=()):
     style.extend(extra)
     table.setStyle(TableStyle(style))
     return table
+
+
+FREIGHT_FILL = colors.HexColor("#FEF3C7")      # soft amber - stands out, prints well
+FREIGHT_BORDER = colors.HexColor("#B45309")
+
+
+def _transport_box(sale, st):
+    """
+    Freight, in its own highlighted box, separate from the goods: what the
+    truck costs, what WE have paid, and what YOU (the party) have to pay -
+    worded for who carries the freight on this sale. Never part of the
+    invoice total.
+    """
+    from ..services.sale_service import settlement
+
+    figures = settlement(sale)
+    total = figures["freight_total"]
+    we_paid = figures["freight_paid_by_us"]
+    if not total and not we_paid and not sale.vehicle_number:
+        return None
+
+    you_pay = max(total - we_paid, Decimal("0"))
+    rate = Decimal(sale.transport_rate_per_ton or 0)
+
+    head = ParagraphStyle("fh", parent=st["bold"], textColor=FREIGHT_BORDER, fontSize=9.5)
+    big = ParagraphStyle("fb", parent=st["right_bold"], fontSize=10)
+
+    details = []
+    if sale.vehicle_number:
+        details.append(f"Vehicle: {sale.vehicle_number}")
+    if sale.driver_name or sale.driver_mobile:
+        details.append("Driver: " + " ".join(x for x in [sale.driver_name, sale.driver_mobile] if x))
+    if sale.transporter_name:
+        details.append(f"Transporter: {sale.transporter_name}")
+    weight = f"{figures['dispatched_kg'] / Decimal('1000'):.3f} ton"
+    details.append(f"Weight: {weight}" + (f" @ Rs. {_rs(rate)} per ton" if rate else ""))
+
+    lines = [("Total freight for this truck", total)]
+    if sale.freight_borne_by == "us":
+        lines += [
+            ("WE HAVE PAID - advance to the driver", we_paid),
+            ("YOU HAVE TO PAY - balance to the driver on unloading", you_pay),
+        ]
+        note = (
+            f"We have paid Rs. {_rs(we_paid)} to the driver as advance. Please pay the driver the balance "
+            f"Rs. {_rs(you_pay)} when the goods are unloaded, and deduct that amount from your payment to us."
+        )
+    elif sale.freight_borne_by == "customer":
+        lines += [
+            ("WE HAVE PAID - advance to the driver on your behalf", we_paid),
+            ("YOU HAVE TO PAY - balance to the driver on unloading", you_pay),
+        ]
+        note = (
+            f"The freight is to your account. We have paid Rs. {_rs(we_paid)} advance to the driver for you - "
+            f"please add it to your payment to us. Pay the driver the balance Rs. {_rs(you_pay)} on unloading."
+        )
+    else:
+        note = "The freight is to be settled directly between you and the transporter."
+
+    money_rows = [[_p(label, st["bold"] if "PAY" in label else st["base"]), _p(f"Rs. {_rs(value)}", big)]
+                  for label, value in lines]
+    money_table = Table(money_rows, colWidths=[WIDTH * 0.42, WIDTH * 0.18])
+    money_table.setStyle(TableStyle([
+        ("LINEBELOW", (0, 0), (-1, -2), 0.25, FREIGHT_BORDER),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+
+    left = [_p("TRANSPORT / FREIGHT  (not included in the invoice total)", head), Spacer(1, 3)]
+    left += [_p(line, st["small"]) for line in details]
+    right = [money_table, Spacer(1, 4), _p(note, st["small"])]
+
+    box = Table([[left, right]], colWidths=[WIDTH * 0.36, WIDTH * 0.64])
+    box.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 1.2, FREIGHT_BORDER),
+        ("BACKGROUND", (0, 0), (-1, -1), FREIGHT_FILL),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7), ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    return KeepTogether([box])
 
 
 def _logo(company):
@@ -347,6 +428,12 @@ def build_invoice_pdf(company, sale):
     ]))
     story.append(item_table)
 
+    transport = _transport_box(sale, st)
+    if transport is not None:
+        story.append(Spacer(1, 4))
+        story.append(transport)
+        story.append(Spacer(1, 4))
+
     # ---- words, bank, QR | totals -----------------------------------------
     left_w = WIDTH * 0.56
     right_w = WIDTH - left_w
@@ -391,8 +478,25 @@ def build_invoice_pdf(company, sale):
         total_rows.append(("Round Off", f"{sale.round_off:+.2f}"))
     grand_index = len(total_rows)
     total_rows.append(("Invoice Total (Rs.)", _rs(sale.total_amount)))
+    # What the party pays US against this invoice: the invoice total, less the
+    # freight balance they pay the driver for us (or plus our advance when the
+    # freight is theirs). Cash discount and brokerage are settled later and
+    # belong on the settlement statement, not on the invoice.
+    from ..services.sale_service import settlement as _settlement
+
+    figures = _settlement(sale)
+    you_pay_driver = max(figures["freight_total"] - figures["freight_paid_by_us"], Decimal("0"))
+    payable = Decimal(sale.total_amount or 0)
+    if sale.freight_borne_by == "us" and you_pay_driver:
+        total_rows.append(("Less: freight you pay the driver", "- " + _rs(you_pay_driver)))
+        payable -= you_pay_driver
+    elif sale.freight_borne_by == "customer" and figures["freight_paid_by_us"]:
+        total_rows.append(("Add: freight advance paid by us", "+ " + _rs(figures["freight_paid_by_us"])))
+        payable += figures["freight_paid_by_us"]
+    if payable != Decimal(sale.total_amount or 0):
+        total_rows.append(("Payable to us (Rs.)", _rs(payable)))
     total_rows.append(("Received", _rs(status["paid"])))
-    total_rows.append(("Balance Due (Rs.)", _rs(status["due"])))
+    total_rows.append(("Balance Due (Rs.)", _rs(max(payable - status["paid"], Decimal("0")))))
 
     totals = Table(
         [[_p(k, st["bold"] if i in (grand_index, len(total_rows) - 1) else st["base"]),
@@ -412,18 +516,7 @@ def build_invoice_pdf(company, sale):
                    extra=[("RIGHTPADDING", (1, 0), (1, 0), 0), ("LEFTPADDING", (1, 0), (1, 0), 0),
                           ("TOPPADDING", (1, 0), (1, 0), 0)])
 
-    # ---- freight note ------------------------------------------------------
     bottom = [summary]
-    if sale.transport_charge:
-        note = (
-            f"Freight (for information, not included in the invoice total): "
-            f"{sale.total_ton:.3f} ton x Rs. {_rs(sale.transport_rate_per_ton)} = Rs. {_rs(sale.transport_charge)}"
-            f"  |  Advance paid by us: Rs. {_rs(sale.transport_paid_by_dealer)}"
-        )
-        if sale.transport_paid_by_customer:
-            note += f"  |  Paid by customer: Rs. {_rs(sale.transport_paid_by_customer)}"
-        note += f"  |  Due to truck: Rs. {_rs(sale.transport_due)}"
-        bottom.append(_box([[_p(note, st["small"])]], [WIDTH]))
 
     # The broker is internal and is never printed on the customer's invoice.
 

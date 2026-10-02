@@ -45,3 +45,4 @@ from .broker.broker_views import (
     toggle_broker,
 )
 from .reports.trade_register import trade_register
+from .reports.party_statements import broker_statement_export, customer_statement_export

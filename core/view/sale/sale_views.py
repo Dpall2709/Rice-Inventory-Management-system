@@ -13,6 +13,7 @@ from decimal import Decimal
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
@@ -28,8 +29,6 @@ from core.services.customer_ledger import (
 )
 from core.services.sale_service import (
     StockError,
-    amount_in_words,
-    invoice_lines,
     sale_profit,
     save_sale,
     stock_lots,
@@ -360,15 +359,17 @@ def sale_detail(request, sale_id):
 
 @login_required
 def sale_print(request, sale_id):
-    company = company_of(request)
-    sale = tenant_object_or_404(Sale.objects.select_related("customer", "broker"), request, sale_id)
+    """
+    Print the invoice exactly as the PDF looks: the page shows the invoice PDF
+    and opens the browser's print dialog on it, so the printed copy and the
+    downloaded copy are the same document.
+    """
+    sale = tenant_object_or_404(Sale, request, sale_id)
 
     return render(request, "core/sale_print.html", {
         "sale": sale,
-        "company": company,
-        "items": invoice_lines(sale),
-        "status": sale_payment_status(company, sale),
-        "amount_words": amount_in_words(sale.total_amount),
+        "pdf_url": reverse("sale_invoice_pdf", args=[sale.id]),
+        "statement_url": reverse("sale_statement_pdf", args=[sale.id]) if sale.unload_date else "",
     })
 
 

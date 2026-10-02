@@ -1,0 +1,51 @@
+{% load i18n %}
+{# Download a statement for a month or a date range. Needs `pdf_url` and `xlsx_url`. #}
+<div class="card statement-box">
+  <div class="list-header" style="margin-bottom:8px;">
+    <div>
+      <div class="list-title">📄 {% translate "Statement" %}</div>
+      <p class="muted small">{% translate "Choose a month, or a from-to range, then download it as PDF or Excel." %}</p>
+    </div>
+  </div>
+  <form class="toolbar" method="GET" data-no-loading target="_blank" style="margin-bottom:0;">
+    <label class="statement-field"><span class="muted small">{% translate "Month" %}</span>
+      <input class="input" type="month" name="month" data-statement-month></label>
+    <span class="muted small statement-or">{% translate "or" %}</span>
+    <label class="statement-field"><span class="muted small">{% translate "From" %}</span>
+      <input class="input" type="date" name="from" data-statement-range></label>
+    <label class="statement-field"><span class="muted small">{% translate "To" %}</span>
+      <input class="input" type="date" name="to" data-statement-range></label>
+    <label class="charge-toggle statement-internal" title="{% translate 'For your own records only' %}">
+      <input type="checkbox" name="internal" value="1">
+      <span><strong>{% translate "My copy (with profit)" %}</strong>
+      <small>{% translate "Leave unticked for the copy you send - it never shows your profit." %}</small></span>
+    </label>
+    <button class="btn btn-outline" type="submit" formaction="{{ pdf_url }}">📄 PDF</button>
+    <button class="btn btn-outline" type="submit" formaction="{{ xlsx_url }}">⬇️ Excel</button>
+  </form>
+  <p class="field-hint" style="margin-top:6px;">{% translate "Leave both empty for this month." %}</p>
+</div>
+<script>
+  // A month and a date range cannot both apply - typing one clears the other.
+  (function () {
+    var box = document.currentScript.previousElementSibling;
+    var month = box.querySelector("[data-statement-month]");
+    var range = box.querySelectorAll("[data-statement-range]");
+    month.addEventListener("input", function () { range.forEach(function (el) { el.value = ""; }); });
+    range.forEach(function (el) { el.addEventListener("input", function () { month.value = ""; }); });
+  })();
+</script>
+<style>
+  .statement-field { display: flex; flex-direction: column; gap: 2px; }
+  .statement-or { align-self: flex-end; padding-bottom: 10px; }
+  .statement-internal {
+    display: flex; gap: 8px; align-items: flex-start; max-width: 320px; cursor: pointer;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2);
+  }
+  .statement-internal input { width: 18px; height: 18px; margin-top: 2px; flex: 0 0 18px; }
+  .statement-internal strong { font-size: 13px; }
+  .statement-internal small { color: var(--text-muted); font-size: 11.5px; line-height: 1.4; }
+  .statement-internal:has(input:checked) { border-color: var(--warning); background: var(--warning-soft); }
+  .statement-internal small { display: block; }
+  @media (max-width: 720px) { .statement-or { align-self: flex-start; padding: 0; } }
+</style>

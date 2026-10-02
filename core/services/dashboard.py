@@ -225,9 +225,11 @@ def receivables(company, today=None):
 
     # Trucks a broker collects for: the broker owes this money, not the party.
     broker_due = ZERO
+    brokers_with_dues = set()
     for broker in Broker.objects.for_company(company):
         for row in broker_collections(company, broker)["rows"]:
             if row["due"] > 0:
+                brokers_with_dues.add(broker.id)
                 broker_due += row["due"]
                 invoices.append({"sale": row["sale"], "customer": row["sale"].customer,
                                  "broker": broker, "due": row["due"]})
@@ -278,7 +280,12 @@ def receivables(company, today=None):
         "by_customer": by_customer,
         "invoices": invoices,
         "total_due": money(total_due),
-        "customers_with_dues": sum(1 for entry in by_customer.values() if entry["due"] > 0) + (1 if loose_due else 0),
+        # Everyone who owes you: customers on direct sales, plus brokers who
+        # collect on your behalf.
+        "customers_with_dues": (
+            sum(1 for entry in by_customer.values() if entry["due"] > 0)
+            + (1 if loose_due else 0) + len(brokers_with_dues)
+        ),
         "buckets": buckets,
         "opening_due": money(opening_due_total),
         "broker_due": money(broker_due),
@@ -727,5 +734,13 @@ def build_dashboard(company, period=None, today=None):
         "trends": trends(company, today),
         "top_customers": top_customers(company, current["start"], current["end"], recv["by_customer"]),
         "top_products": top_products(company, current["start"], current["end"]),
+    })
+
+    from core.services.insights import profit_tips, pulse, reminders
+
+    data.update({
+        "pulse": pulse(company, current["start"], current["end"], today),
+        "reminders": reminders(company, today, recv, mills),
+        "profit_tips": profit_tips(company, current["start"], current["end"], today),
     })
     return data

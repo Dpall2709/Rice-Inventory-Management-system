@@ -333,5 +333,104 @@
     }
   });
 
+  /* ------------------------------------- keep typed values across EN / हिं */
+
+  // Switching language reloads the page so the server can draw it in the
+  // other language. Without this, everything typed into a form was lost.
+  // Just before switching we keep the forms' values in this tab, and put
+  // them back after the reload - including extra item lines added by hand.
+  // Passwords and files are never kept.
+  var LANG_KEY = "formsBeforeLanguageSwitch";
+
+  function keepable(field) {
+    if (!field.name || field.disabled) return false;
+    var type = (field.type || "").toLowerCase();
+    if (type === "password" || type === "file" || type === "hidden" || type === "submit" || type === "button") return false;
+    return !field.closest(".lang-switch");
+  }
+
+  function snapshotForms() {
+    var forms = [];
+    document.querySelectorAll("form:not(.lang-switch)").forEach(function (form, index) {
+      var values = {};
+      var lines = {};
+      form.querySelectorAll('input[name$="-TOTAL_FORMS"]').forEach(function (total) {
+        lines[total.name] = total.value;
+      });
+      form.querySelectorAll("input, select, textarea").forEach(function (field) {
+        if (!keepable(field)) return;
+        var type = (field.type || "").toLowerCase();
+        if (type === "checkbox" || type === "radio") {
+          values[field.name + (type === "radio" ? "=" + field.value : "")] = field.checked;
+        } else {
+          values[field.name] = field.value;
+        }
+      });
+      forms.push({ index: index, id: form.id || "", values: values, lines: lines });
+    });
+    return forms;
+  }
+
+  function fill(form, values, fire) {
+    form.querySelectorAll("input, select, textarea").forEach(function (field) {
+      if (!keepable(field)) return;
+      var type = (field.type || "").toLowerCase();
+      var key = field.name + (type === "radio" ? "=" + field.value : "");
+      if (!(key in values)) return;
+      if (type === "checkbox" || type === "radio") field.checked = values[key];
+      else field.value = values[key];
+      if (fire) {
+        field.dispatchEvent(new Event(field.tagName === "SELECT" || type === "checkbox" || type === "radio" ? "change" : "input", { bubbles: true }));
+      }
+    });
+  }
+
+  function restoreForms() {
+    var saved;
+    try {
+      saved = JSON.parse(sessionStorage.getItem(LANG_KEY) || "null");
+      sessionStorage.removeItem(LANG_KEY);
+    } catch (e) { return; }
+    if (!saved || saved.path !== window.location.pathname + window.location.search) return;
+
+    var forms = document.querySelectorAll("form:not(.lang-switch)");
+    saved.forms.forEach(function (entry) {
+      var form = (entry.id && document.getElementById(entry.id)) || forms[entry.index];
+      if (!form || form.tagName !== "FORM") return;
+
+      // Re-create item lines that were added by hand before the switch.
+      Object.keys(entry.lines).forEach(function (name) {
+        var total = form.querySelector('input[name="' + name + '"]');
+        var add = form.querySelector("[data-add-line]");
+        var guard = 0;
+        while (total && add && parseInt(total.value, 10) < parseInt(entry.lines[name], 10) && guard++ < 100) {
+          add.click();
+        }
+      });
+
+      fill(form, entry.values, true);    // let the page react (lot lists, buyer card…)
+      fill(form, entry.values, false);   // then make sure every value is exactly as typed
+      var any = form.querySelector('input[type="number"], input[type="text"]');
+      if (any) any.dispatchEvent(new Event("input", { bubbles: true }));   // recalculate totals
+    });
+  }
+
+  document.addEventListener("submit", function (e) {
+    if (!e.target.classList || !e.target.classList.contains("lang-switch")) return;
+    try {
+      sessionStorage.setItem(LANG_KEY, JSON.stringify({
+        path: window.location.pathname + window.location.search,
+        forms: snapshotForms(),
+      }));
+    } catch (err) {}
+  }, true);
+
+  // After the page's own scripts (sale and purchase forms) have set up.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { setTimeout(restoreForms, 0); });
+  } else {
+    setTimeout(restoreForms, 0);
+  }
+
   paintThemeButton();
 })();
