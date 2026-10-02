@@ -1,18 +1,19 @@
 {% extends 'core/base.html' %}
+{% load i18n %}
 {% block nav_kind %}form{% endblock %}
 {% block back_url %}{% url 'purchase_detail' purchase.id %}{% endblock %}
 {% block content_class %}page-narrow{% endblock %}
-{% block page_title %}Delete purchase{% endblock %}
+{% block page_title %}{% translate "Delete purchase" %}{% endblock %}
 
 {% block content %}
 
 <div class="page-head">
   <div>
     <div class="crumbs">
-      <a href="{% url 'purchase_list' %}">Purchases</a> ›
-      <a href="{% url 'purchase_detail' purchase.id %}">{{ purchase.invoice_no }}</a> › <span>Delete</span>
+      <a href="{% url 'purchase_list' %}">{% translate "Purchases" %}</a> ›
+      <a href="{% url 'purchase_detail' purchase.id %}">{{ purchase.invoice_no }}</a> › <span>{% translate "Delete" %}</span>
     </div>
-    <h1>Delete bill {{ purchase.invoice_no }}?</h1>
+    <h1>{% blocktranslate with invoice_no=purchase.invoice_no %}Delete bill {{ invoice_no }}?{% endblocktranslate %}</h1>
   </div>
 </div>
 
@@ -22,21 +23,28 @@
     <span>{% if can_delete %}⚠️{% else %}🔒{% endif %}</span>
     <div>
       {% if can_delete %}
-        Deleting this bill also removes <strong>{{ purchase.total_bags }} bags</strong> from your stock.
+        {% blocktranslate trimmed with bags=purchase.total_bags %}
+        Deleting this bill also removes <strong>{{ bags }} bags</strong> from your stock.
         This cannot be undone.
+        {% endblocktranslate %}
       {% else %}
-        This bill has {{ payment_count }} payment{{ payment_count|pluralize }} recorded against it and
+        {% blocktranslate trimmed count counter=payment_count %}
+        This bill has {{ counter }} payment recorded against it and
         <strong>cannot be deleted</strong>. Delete those payments first, or edit the bill instead.
+        {% plural %}
+        This bill has {{ counter }} payments recorded against it and
+        <strong>cannot be deleted</strong>. Delete those payments first, or edit the bill instead.
+        {% endblocktranslate %}
       {% endif %}
     </div>
   </div>
 
   <dl class="kv">
-    <dt>Mill</dt><dd>{{ purchase.mill.mill_name }}</dd>
-    <dt>Bill date</dt><dd>{{ purchase.purchase_date|date:"d M Y" }}</dd>
-    <dt>Our reference</dt><dd>{{ purchase.purchase_ref|default:"—" }}</dd>
-    <dt>Bill total</dt><dd>₹ {{ purchase.total_amount }}</dd>
-    <dt>Stock added</dt>
+    <dt>{% translate "Mill" %}</dt><dd>{{ purchase.mill.mill_name }}</dd>
+    <dt>{% translate "Bill date" %}</dt><dd>{{ purchase.purchase_date|date:"d M Y" }}</dd>
+    <dt>{% translate "Our reference" %}</dt><dd>{{ purchase.purchase_ref|default:"—" }}</dd>
+    <dt>{% translate "Bill total" %}</dt><dd>₹ {{ purchase.total_amount }}</dd>
+    <dt>{% translate "Stock added" %}</dt>
     <dd>
       {% for item in items %}
         {{ item.bag_count }} × {{ item.bag_weight }}kg {{ item.product.rice_name }}{% if not forloop.last %}<br>{% endif %}
@@ -48,10 +56,10 @@
     {% csrf_token %}
     {% if can_delete %}
       <button class="btn btn-danger" type="submit"
-              data-confirm="Bill {{ purchase.invoice_no }} and {{ purchase.total_bags }} bags of stock will be removed permanently."
-              data-confirm-title="Delete this purchase?">🗑 Delete permanently</button>
+              data-confirm="{% blocktranslate with invoice_no=purchase.invoice_no bags=purchase.total_bags %}Bill {{ invoice_no }} and {{ bags }} bags of stock will be removed permanently.{% endblocktranslate %}"
+              data-confirm-title="{% translate 'Delete this purchase?' %}">🗑 {% translate "Delete permanently" %}</button>
     {% endif %}
-    <a class="btn btn-ghost" href="{% url 'purchase_detail' purchase.id %}">Cancel</a>
+    <a class="btn btn-ghost" href="{% url 'purchase_detail' purchase.id %}">{% translate "Cancel" %}</a>
   </form>
 
 </div>

@@ -15,6 +15,7 @@ _ASSETS = [
     "core/static/core/style.css",
     "core/static/core/app.js",
     "core/static/core/purchase_form.js",
+    "core/static/core/sale_form.js",
 ]
 _cached_version = None
 

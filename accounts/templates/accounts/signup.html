@@ -1,0 +1,224 @@
+{% extends "core/auth/auth_base.html" %}
+{% load i18n %}
+{% block title %}{% translate "Create your account" %}{% endblock %}
+{% block card_class %}auth-card-wide{% endblock %}
+
+{% block extra_head %}
+<style>
+  .steps { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text-muted); margin-bottom: 14px; flex-wrap: wrap; }
+  .steps b { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-3); color: var(--text-soft); font-size: 12px; margin-right: 4px; }
+  .steps .on b { background: var(--primary); color: var(--on-primary, #fff); }
+  .steps .on { color: var(--text); font-weight: 600; }
+  .steps i { flex: 0 0 18px; height: 1px; background: var(--border); }
+  .avail { font-size: 12.5px; min-height: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .avail:empty { display: none; }
+  .avail.is-ok { color: var(--success); font-weight: 600; }
+  .avail.is-bad { color: var(--danger); font-weight: 600; }
+  .avail.is-hint { color: var(--warning); }
+  .avail .sugg { font: inherit; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--primary-border, var(--border)); background: var(--primary-soft); color: var(--primary); cursor: pointer; }
+  .rules { margin: 2px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--text-muted); display: grid; gap: 2px; }
+  .rules li { padding-left: 14px; text-indent: -14px; }
+  .rules li::before { content: "•"; display: inline-block; width: 14px; text-indent: 0; color: var(--border-strong); }
+  .rules li.is-ok { color: var(--success); }
+  .rules li.is-ok::before { content: "✓"; color: var(--success); }
+  @media (max-width: 400px) { .steps span:not(.on) { font-size: 0; } .steps span:not(.on) b { font-size: 12px; margin-right: 0; } }
+  .rules li.is-bad { color: var(--danger); }
+  .rules li.is-bad::before { content: "✗"; color: var(--danger); }
+  .meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 2px; }
+  .meter span { height: 5px; border-radius: 3px; background: var(--surface-3); transition: background .2s; }
+  .meter[data-score="1"] span:nth-child(-n+1) { background: var(--danger); }
+  .meter[data-score="2"] span:nth-child(-n+2) { background: var(--warning); }
+  .meter[data-score="3"] span:nth-child(-n+3) { background: var(--info, var(--primary)); }
+  .meter[data-score="4"] span { background: var(--success); }
+  .meter-label { font-size: 12px; color: var(--text-muted); min-height: 1em; }
+  .req { color: var(--danger); }
+  .signup-note { font-size: 12.5px; color: var(--text-muted); text-align: center; }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="steps" aria-label="{% translate 'Progress' %}">
+    <span class="on"><b>1</b>{% translate "Your details" %}</span><i></i>
+    <span><b>2</b>{% translate "Verify email" %}</span><i></i>
+    <span><b>3</b>{% translate "Start using" %}</span>
+  </div>
+
+  <div class="auth-head">
+    <h1>{% translate "Create your business account" %}</h1>
+    <p>{% blocktranslate with days=14 %}{{ days }}-day free trial. No card needed.{% endblocktranslate %}</p>
+  </div>
+
+  {% if form.non_field_errors %}
+    <div class="auth-msg is-error" role="alert"><span>⛔</span><div>{{ form.non_field_errors|join:" " }}</div></div>
+  {% endif %}
+
+  <form method="post" action="{% url 'accounts:signup' %}" class="auth-form" novalidate id="signup-form"
+        data-check-url="{% url 'accounts:check' %}">
+    {% csrf_token %}
+
+    <div class="auth-section">{% translate "Your business" %}</div>
+    <div class="auth-grid">
+      {% include "accounts/_field.html" with field=form.company_name full=True %}
+      {% include "accounts/_field.html" with field=form.owner_name %}
+      {% include "accounts/_field.html" with field=form.mobile check="mobile" hint=True %}
+      {% include "accounts/_field.html" with field=form.email full=True check="email" hint=True %}
+    </div>
+
+    <div class="auth-section">{% translate "Your login" %}</div>
+    <div class="auth-grid">
+      <div class="field auth-full{% if form.username.errors %} has-error{% endif %}">
+        <label for="{{ form.username.id_for_label }}">{{ form.username.label }} <span class="req" aria-hidden="true">*</span></label>
+        {{ form.username }}
+        <div class="avail" data-avail-for="username" aria-live="polite"></div>
+        {% for error in form.username.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+        <ul class="rules" id="username-rules">
+          <li data-rule="length">{% translate "4 to 20 characters" %}</li>
+          <li data-rule="chars">{% translate "Only lowercase letters, digits, dot (.) and underscore (_)" %}</li>
+          <li data-rule="start">{% translate "Starts with a letter" %}</li>
+          <li data-rule="symbols">{% translate "No two symbols in a row, and doesn't end with a symbol" %}</li>
+        </ul>
+      </div>
+
+      <div class="field{% if form.password1.errors %} has-error{% endif %}">
+        <label for="{{ form.password1.id_for_label }}">{{ form.password1.label }} <span class="req" aria-hidden="true">*</span></label>
+        <div class="password-wrap">
+          {{ form.password1 }}
+          <button type="button" class="password-eye" data-toggle-password="{{ form.password1.id_for_label }}"
+                  aria-label="{% translate 'Show password' %}" aria-pressed="false">👁</button>
+        </div>
+        <div class="meter" id="pw-meter" data-score="0" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+        <div class="meter-label" id="pw-label" aria-live="polite"></div>
+        {% for error in form.password1.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+      </div>
+      {% include "accounts/_field.html" with field=form.password2 %}
+    </div>
+    <p class="field-hint">{% translate "At least 8 characters. Not only numbers, not a common password, and not similar to your name or username." %}</p>
+
+    <button type="submit" class="btn btn-primary btn-block btn-lg">{% translate "Continue - send me a code" %}</button>
+    <p class="signup-note">{% translate "Nothing is created until you enter the code we email you." %}</p>
+  </form>
+
+  <div class="auth-alt">
+    {% translate "Already have an account?" %}
+    <a href="{% url 'login' %}">{% translate "Login" %} →</a>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.getElementById("signup-form");
+  if (!form) return;
+  var url = form.getAttribute("data-check-url");
+  var T = {
+    checking: "{{ _('Checking…')|escapejs }}",
+    tryThese: "{{ _('Try:')|escapejs }}",
+    weak: "{{ _('Weak')|escapejs }}",
+    fair: "{{ _('Fair')|escapejs }}",
+    good: "{{ _('Good')|escapejs }}",
+    strong: "{{ _('Strong')|escapejs }}",
+    tooShort: "{{ _('Too short')|escapejs }}"
+  };
+
+  function val(name) {
+    var el = form.querySelector('[name="' + name + '"]');
+    return el ? el.value.trim() : "";
+  }
+
+  // ---- username rules, checked as you type --------------------------------
+  var rules = document.getElementById("username-rules");
+  function usernameRules(v) {
+    return {
+      length: v.length >= 4 && v.length <= 20,
+      chars: /^[a-z0-9._]+$/.test(v),
+      start: /^[a-z]/.test(v),
+      symbols: v.length > 0 && !/[._]{2}/.test(v) && !/[._]$/.test(v)
+    };
+  }
+  function paintRules(v) {
+    var r = usernameRules(v);
+    rules.querySelectorAll("li").forEach(function (li) {
+      li.classList.remove("is-ok", "is-bad");
+      if (!v) return;
+      li.classList.add(r[li.getAttribute("data-rule")] ? "is-ok" : "is-bad");
+    });
+    return r.length && r.chars && r.start && r.symbols;
+  }
+
+  // ---- live availability ---------------------------------------------------
+  var timers = {};
+  var seq = {};
+  function show(box, cls, text) {
+    box.className = "avail " + (cls || "");
+    box.textContent = text || "";
+  }
+  function check(input) {
+    var field = input.getAttribute("data-check");
+    var box = form.querySelector('[data-avail-for="' + field + '"]');
+    if (!box) return;
+    var value = input.value.trim();
+    if (field === "username") {
+      value = value.toLowerCase();
+      if (input.value !== value) input.value = value;
+      if (!paintRules(value)) { show(box, "", ""); return; }
+    }
+    if (!value) { show(box, "", ""); return; }
+    clearTimeout(timers[field]);
+    timers[field] = setTimeout(function () {
+      var n = (seq[field] = (seq[field] || 0) + 1);
+      show(box, "", T.checking);
+      var q = "?field=" + encodeURIComponent(field) + "&value=" + encodeURIComponent(value) +
+              "&company_name=" + encodeURIComponent(val("company_name")) +
+              "&owner_name=" + encodeURIComponent(val("owner_name"));
+      fetch(url + q, { headers: { "Accept": "application/json" }, credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (n !== seq[field]) return;  // a newer check is on its way
+          if (data.available === true) show(box, "is-ok", "✓ " + data.message);
+          else if (data.available === false) show(box, "is-bad", "✗ " + data.message);
+          else show(box, "is-hint", data.message);
+          if (data.suggestions && data.suggestions.length) {
+            var label = document.createElement("span");
+            label.textContent = T.tryThese;
+            box.appendChild(document.createTextNode(" "));
+            box.appendChild(label);
+            data.suggestions.forEach(function (s) {
+              var b = document.createElement("button");
+              b.type = "button"; b.className = "sugg"; b.textContent = s;
+              b.addEventListener("click", function () { input.value = s; check(input); input.focus(); });
+              box.appendChild(b);
+            });
+          }
+        })
+        .catch(function () { show(box, "", ""); });
+    }, 450);
+  }
+  form.querySelectorAll("[data-check]").forEach(function (input) {
+    input.addEventListener("input", function () { check(input); });
+    input.addEventListener("blur", function () { check(input); });
+    if (input.value) check(input);
+  });
+
+  // ---- password strength meter ------------------------------------------------
+  var pw = form.querySelector("[data-strength]");
+  var meter = document.getElementById("pw-meter");
+  var label = document.getElementById("pw-label");
+  function score(p) {
+    if (!p) return 0;
+    if (p.length < 8) return 1;
+    var s = 1;
+    var kinds = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^A-Za-z0-9]/].filter(function (re) { return re.test(p); }).length;
+    if (kinds >= 2) s++;
+    if (kinds >= 3 || p.length >= 12) s++;
+    if (kinds >= 3 && p.length >= 12) s++;
+    if (/^\d+$/.test(p) || /(.)\1{3,}/.test(p) || /^(password|12345678|qwerty)/i.test(p)) s = 1;
+    return Math.min(s, 4);
+  }
+  if (pw) pw.addEventListener("input", function () {
+    var s = score(pw.value);
+    meter.setAttribute("data-score", s);
+    label.textContent = !pw.value ? "" : pw.value.length < 8 ? T.tooShort : [T.weak, T.weak, T.fair, T.good, T.strong][s];
+  });
+})();
+</script>
+{% endblock %}

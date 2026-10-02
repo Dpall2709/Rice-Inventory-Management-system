@@ -1,20 +1,21 @@
 {% extends 'core/base.html' %}
+{% load i18n %}
 {% block nav_kind %}form{% endblock %}
 {% block back_url %}{% url 'product_list' %}{% endblock %}
 {% block content_class %}page-narrow{% endblock %}
-{% block page_title %}Add Product{% endblock %}
+{% block page_title %}{% translate "Add Product" %}{% endblock %}
 
 {% block content %}
 <div class="panel">
 
   <div class="list-header">
     <div>
-      <h2 class="list-title">Add Product</h2>
-      <p class="muted">Enter rice product details</p>
+      <h2 class="list-title">{% translate "Add Product" %}</h2>
+      <p class="muted">{% translate "Enter rice product details" %}</p>
     </div>
 
     <div class="list-actions">
-      <a href="{% url 'product_list' %}" class="btn btn-outline">📋 Product List</a>
+      <a href="{% url 'product_list' %}" class="btn btn-outline">📋 {% translate "Product List" %}</a>
     </div>
   </div>
 
@@ -23,32 +24,33 @@
 
     <div class="form-grid">
       <div class="form-group">
-        <label>Rice Name *</label>
-        <input type="text" name="rice_name" placeholder="e.g., IR-64" required>
+        <label>{% translate "Rice Name" %} *</label>
+        <input type="text" name="rice_name" placeholder="{% translate 'e.g., IR-64' %}" required>
       </div>
 
       <div class="form-group">
-        <label>HSN Code</label>
-        <input type="text" name="hsn_code" placeholder="e.g., 1006">
+        <label>{% translate "HSN Code" %}</label>
+        <input type="text" name="hsn_code" placeholder="{% translate 'e.g., 1006' %}">
       </div>
 
       <div class="form-group">
-        <label>GST %</label>
+        <label>{% translate "GST %" %}</label>
         <input type="number" step="0.01" name="gst_percent" value="0">
       </div>
 
       <div class="form-group" style="display:flex; align-items:center; gap:10px; margin-top:24px;">
         <input type="checkbox" name="is_active" checked>
-        <label style="margin:0; font-weight:700; color:var(--text);">Active</label>
+        <label style="margin:0; font-weight:700; color:var(--text);">{% translate "Active" %}</label>
       </div>
     </div>
 
     <div class="form-actions">
+      {% translate "Saving..." as saving_text %}
       <button type="submit" class="btn btn-primary"
-        onclick="this.disabled=true; this.innerText='Saving...'; this.form.submit();">
-        Save Product
+        onclick="this.disabled=true; this.innerText='{{ saving_text|escapejs }}'; this.form.submit();">
+        {% translate "Save Product" %}
       </button>
-      <a href="{% url 'product_list' %}" class="btn btn-outline">Cancel</a>
+      <a href="{% url 'product_list' %}" class="btn btn-outline">{% translate "Cancel" %}</a>
     </div>
 
   </form>

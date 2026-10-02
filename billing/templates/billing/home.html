@@ -1,52 +1,55 @@
 {% extends "core/base.html" %}
-{% block page_title %}Subscription & Billing{% endblock %}
+{% load i18n %}
+{% block page_title %}{% translate "Subscription & Billing" %}{% endblock %}
 
 {% block content %}
 
 <div class="card">
   <div class="list-header">
-    <div class="list-title">Your subscription</div>
+    <div class="list-title">{% translate "Your subscription" %}</div>
     {% if subscription.is_expired %}
-      <span class="badge badge-red">Expired</span>
+      <span class="badge badge-red">{% translate "Expired" %}</span>
     {% elif subscription.in_trial %}
-      <span class="badge badge-orange">Free trial</span>
+      <span class="badge badge-orange">{% translate "Free trial" %}</span>
     {% else %}
-      <span class="badge badge-green">Active</span>
+      <span class="badge badge-green">{% translate "Active" %}</span>
     {% endif %}
   </div>
 
   <div class="info-grid">
     <div class="info-card">
-      <div class="info-label">Plan</div>
-      <div class="info-value">{{ subscription.plan.name|default:"Free trial" }}</div>
+      <div class="info-label">{% translate "Plan" %}</div>
+      <div class="info-value">{% translate "Free trial" as free_trial %}{{ subscription.plan.name|default:free_trial }}</div>
     </div>
     <div class="info-card">
-      <div class="info-label">Valid until</div>
+      <div class="info-label">{% translate "Valid until" %}</div>
       <div class="info-value">{{ subscription.end_date|date:"d M Y" }}</div>
     </div>
     <div class="info-card">
-      <div class="info-label">Days left</div>
+      <div class="info-label">{% translate "Days left" %}</div>
       <div class="info-value" style="color:{% if subscription.days_left < 4 %}#dc2626{% else %}#16a34a{% endif %};">
         {{ subscription.days_left }}
       </div>
     </div>
     <div class="info-card">
-      <div class="info-label">Status</div>
+      <div class="info-label">{% translate "Status" %}</div>
       <div class="info-value">{{ subscription.get_status_display }}</div>
     </div>
   </div>
 
   {% if subscription.is_expired %}
     <p class="muted">
+      {% blocktranslate trimmed %}
       Your account is in <strong>read-only mode</strong>. All your data is safe and you can
       still open every report — but nothing new can be saved until you renew.
+      {% endblocktranslate %}
     </p>
   {% endif %}
 </div>
 
 <div class="card">
   <div class="list-header">
-    <div class="list-title">Choose a plan</div>
+    <div class="list-title">{% translate "Choose a plan" %}</div>
   </div>
 
   <div class="cards">
@@ -54,8 +57,8 @@
       <div class="card {% if plan == subscription.plan %}card-warn{% endif %}">
         <div class="card-label">{{ plan.name }}</div>
         <div class="card-value">₹ {{ plan.price }}</div>
-        <p class="muted">{{ plan.duration_days }} days
-          {% if plan.max_users %}· up to {{ plan.max_users }} users{% else %}· unlimited users{% endif %}
+        <p class="muted">{% blocktranslate count days=plan.duration_days %}{{ days }} day{% plural %}{{ days }} days{% endblocktranslate %}
+          {% if plan.max_users %}· {% blocktranslate count users=plan.max_users %}up to {{ users }} user{% plural %}up to {{ users }} users{% endblocktranslate %}{% else %}· {% translate "unlimited users" %}{% endif %}
         </p>
 
         <ul>
@@ -65,32 +68,34 @@
         </ul>
 
         <a class="btn btn-primary" href="{% url 'billing:checkout' plan.code %}">
-          {% if subscription.is_expired %}Renew{% else %}Choose{% endif %} — ₹{{ plan.price }}
+          {% if subscription.is_expired %}{% translate "Renew" %}{% else %}{% translate "Choose" %}{% endif %} — ₹{{ plan.price }}
         </a>
       </div>
     {% empty %}
-      <p class="muted">No plans have been created yet. Run <code>python manage.py seed_plans</code>.</p>
+      <p class="muted">{% blocktranslate %}No plans have been created yet. Run <code>python manage.py seed_plans</code>.{% endblocktranslate %}</p>
     {% endfor %}
   </div>
 
   {% if not razorpay_enabled %}
     <p class="muted">
+      {% blocktranslate trimmed %}
       Online payment is not switched on yet (no Razorpay keys configured), so a plan you choose
       will be recorded as a request and we activate it after your UPI or bank transfer.
+      {% endblocktranslate %}
     </p>
   {% endif %}
 </div>
 
 <div class="card">
   <div class="list-header">
-    <div class="list-title">Payment history</div>
+    <div class="list-title">{% translate "Payment history" %}</div>
   </div>
 
   <div class="table-wrap">
   <table class="table">
     <thead>
       <tr>
-        <th>Date</th><th>Plan</th><th>Amount</th><th>Method</th><th>Status</th><th>Reference</th>
+        <th>{% translate "Date" %}</th><th>{% translate "Plan" %}</th><th>{% translate "Amount" %}</th><th>{% translate "Method" %}</th><th>{% translate "Status" %}</th><th>{% translate "Reference" %}</th>
       </tr>
     </thead>
     <tbody>
@@ -102,17 +107,17 @@
           <td>{{ payment.get_gateway_display }}</td>
           <td>
             {% if payment.status == "paid" %}
-              <span class="badge badge-green">Paid</span>
+              <span class="badge badge-green">{% translate "Paid" %}</span>
             {% elif payment.status == "failed" %}
-              <span class="badge badge-red">Failed</span>
+              <span class="badge badge-red">{% translate "Failed" %}</span>
             {% else %}
-              <span class="badge badge-orange">Pending</span>
+              <span class="badge badge-orange">{% translate "Pending" %}</span>
             {% endif %}
           </td>
           <td>{{ payment.razorpay_payment_id|default:"—" }}</td>
         </tr>
       {% empty %}
-        <tr><td colspan="6" class="muted">No payments yet.</td></tr>
+        <tr><td colspan="6" class="muted">{% translate "No payments yet." %}</td></tr>
       {% endfor %}
     </tbody>
   </table>

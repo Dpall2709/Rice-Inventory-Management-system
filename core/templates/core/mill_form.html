@@ -1,24 +1,25 @@
 {% extends 'core/base.html' %}
+{% load i18n form_tags %}
 {% block nav_kind %}form{% endblock %}
 {% block back_url %}{% url 'mill_list' %}{% endblock %}
 {% block content_class %}page-narrow{% endblock %}
-{% block page_title %}{% if mode == 'edit' %}Edit supplier{% else %}Add supplier{% endif %}{% endblock %}
-{% block browser_title %}{% if mode == 'edit' %}Edit {{ mill.mill_name }}{% else %}Add supplier{% endif %}{% endblock %}
+{% block page_title %}{% if mode == 'edit' %}{% translate "Edit supplier" %}{% else %}{% translate "Add supplier" %}{% endif %}{% endblock %}
+{% block browser_title %}{% if mode == 'edit' %}{% blocktranslate with name=mill.mill_name %}Edit {{ name }}{% endblocktranslate %}{% else %}{% translate "Add supplier" %}{% endif %}{% endblock %}
 
 {% block content %}
 
 <div class="page-head">
   <div>
     <div class="crumbs">
-      <a href="{% url 'dashboard' %}">Dashboard</a> ›
-      <a href="{% url 'mill_list' %}">Mills / Suppliers</a> ›
-      <span>{% if mode == 'edit' %}{{ mill.mill_name }}{% else %}New{% endif %}</span>
+      <a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> ›
+      <a href="{% url 'mill_list' %}">{% translate "Mills / Suppliers" %}</a> ›
+      <span>{% if mode == 'edit' %}{{ mill.mill_name }}{% else %}{% translate "New" %}{% endif %}</span>
     </div>
-    <h1>{% if mode == 'edit' %}Edit “{{ mill.mill_name }}”{% else %}Add a supplier{% endif %}</h1>
-    <p class="muted">Mills you buy rice from. Only the name and mobile number are required.</p>
+    <h1>{% if mode == 'edit' %}{% blocktranslate with name=mill.mill_name %}Edit “{{ name }}”{% endblocktranslate %}{% else %}{% translate "Add a supplier" %}{% endif %}</h1>
+    <p class="muted">{% translate "Mills you buy rice from. Only the name and mobile number are required." %}</p>
   </div>
   <div class="page-actions">
-    <a class="btn btn-outline" href="{% url 'mill_list' %}">📋 All suppliers</a>
+    <a class="btn btn-outline" href="{% url 'mill_list' %}">📋 {% translate "All suppliers" %}</a>
   </div>
 </div>
 
@@ -29,7 +30,7 @@
 <form method="POST" class="card card-narrow" novalidate>
   {% csrf_token %}
 
-  <div class="form-section-title">Identity</div>
+  <div class="form-section-title">{% translate "Identity" %}</div>
   <div class="form-grid">
     {% for field in form %}
       {% if field.name == 'mill_name' or field.name == 'owner_name' %}
@@ -45,10 +46,10 @@
     {% endfor %}
   </div>
 
-  <div class="form-section-title">Contact</div>
+  <div class="form-section-title">{% translate "Contact" %}</div>
   <div class="form-grid">
     {% for field in form %}
-      {% if field.name in 'mobile,address,city,state' %}
+      {% if field.name|one_of:"mobile,address,city,state" %}
         <div class="field {% if field.errors %}has-error{% endif %} {% if field.name == 'address' %}field-full{% endif %}">
           <label for="{{ field.id_for_label }}">
             {{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}
@@ -61,10 +62,10 @@
     {% endfor %}
   </div>
 
-  <div class="form-section-title">Tax &amp; balance</div>
+  <div class="form-section-title">{% translate "Tax &amp; balance" %}</div>
   <div class="form-grid">
     {% for field in form %}
-      {% if field.name in 'gst_number,opening_balance,notes' %}
+      {% if field.name|one_of:"gst_number,opening_balance,notes" %}
         <div class="field {% if field.errors %}has-error{% endif %} {% if field.name == 'notes' %}field-full{% endif %}">
           <label for="{{ field.id_for_label }}">{{ field.label }}</label>
           {{ field }}
@@ -77,15 +78,15 @@
 
   <div class="form-actions">
     <button class="btn btn-primary" type="submit">
-      {% if mode == 'edit' %}💾 Save changes{% else %}💾 Save supplier{% endif %}
+      {% if mode == 'edit' %}💾 {% translate "Save changes" %}{% else %}💾 {% translate "Save supplier" %}{% endif %}
     </button>
     {% if mode == 'add' %}
-      <button class="btn btn-outline" type="submit" name="save_and_new" value="1">➕ Save &amp; add another</button>
+      <button class="btn btn-outline" type="submit" name="save_and_new" value="1">➕ {% translate "Save &amp; add another" %}</button>
     {% endif %}
-    <a class="btn btn-ghost" href="{% if mode == 'edit' %}{% url 'mill_report_detail' mill.id %}{% else %}{% url 'mill_list' %}{% endif %}">Cancel</a>
+    <a class="btn btn-ghost" href="{% if mode == 'edit' %}{% url 'mill_report_detail' mill.id %}{% else %}{% url 'mill_list' %}{% endif %}">{% translate "Cancel" %}</a>
 
     {% if mode == 'edit' and mill.is_active %}
-      <a class="btn btn-ghost text-danger" style="margin-left:auto;" href="{% url 'delete_mill' mill.id %}">🚫 Deactivate</a>
+      <a class="btn btn-ghost text-danger" style="margin-left:auto;" href="{% url 'delete_mill' mill.id %}">🚫 {% translate "Deactivate" %}</a>
     {% endif %}
   </div>
 </form>

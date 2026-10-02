@@ -1,60 +1,105 @@
 {% extends 'core/base.html' %}
-{% block page_title %}Brokers{% endblock %}
+{% load i18n %}
+{% block page_title %}{% translate "Brokers" %}{% endblock %}
 
 {% block content %}
-<div class="panel">
 
-  <div class="list-header">
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> › <span>{% translate "Brokers" %}</span></div>
+    <h1>{% translate "Brokers" %}</h1>
+    <p class="muted">{% translate "People who bring you buyers. The invoice goes to the customer; the broker earns a commission you owe him." %}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-primary" href="{% url 'add_broker' %}">➕ {% translate "Add broker" %}</a>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-icon">🤝</div>
     <div>
-      <h2 class="list-title">Brokers</h2>
-      <p class="muted">All brokers you sell through</p>
-    </div>
-
-    <div class="list-actions">
-      <form method="GET" class="search-box">
-        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search broker...">
-        <button type="submit" class="btn btn-outline">Search</button>
-      </form>
-
-      <a href="{% url 'add_broker' %}" class="btn btn-primary">➕ Add Broker</a>
+      <div class="stat-label">{% translate "Brokers" %}</div>
+      <div class="stat-value">{{ brokers|length }}</div>
     </div>
   </div>
+  <div class="stat {% if total_owes_us > 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">💰</div>
+    <div>
+      <div class="stat-label">{% translate "Brokers owe you" %}</div>
+      <div class="stat-value inr" data-value="{{ total_owes_us }}">₹ {{ total_owes_us }}</div>
+    </div>
+  </div>
+  <div class="stat {% if total_owed > 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">⏳</div>
+    <div>
+      <div class="stat-label">{% translate "Commission you owe" %}</div>
+      <div class="stat-value inr" data-value="{{ total_owed }}">₹ {{ total_owed }}</div>
+    </div>
+  </div>
+</div>
 
+<div class="card">
+  <form class="toolbar" method="GET" data-no-loading>
+    <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Name, mobile or city…' %}">
+    <select class="select" name="show">
+      <option value="active" {% if show == 'active' %}selected{% endif %}>{% translate "Active" %}</option>
+      <option value="inactive" {% if show == 'inactive' %}selected{% endif %}>{% translate "Inactive" %} ({{ inactive_count }})</option>
+      <option value="all" {% if show == 'all' %}selected{% endif %}>{% translate "All" %}</option>
+    </select>
+    <button class="btn btn-outline" type="submit">{% translate "Filter" %}</button>
+  </form>
+
+  {% if brokers %}
   <div class="table-wrap">
-    <table class="table">
+    <table class="table table-cards">
       <thead>
         <tr>
-          <th>#</th>
-          <th>Broker Name</th>
-          <th>Mobile</th>
-          <th>GST</th>
-          <th class="right">Opening Balance</th>
-          <th>Report</th>
+          <th>{% translate "Broker" %}</th><th>{% translate "Mobile" %}</th><th>{% translate "Usual commission" %}</th>
+          <th class="right">{% translate "Sales" %}</th><th class="right">{% translate "Bags" %}</th>
+          <th class="right">{% translate "He owes you" %}</th>
+          <th class="right">{% translate "Commission owed" %}</th><th class="right">{% translate "Actions" %}</th>
         </tr>
       </thead>
-
       <tbody>
-        {% for b in brokers %}
+        {% for broker in brokers %}
         <tr>
-          <td>{{ forloop.counter }}</td>
-          <td><b>{{ b.broker_name }}</b></td>
-          <td>{{ b.mobile|default:"-" }}</td>
-          <td>{{ b.gst_number|default:"-" }}</td>
-          <td class="right">₹ {{ b.opening_balance }}</td>
-          <td>
-            <a href="{% url 'broker_report_detail' b.id %}" class="btn btn-outline" style="padding:6px 10px;">
-              📒 View Report
-            </a>
+          <td data-label="{% translate 'Broker' %}">
+            <a class="row-title" href="{% url 'broker_report_detail' broker.id %}">{{ broker.broker_name }}</a>
+            {% if not broker.is_active %}<span class="badge badge-muted">{% translate "Inactive" %}</span>{% endif %}
+            {% if broker.city %}<div class="row-sub">{{ broker.city }}</div>{% endif %}
           </td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="6" style="text-align:center; padding:20px;">No brokers found.</td>
+          <td data-label="{% translate 'Mobile' %}">{{ broker.mobile|default:"—" }}</td>
+          <td data-label="{% translate 'Usual commission' %}">{% if broker.commission_rate %}{{ broker.commission_rate }} · {{ broker.get_commission_type_display }}{% else %}—{% endif %}</td>
+          <td data-label="{% translate 'Sales' %}" class="right">{{ broker.sale_count }}</td>
+          <td data-label="{% translate 'Bags' %}" class="right">{{ broker.total_bags }}</td>
+          <td data-label="{% translate 'He owes you' %}" class="right">
+            {% if broker.owes_us > 0 %}<span class="bold text-danger inr" data-value="{{ broker.owes_us }}">₹ {{ broker.owes_us }}</span>{% else %}—{% endif %}
+          </td>
+          <td data-label="{% translate 'Commission owed' %}" class="right">
+            {% if broker.owed > 0 %}<span class="bold text-danger inr" data-value="{{ broker.owed }}">₹ {{ broker.owed }}</span>
+            {% else %}<span class="badge badge-green">{% translate "Settled" %}</span>{% endif %}
+          </td>
+          <td data-label="{% translate 'Actions' %}">
+            <div class="actions">
+              <a class="btn btn-outline btn-sm" href="{% url 'broker_report_detail' broker.id %}">{% translate "View" %}</a>
+              {% if broker.owed > 0 %}<a class="btn btn-ghost btn-sm" href="{% url 'add_broker_payment' broker.id %}" title="{% translate 'Pay commission' %}">💳</a>{% endif %}
+              <a class="btn btn-ghost btn-sm" href="{% url 'edit_broker' broker.id %}" title="{% translate 'Edit' %}">✏️</a>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">🤝</div>
+    <div class="empty-title">{% if q %}{% translate "No broker matches this search" %}{% else %}{% translate "No brokers yet" %}{% endif %}</div>
+    <p>{% translate "Add a broker to track the sales he brings and the commission you owe him." %}</p>
+    <a class="btn btn-primary" href="{% url 'add_broker' %}">➕ {% translate "Add broker" %}</a>
+  </div>
+  {% endif %}
 </div>
+
 {% endblock %}

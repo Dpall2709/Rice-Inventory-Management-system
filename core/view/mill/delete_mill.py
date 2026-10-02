@@ -9,6 +9,8 @@ dropdowns, but every record stays.
 A mill with no records at all (added by mistake) can be deleted properly.
 """
 
+from django.utils.translation import gettext as _
+
 from core.models import Mill
 from core.permissions import manager_required
 from core.tenancy import tenant_object_or_404
@@ -34,23 +36,27 @@ def delete_mill(request, mill_id):
             if not can_delete:
                 messages.error(
                     request,
-                    f"“{mill.mill_name}” cannot be deleted because it has "
-                    f"{purchase_count} purchase(s) and {payment_count} payment(s). "
-                    "Deactivate it instead - the history stays safe.",
+                    _(
+                        "“%(mill)s” cannot be deleted because it has "
+                        "%(purchases)s purchase(s) and %(payments)s payment(s). "
+                        "Deactivate it instead - the history stays safe."
+                    ) % {"mill": mill.mill_name, "purchases": purchase_count, "payments": payment_count},
                 )
                 return redirect("delete_mill", mill_id=mill.id)
 
             name = mill.mill_name
             mill.delete()
-            messages.success(request, f"Supplier “{name}” deleted.")
+            messages.success(request, _("Supplier “%(mill)s” deleted.") % {"mill": name})
             return redirect("mill_list")
 
         mill.is_active = False
         mill.save(update_fields=["is_active", "updated_at"])
         messages.success(
             request,
-            f"“{mill.mill_name}” deactivated. It is hidden from new entries; "
-            "its history is unchanged.",
+            _(
+                "“%(mill)s” deactivated. It is hidden from new entries; "
+                "its history is unchanged."
+            ) % {"mill": mill.mill_name},
         )
         return redirect("mill_list")
 
@@ -72,6 +78,6 @@ def restore_mill(request, mill_id):
     if request.method == "POST":
         mill.is_active = True
         mill.save(update_fields=["is_active", "updated_at"])
-        messages.success(request, f"“{mill.mill_name}” is active again.")
+        messages.success(request, _("“%(mill)s” is active again.") % {"mill": mill.mill_name})
 
     return redirect("mill_list")

@@ -1,28 +1,30 @@
 {% extends 'core/base.html' %}
+{% load i18n %}
 {% block back_url %}{% url 'purchase_list' %}{% endblock %}
-{% block page_title %}Purchase {{ purchase.purchase_ref|default:purchase.invoice_no }}{% endblock %}
+{% block page_title %}{% blocktranslate with ref=purchase.purchase_ref|default:purchase.invoice_no %}Purchase {{ ref }}{% endblocktranslate %}{% endblock %}
 
 {% block content %}
 
 <div class="page-head">
   <div>
     <div class="crumbs">
-      <a href="{% url 'dashboard' %}">Dashboard</a> ›
-      <a href="{% url 'purchase_list' %}">Purchases</a> ›
+      <a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> ›
+      <a href="{% url 'purchase_list' %}">{% translate "Purchases" %}</a> ›
       <span>{{ purchase.purchase_ref|default:purchase.invoice_no }}</span>
     </div>
-    <h1>Bill {{ purchase.invoice_no }}</h1>
+    <h1>{% blocktranslate with invoice_no=purchase.invoice_no %}Bill {{ invoice_no }}{% endblocktranslate %}</h1>
     <p class="muted">
-      From <a href="{% url 'mill_report_detail' purchase.mill.id %}">{{ purchase.mill.mill_name }}</a>
+      {% translate "From" %} <a href="{% url 'mill_report_detail' purchase.mill.id %}">{{ purchase.mill.mill_name }}</a>
       · {{ purchase.purchase_date|date:"d M Y" }}
-      {% if purchase.purchase_ref %} · our ref <strong>{{ purchase.purchase_ref }}</strong>{% endif %}
+      {% if purchase.purchase_ref %} · {% translate "our ref" %} <strong>{{ purchase.purchase_ref }}</strong>{% endif %}
       · {{ purchase.get_tax_type_display }}
     </p>
   </div>
   <div class="page-actions">
-    <a class="btn btn-outline" href="{% url 'edit_purchase' purchase.id %}">✏️ Edit</a>
+    {% if purchase.bill_file %}<a class="btn btn-outline" href="{% url 'purchase_bill_file' purchase.id %}" target="_blank" rel="noopener">📎 {% translate "Original bill" %}</a>{% endif %}
+    <a class="btn btn-outline" href="{% url 'edit_purchase' purchase.id %}">✏️ {% translate "Edit" %}</a>
     {% if due > 0 %}
-      <a class="btn btn-primary" href="{% url 'add_purchase_payment' purchase.id %}">💳 Pay <span class="inr" data-value="{{ due }}">₹ {{ due }}</span></a>
+      <a class="btn btn-primary" href="{% url 'add_purchase_payment' purchase.id %}">💳 {% translate "Pay" %} <span class="inr" data-value="{{ due }}">₹ {{ due }}</span></a>
     {% endif %}
     <a class="btn btn-ghost" href="{% url 'delete_purchase' purchase.id %}">🗑</a>
   </div>
@@ -32,33 +34,33 @@
   <div class="stat">
     <div class="stat-icon">📦</div>
     <div>
-      <div class="stat-label">Bags</div>
+      <div class="stat-label">{% translate "Bags" %}</div>
       <div class="stat-value">{{ purchase.total_bags }}</div>
-      <div class="stat-hint">{{ purchase.total_kg }} kg</div>
+      <div class="stat-hint">{{ purchase.total_kg }} {% translate "kg" %}</div>
     </div>
   </div>
   <div class="stat">
     <div class="stat-icon">🧾</div>
     <div>
-      <div class="stat-label">Bill total</div>
+      <div class="stat-label">{% translate "Bill total" %}</div>
       <div class="stat-value inr" data-value="{{ purchase.total_amount }}">₹ {{ purchase.total_amount }}</div>
-      <div class="stat-hint">incl. GST ₹ <span class="inr-abs" data-value="{{ purchase.gst_amount }}">{{ purchase.gst_amount }}</span></div>
+      <div class="stat-hint">{% translate "incl. GST" %} ₹ <span class="inr-abs" data-value="{{ purchase.gst_amount }}">{{ purchase.gst_amount }}</span></div>
     </div>
   </div>
   <div class="stat is-success">
     <div class="stat-icon">✅</div>
     <div>
-      <div class="stat-label">Paid</div>
+      <div class="stat-label">{% translate "Paid" %}</div>
       <div class="stat-value inr" data-value="{{ paid }}">₹ {{ paid }}</div>
       {% if applied_from_account %}
-        <div class="stat-hint">₹ <span class="inr-abs" data-value="{{ entered_against_bill }}">{{ entered_against_bill }}</span> direct + ₹ <span class="inr-abs" data-value="{{ applied_from_account }}">{{ applied_from_account }}</span> applied from other payments</div>
+        <div class="stat-hint">₹ <span class="inr-abs" data-value="{{ entered_against_bill }}">{{ entered_against_bill }}</span> {% translate "direct" %} + ₹ <span class="inr-abs" data-value="{{ applied_from_account }}">{{ applied_from_account }}</span> {% translate "applied from other payments" %}</div>
       {% endif %}
     </div>
   </div>
   <div class="stat {% if due > 0 %}is-danger{% else %}is-success{% endif %}">
     <div class="stat-icon">⏳</div>
     <div>
-      <div class="stat-label">Due to mill</div>
+      <div class="stat-label">{% translate "Due to mill" %}</div>
       <div class="stat-value inr" data-value="{{ due }}">₹ {{ due }}</div>
     </div>
   </div>
@@ -66,36 +68,36 @@
 
 <div class="card">
   <div class="list-header">
-    <div class="list-title">Rice on this bill</div>
-    <span class="muted">These lines are what added stock</span>
+    <div class="list-title">{% translate "Rice on this bill" %}</div>
+    <span class="muted">{% translate "These lines are what added stock" %}</span>
   </div>
 
   <div class="table-wrap">
     <table class="table table-cards">
       <thead>
         <tr>
-          <th>Rice</th><th>HSN</th><th class="right">Bag wt</th><th class="right">Bags</th>
-          <th class="right">Quantity</th><th class="right">Rate/kg</th>
-          <th class="right">Taxable</th><th class="right">GST</th><th class="right">Line total</th>
+          <th>{% translate "Rice" %}</th><th>{% translate "HSN" %}</th><th class="right">{% translate "Bag wt" %}</th><th class="right">{% translate "Bags" %}</th>
+          <th class="right">{% translate "Quantity" %}</th><th class="right">{% translate "Rate/kg" %}</th>
+          <th class="right">{% translate "Taxable" %}</th><th class="right">{% translate "GST" %}</th><th class="right">{% translate "Line total" %}</th>
         </tr>
       </thead>
       <tbody>
         {% for item in items %}
         <tr>
-          <td data-label="Rice" class="row-title">{{ item.product.rice_name }}</td>
-          <td data-label="HSN"><span class="muted">{{ item.product.hsn_code|default:"—" }}</span></td>
-          <td data-label="Bag wt" class="right">{{ item.bag_weight }} kg</td>
-          <td data-label="Bags" class="right">{{ item.bag_count }}</td>
-          <td data-label="Quantity" class="right">{{ item.total_kg }} kg</td>
-          <td data-label="Rate/kg" class="right">₹ {{ item.purchase_price }}</td>
-          <td data-label="Taxable" class="right inr" data-value="{{ item.taxable_amount }}">₹ {{ item.taxable_amount }}</td>
-          <td data-label="GST" class="right">
+          <td data-label="{% translate 'Rice' %}" class="row-title">{{ item.product.rice_name }}</td>
+          <td data-label="{% translate 'HSN' %}"><span class="muted">{{ item.product.hsn_code|default:"—" }}</span></td>
+          <td data-label="{% translate 'Bag wt' %}" class="right">{{ item.bag_weight }} {% translate "kg" %}</td>
+          <td data-label="{% translate 'Bags' %}" class="right">{{ item.bag_count }}</td>
+          <td data-label="{% translate 'Quantity' %}" class="right">{{ item.total_kg }} {% translate "kg" %}</td>
+          <td data-label="{% translate 'Rate/kg' %}" class="right">₹ {{ item.purchase_price }}</td>
+          <td data-label="{% translate 'Taxable' %}" class="right inr" data-value="{{ item.taxable_amount }}">₹ {{ item.taxable_amount }}</td>
+          <td data-label="{% translate 'GST' %}" class="right">
             {% if item.gst_percent %}
               <span class="chip">{{ item.gst_percent }}%</span>
               <span class="inr" data-value="{{ item.gst_amount }}">₹ {{ item.gst_amount }}</span>
             {% else %}—{% endif %}
           </td>
-          <td data-label="Line total" class="right bold inr" data-value="{{ item.line_total }}">₹ {{ item.line_total }}</td>
+          <td data-label="{% translate 'Line total' %}" class="right bold inr" data-value="{{ item.line_total }}">₹ {{ item.line_total }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -104,38 +106,38 @@
 
   <div class="bill-summary">
     <dl class="kv summary">
-      <dt>Goods value</dt><dd class="num inr" data-value="{{ purchase.goods_amount }}">₹ {{ purchase.goods_amount }}</dd>
+      <dt>{% translate "Goods value" %}</dt><dd class="num inr" data-value="{{ purchase.goods_amount }}">₹ {{ purchase.goods_amount }}</dd>
       {% if purchase.discount_amount %}
-        <dt>Discount</dt><dd class="num text-warning">− ₹ {{ purchase.discount_amount }}</dd>
+        <dt>{% translate "Discount" %}</dt><dd class="num text-warning">− ₹ {{ purchase.discount_amount }}</dd>
       {% endif %}
-      <dt>Taxable amount</dt><dd class="num bold inr" data-value="{{ purchase.taxable_amount }}">₹ {{ purchase.taxable_amount }}</dd>
+      <dt>{% translate "Taxable amount" %}</dt><dd class="num bold inr" data-value="{{ purchase.taxable_amount }}">₹ {{ purchase.taxable_amount }}</dd>
       {% if purchase.cgst_amount %}
-        <dt>CGST</dt><dd class="num inr" data-value="{{ purchase.cgst_amount }}">₹ {{ purchase.cgst_amount }}</dd>
-        <dt>SGST</dt><dd class="num inr" data-value="{{ purchase.sgst_amount }}">₹ {{ purchase.sgst_amount }}</dd>
+        <dt>{% translate "CGST" %}</dt><dd class="num inr" data-value="{{ purchase.cgst_amount }}">₹ {{ purchase.cgst_amount }}</dd>
+        <dt>{% translate "SGST" %}</dt><dd class="num inr" data-value="{{ purchase.sgst_amount }}">₹ {{ purchase.sgst_amount }}</dd>
       {% endif %}
       {% if purchase.igst_amount %}
-        <dt>IGST</dt><dd class="num inr" data-value="{{ purchase.igst_amount }}">₹ {{ purchase.igst_amount }}</dd>
+        <dt>{% translate "IGST" %}</dt><dd class="num inr" data-value="{{ purchase.igst_amount }}">₹ {{ purchase.igst_amount }}</dd>
       {% endif %}
       {% if purchase.freight_charge %}
-        <dt>Freight</dt><dd class="num">+ ₹ {{ purchase.freight_charge }}</dd>
+        <dt>{% translate "Freight" %}</dt><dd class="num">+ ₹ {{ purchase.freight_charge }}</dd>
       {% endif %}
       {% if purchase.labour_charge %}
-        <dt>Labour</dt><dd class="num">+ ₹ {{ purchase.labour_charge }}</dd>
+        <dt>{% translate "Labour" %}</dt><dd class="num">+ ₹ {{ purchase.labour_charge }}</dd>
       {% endif %}
       {% if purchase.round_off %}
-        <dt>Round off</dt><dd class="num">{{ purchase.round_off }}</dd>
+        <dt>{% translate "Round off" %}</dt><dd class="num">{{ purchase.round_off }}</dd>
       {% endif %}
     </dl>
 
     <div class="grand-total">
-      <span>Bill total</span>
+      <span>{% translate "Bill total" %}</span>
       <span class="num inr" data-value="{{ purchase.total_amount }}">₹ {{ purchase.total_amount }}</span>
     </div>
   </div>
 
   {% if purchase.notes %}
     <div class="divider"></div>
-    <p class="muted"><strong>Note:</strong> {{ purchase.notes }}</p>
+    <p class="muted"><strong>{% translate "Note:" %}</strong> {{ purchase.notes }}</p>
   {% endif %}
 </div>
 
@@ -143,87 +145,87 @@
 <div class="card">
   <div class="list-header">
     <div>
-      <div class="list-title">Real cost &amp; selling price</div>
-      <p class="muted">The bill rate is not your cost. Transport and labour are part of it.</p>
+      <div class="list-title">{% translate "Real cost &amp; selling price" %}</div>
+      <p class="muted">{% translate "The bill rate is not your cost. Transport and labour are part of it." %}</p>
     </div>
     <form method="GET" class="margin-form">
-      <label for="marginBox">Margin %</label>
+      <label for="marginBox">{% translate "Margin %" %}</label>
       <input class="input" id="marginBox" type="number" name="margin" step="0.5" min="0" max="100"
              value="{{ costing.margin_percent }}" style="width:90px;">
-      <button class="btn btn-outline btn-sm" type="submit">Apply</button>
+      <button class="btn btn-outline btn-sm" type="submit">{% translate "Apply" %}</button>
     </form>
   </div>
 
   <div class="cost-grid">
     <div class="cost-card">
-      <div class="cost-label">Goods on the bill</div>
+      <div class="cost-label">{% translate "Goods on the bill" %}</div>
       <div class="cost-value inr" data-value="{{ costing.goods }}">₹ {{ costing.goods }}</div>
-      <div class="muted">₹ {{ costing.bill_rate_per_kg }} / kg</div>
+      <div class="muted">₹ {{ costing.bill_rate_per_kg }} / {% translate "kg" %}</div>
     </div>
     <div class="cost-card">
-      <div class="cost-label">Mill's charges</div>
+      <div class="cost-label">{% translate "Mill's charges" %}</div>
       <div class="cost-value inr" data-value="{{ costing.mill_charges }}">₹ {{ costing.mill_charges }}</div>
-      <div class="muted">owed to the mill</div>
+      <div class="muted">{% translate "owed to the mill" %}</div>
     </div>
     <div class="cost-card">
-      <div class="cost-label">Your own expenses</div>
+      <div class="cost-label">{% translate "Your own expenses" %}</div>
       <div class="cost-value inr" data-value="{{ costing.own_expenses }}">₹ {{ costing.own_expenses }}</div>
-      <div class="muted">paid by you, not the mill</div>
+      <div class="muted">{% translate "paid by you, not the mill" %}</div>
     </div>
     <div class="cost-card is-cost">
-      <div class="cost-label">Landed cost</div>
+      <div class="cost-label">{% translate "Landed cost" %}</div>
       <div class="cost-value inr" data-value="{{ costing.landed_cost }}">₹ {{ costing.landed_cost }}</div>
-      <div class="muted">{{ costing.total_kg }} kg</div>
+      <div class="muted">{{ costing.total_kg }} {% translate "kg" %}</div>
     </div>
   </div>
 
   <div class="headline-row">
     <div class="headline is-cost">
-      <div class="headline-label">Costs you</div>
-      <div class="headline-value">₹ {{ costing.cost_per_kg }}<span>/kg</span></div>
-      <div class="headline-hint">bill ₹ {{ costing.bill_rate_per_kg }} + ₹ {{ costing.extra_per_kg }} expenses</div>
+      <div class="headline-label">{% translate "Costs you" %}</div>
+      <div class="headline-value">₹ {{ costing.cost_per_kg }}<span>/{% translate "kg" %}</span></div>
+      <div class="headline-hint">{% translate "bill" %} ₹ {{ costing.bill_rate_per_kg }} + ₹ {{ costing.extra_per_kg }} {% translate "expenses" %}</div>
     </div>
     <div class="headline is-sell">
-      <div class="headline-label">Sell at least at ({{ costing.margin_percent }}% margin)</div>
-      <div class="headline-value">₹ {{ costing.suggested_per_kg }}<span>/kg</span></div>
-      <div class="headline-hint">₹ {{ costing.suggested_per_bag }} per {{ costing.average_bag_weight }} kg bag</div>
+      <div class="headline-label">{% blocktranslate with margin=costing.margin_percent %}Sell at least at ({{ margin }}% margin){% endblocktranslate %}</div>
+      <div class="headline-value">₹ {{ costing.suggested_per_kg }}<span>/{% translate "kg" %}</span></div>
+      <div class="headline-hint">₹ {{ costing.suggested_per_bag }} {% blocktranslate with weight=costing.average_bag_weight %}per {{ weight }} kg bag{% endblocktranslate %}</div>
     </div>
     <div class="headline is-profit">
-      <div class="headline-label">Profit if sold at that price</div>
+      <div class="headline-label">{% translate "Profit if sold at that price" %}</div>
       <div class="headline-value">₹ <span class="inr-abs" data-value="{{ costing.profit_on_this_bill }}">{{ costing.profit_on_this_bill }}</span></div>
-      <div class="headline-hint">₹ {{ costing.profit_per_kg }} per kg</div>
+      <div class="headline-hint">₹ {{ costing.profit_per_kg }} {% translate "per kg" %}</div>
     </div>
   </div>
 
   {% if costing.gst_excluded %}
     <p class="field-hint" style="margin-top:12px;">
-      GST of ₹ <span class="inr-abs" data-value="{{ costing.gst_excluded }}">{{ costing.gst_excluded }}</span> is left out of the cost — you claim it back as input credit.
+      {% translate "GST of" %} ₹ <span class="inr-abs" data-value="{{ costing.gst_excluded }}">{{ costing.gst_excluded }}</span> {% translate "is left out of the cost — you claim it back as input credit." %}
     </p>
   {% endif %}
 
   <div class="divider"></div>
 
-  <div class="list-title" style="margin-bottom:10px;">Per rice type</div>
+  <div class="list-title" style="margin-bottom:10px;">{% translate "Per rice type" %}</div>
   <div class="table-wrap">
     <table class="table table-cards">
       <thead>
         <tr>
-          <th>Rice</th><th class="right">Bags</th><th class="right">Kg</th>
-          <th class="right">Bill rate</th><th class="right">Share of expenses</th>
-          <th class="right">Cost / kg</th><th class="right">Sell at / kg</th><th class="right">Profit / bag</th>
+          <th>{% translate "Rice" %}</th><th class="right">{% translate "Bags" %}</th><th class="right">{% translate "Kg" %}</th>
+          <th class="right">{% translate "Bill rate" %}</th><th class="right">{% translate "Share of expenses" %}</th>
+          <th class="right">{% translate "Cost / kg" %}</th><th class="right">{% translate "Sell at / kg" %}</th><th class="right">{% translate "Profit / bag" %}</th>
         </tr>
       </thead>
       <tbody>
         {% for row in line_costs %}
         <tr>
-          <td data-label="Rice" class="row-title">{{ row.product.rice_name }}</td>
-          <td data-label="Bags" class="right">{{ row.bags }}</td>
-          <td data-label="Kg" class="right">{{ row.kg }}</td>
-          <td data-label="Bill rate" class="right">₹ {{ row.bill_rate_per_kg }}</td>
-          <td data-label="Share of expenses" class="right inr" data-value="{{ row.share_of_expenses }}">₹ {{ row.share_of_expenses }}</td>
-          <td data-label="Cost / kg" class="right bold text-warning">₹ {{ row.cost_per_kg }}</td>
-          <td data-label="Sell at / kg" class="right bold text-success">₹ {{ row.suggested_per_kg }}</td>
-          <td data-label="Profit / bag" class="right">₹ {{ row.profit_per_bag }}</td>
+          <td data-label="{% translate 'Rice' %}" class="row-title">{{ row.product.rice_name }}</td>
+          <td data-label="{% translate 'Bags' %}" class="right">{{ row.bags }}</td>
+          <td data-label="{% translate 'Kg' %}" class="right">{{ row.kg }}</td>
+          <td data-label="{% translate 'Bill rate' %}" class="right">₹ {{ row.bill_rate_per_kg }}</td>
+          <td data-label="{% translate 'Share of expenses' %}" class="right inr" data-value="{{ row.share_of_expenses }}">₹ {{ row.share_of_expenses }}</td>
+          <td data-label="{% translate 'Cost / kg' %}" class="right bold text-warning">₹ {{ row.cost_per_kg }}</td>
+          <td data-label="{% translate 'Sell at / kg' %}" class="right bold text-success">₹ {{ row.suggested_per_kg }}</td>
+          <td data-label="{% translate 'Profit / bag' %}" class="right">₹ {{ row.profit_per_bag }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -235,39 +237,39 @@
 <div class="card">
   <div class="list-header">
     <div>
-      <div class="list-title">Your expenses on this bill</div>
-      <p class="muted">Transport, labour, brokerage — money you paid to someone other than the mill.</p>
+      <div class="list-title">{% translate "Your expenses on this bill" %}</div>
+      <p class="muted">{% translate "Transport, labour, brokerage — money you paid to someone other than the mill." %}</p>
     </div>
   </div>
 
   {% if expenses %}
     <div class="table-wrap">
       <table class="table table-cards">
-        <thead><tr><th>Type</th><th>Paid to</th><th>Date</th><th>Note</th><th class="right">Amount</th><th></th></tr></thead>
+        <thead><tr><th>{% translate "Type" %}</th><th>{% translate "Paid to" %}</th><th>{% translate "Date" %}</th><th>{% translate "Note" %}</th><th class="right">{% translate "Amount" %}</th><th></th></tr></thead>
         <tbody>
           {% for expense in expenses %}
           <tr>
-            <td data-label="Type"><span class="chip">{{ expense.get_category_display }}</span></td>
-            <td data-label="Paid to">{{ expense.paid_to|default:"—" }}</td>
-            <td data-label="Date">{{ expense.expense_date|date:"d M Y" }}</td>
-            <td data-label="Note"><span class="muted">{{ expense.notes|default:"—" }}</span></td>
-            <td data-label="Amount" class="right bold inr" data-value="{{ expense.amount }}">₹ {{ expense.amount }}</td>
+            <td data-label="{% translate 'Type' %}"><span class="chip">{{ expense.get_category_display }}</span></td>
+            <td data-label="{% translate 'Paid to' %}">{{ expense.paid_to|default:"—" }}</td>
+            <td data-label="{% translate 'Date' %}">{{ expense.expense_date|date:"d M Y" }}</td>
+            <td data-label="{% translate 'Note' %}"><span class="muted">{{ expense.notes|default:"—" }}</span></td>
+            <td data-label="{% translate 'Amount' %}" class="right bold inr" data-value="{{ expense.amount }}">₹ {{ expense.amount }}</td>
             <td>
               <form method="POST" action="{% url 'delete_purchase_expense' purchase.id expense.id %}">
                 {% csrf_token %}
                 <button class="btn btn-ghost btn-sm" type="submit"
-                        data-confirm="This expense of ₹ {{ expense.amount }} will be removed from the bill."
-                        data-confirm-title="Remove this expense?">✖</button>
+                        data-confirm="{% translate 'This expense of' %} ₹ {{ expense.amount }} {% translate 'will be removed from the bill.' %}"
+                        data-confirm-title="{% translate 'Remove this expense?' %}">✖</button>
               </form>
             </td>
           </tr>
           {% endfor %}
         </tbody>
-        <tfoot><tr><td colspan="4">Total you spent</td><td class="right inr" data-value="{{ costing.own_expenses }}">₹ {{ costing.own_expenses }}</td><td></td></tr></tfoot>
+        <tfoot><tr><td colspan="4">{% translate "Total you spent" %}</td><td class="right inr" data-value="{{ costing.own_expenses }}">₹ {{ costing.own_expenses }}</td><td></td></tr></tfoot>
       </table>
     </div>
   {% else %}
-    <p class="muted">No expenses recorded yet for this bill.</p>
+    <p class="muted">{% translate "No expenses recorded yet for this bill." %}</p>
   {% endif %}
 
   <div class="divider"></div>
@@ -277,39 +279,39 @@
     <select class="select" name="category">
       {% for value, label in expense_categories %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
     </select>
-    <input class="input" type="number" name="amount" step="0.01" min="0" placeholder="Amount ₹" required>
-    <input class="input" type="text" name="paid_to" placeholder="Paid to (truck owner, labour…)">
+    <input class="input" type="number" name="amount" step="0.01" min="0" placeholder="{% translate 'Amount' %} ₹" required>
+    <input class="input" type="text" name="paid_to" placeholder="{% translate 'Paid to (truck owner, labour…)' %}">
     <input class="input" type="date" name="expense_date" value="{{ purchase.purchase_date|date:'Y-m-d' }}">
-    <input class="input" type="text" name="notes" placeholder="Note (optional)">
-    <button class="btn btn-primary" type="submit">➕ Add expense</button>
+    <input class="input" type="text" name="notes" placeholder="{% translate 'Note (optional)' %}">
+    <button class="btn btn-primary" type="submit">➕ {% translate "Add expense" %}</button>
   </form>
 </div>
 
 <div class="card">
   <div class="list-header">
-    <div class="list-title">Payments against this bill</div>
+    <div class="list-title">{% translate "Payments against this bill" %}</div>
     {% if due > 0 %}
-      <a class="btn btn-primary btn-sm" href="{% url 'add_purchase_payment' purchase.id %}">💳 Add payment</a>
+      <a class="btn btn-primary btn-sm" href="{% url 'add_purchase_payment' purchase.id %}">💳 {% translate "Add payment" %}</a>
     {% endif %}
   </div>
 
   {% if payments %}
     <div class="table-wrap">
       <table class="table table-cards">
-        <thead><tr><th>Date</th><th>Mode</th><th>Notes</th><th class="right">Amount</th></tr></thead>
+        <thead><tr><th>{% translate "Date" %}</th><th>{% translate "Mode" %}</th><th>{% translate "Notes" %}</th><th class="right">{% translate "Amount" %}</th></tr></thead>
         <tbody>
           {% for payment in payments %}
           <tr>
-            <td data-label="Date">{{ payment.payment_date|date:"d M Y" }}</td>
-            <td data-label="Mode"><span class="chip">{{ payment.payment_mode }}</span></td>
-            <td data-label="Notes"><span class="muted">{{ payment.notes|default:"—" }}</span></td>
-            <td data-label="Amount" class="right bold inr" data-value="{{ payment.amount }}">₹ {{ payment.amount }}</td>
+            <td data-label="{% translate 'Date' %}">{{ payment.payment_date|date:"d M Y" }}</td>
+            <td data-label="{% translate 'Mode' %}"><span class="chip">{{ payment.payment_mode }}</span></td>
+            <td data-label="{% translate 'Notes' %}"><span class="muted">{{ payment.notes|default:"—" }}</span></td>
+            <td data-label="{% translate 'Amount' %}" class="right bold inr" data-value="{{ payment.amount }}">₹ {{ payment.amount }}</td>
           </tr>
           {% endfor %}
         </tbody>
         <tfoot>
           <tr>
-            <td colspan="3">Paid directly against this bill</td>
+            <td colspan="3">{% translate "Paid directly against this bill" %}</td>
             <td class="right inr" data-value="{{ entered_against_bill }}">₹ {{ entered_against_bill }}</td>
           </tr>
         </tfoot>
@@ -321,46 +323,48 @@
     <div class="applied-box">
       <div class="applied-row">
         <div>
-          <div class="bold">+ ₹ <span class="inr-abs" data-value="{{ applied_from_account }}">{{ applied_from_account }}</span> applied automatically</div>
+          <div class="bold">+ ₹ <span class="inr-abs" data-value="{{ applied_from_account }}">{{ applied_from_account }}</span> {% translate "applied automatically" %}</div>
           <div class="muted">
-            This was not paid against bill {{ purchase.invoice_no }}. It is extra money you paid to
-            {{ purchase.mill.mill_name }}
+            {% blocktranslate trimmed with invoice_no=purchase.invoice_no mill_name=purchase.mill.mill_name %}
+            This was not paid against bill {{ invoice_no }}. It is extra money you paid to
+            {{ mill_name }}
+            {% endblocktranslate %}
             {% if overpaid_sources %}
-              — more than bill{{ overpaid_sources|length|pluralize }}
+              — {% blocktranslate trimmed count counter=overpaid_sources|length %}more than bill{% plural %}more than bills{% endblocktranslate %}
               {% for bill, amount in overpaid_sources %}
-                <a href="{% url 'purchase_detail' bill.id %}">{{ bill.invoice_no }}</a> needed
-                (₹ <span class="inr-abs" data-value="{{ amount }}">{{ amount }}</span> over){% if not forloop.last %}, {% endif %}
+                <a href="{% url 'purchase_detail' bill.id %}">{{ bill.invoice_no }}</a> {% translate "needed" %}
+                (₹ <span class="inr-abs" data-value="{{ amount }}">{{ amount }}</span> {% translate "over" %}){% if not forloop.last %}, {% endif %}
               {% endfor %}
             {% endif %}
             {% if on_account_total %}
-              {% if overpaid_sources %}and{% endif %}
-              ₹ <span class="inr-abs" data-value="{{ on_account_total }}">{{ on_account_total }}</span> paid without naming a bill
+              {% if overpaid_sources %}{% translate "and" %}{% endif %}
+              ₹ <span class="inr-abs" data-value="{{ on_account_total }}">{{ on_account_total }}</span> {% translate "paid without naming a bill" %}
             {% endif %}
-            — which goes to the oldest unpaid bills first.
+            — {% translate "which goes to the oldest unpaid bills first." %}
           </div>
         </div>
-        <a class="btn btn-outline btn-sm" href="{% url 'mill_report_detail' purchase.mill.id %}#history">See account history</a>
+        <a class="btn btn-outline btn-sm" href="{% url 'mill_report_detail' purchase.mill.id %}#history">{% translate "See account history" %}</a>
       </div>
     </div>
   {% endif %}
 
   {% if payments or applied_from_account %}
     <div class="settle-summary">
-      <div><span class="muted">Paid directly</span><strong class="inr" data-value="{{ entered_against_bill }}">₹ {{ entered_against_bill }}</strong></div>
+      <div><span class="muted">{% translate "Paid directly" %}</span><strong class="inr" data-value="{{ entered_against_bill }}">₹ {{ entered_against_bill }}</strong></div>
       {% if applied_from_account %}
-        <div><span class="muted">Applied from other payments</span><strong class="inr" data-value="{{ applied_from_account }}">₹ {{ applied_from_account }}</strong></div>
+        <div><span class="muted">{% translate "Applied from other payments" %}</span><strong class="inr" data-value="{{ applied_from_account }}">₹ {{ applied_from_account }}</strong></div>
       {% endif %}
-      <div><span class="muted">Bill settled so far</span><strong class="inr" data-value="{{ paid }}">₹ {{ paid }}</strong></div>
-      <div><span class="muted">Still due</span><strong class="{% if due > 0 %}text-danger{% else %}text-success{% endif %} inr" data-value="{{ due }}">₹ {{ due }}</strong></div>
+      <div><span class="muted">{% translate "Bill settled so far" %}</span><strong class="inr" data-value="{{ paid }}">₹ {{ paid }}</strong></div>
+      <div><span class="muted">{% translate "Still due" %}</span><strong class="{% if due > 0 %}text-danger{% else %}text-success{% endif %} inr" data-value="{{ due }}">₹ {{ due }}</strong></div>
     </div>
   {% endif %}
 
   {% if not payments and not applied_from_account %}
     <div class="empty">
       <div class="empty-icon">💳</div>
-      <div class="empty-title">Nothing paid yet</div>
-      <p>The full <span class="inr" data-value="{{ purchase.total_amount }}">₹ {{ purchase.total_amount }}</span> is outstanding with {{ purchase.mill.mill_name }}.</p>
-      <a class="btn btn-primary" href="{% url 'add_purchase_payment' purchase.id %}">💳 Record a payment</a>
+      <div class="empty-title">{% translate "Nothing paid yet" %}</div>
+      <p>{% translate "The full" %} <span class="inr" data-value="{{ purchase.total_amount }}">₹ {{ purchase.total_amount }}</span> {% blocktranslate with mill_name=purchase.mill.mill_name %}is outstanding with {{ mill_name }}.{% endblocktranslate %}</p>
+      <a class="btn btn-primary" href="{% url 'add_purchase_payment' purchase.id %}">💳 {% translate "Record a payment" %}</a>
     </div>
   {% endif %}
 </div>
@@ -375,11 +379,11 @@
     align-items: flex-end;
     margin-top: 18px;
   }
-  .bill-summary dl, .bill-summary .grand-total { min-width: 340px; max-width: 100%; }
+  .bill-summary dl, .bill-summary .grand-total { min-width: min(340px, 100%); max-width: 100%; }
   .kv.summary { grid-template-columns: 1fr auto; gap: 7px 16px; }
   .kv.summary dd { text-align: right; }
   .grand-total {
-    display: flex; justify-content: space-between; gap: 24px;
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 24px;
     margin-top: 12px; padding: 12px 14px; border-radius: var(--r);
     background: var(--primary-soft); color: var(--primary); font-weight: 700;
   }

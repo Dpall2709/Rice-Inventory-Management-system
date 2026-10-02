@@ -9,6 +9,7 @@ from django.db.models.functions import Coalesce
 from decimal import Decimal, InvalidOperation
 
 from django.shortcuts import get_object_or_404
+from django.utils.translation import gettext as _
 
 from core.models import Mill, Payment, Purchase, PurchaseExpense, PurchaseItem
 from core.services.costing import line_costing, purchase_costing
@@ -182,7 +183,7 @@ def add_purchase_expense(request, purchase_id):
             amount = Decimal(0)
 
         if amount <= 0:
-            messages.error(request, "Enter how much you spent.")
+            messages.error(request, _("Enter how much you spent."))
         else:
             PurchaseExpense.objects.create(
                 purchase=purchase,
@@ -193,7 +194,7 @@ def add_purchase_expense(request, purchase_id):
                 expense_date=request.POST.get("expense_date") or purchase.purchase_date,
                 notes=request.POST.get("notes", "")[:200],
             )
-            messages.success(request, f"Expense of ₹ {amount} added to this bill.")
+            messages.success(request, _("Expense of ₹ %(amount)s added to this bill.") % {"amount": amount})
 
     return redirect("purchase_detail", purchase_id=purchase.id)
 
@@ -207,7 +208,7 @@ def delete_purchase_expense(request, purchase_id, expense_id):
     if request.method == "POST":
         expense = get_object_or_404(PurchaseExpense, id=expense_id, purchase=purchase)
         expense.delete()
-        messages.success(request, "Expense removed.")
+        messages.success(request, _("Expense removed."))
 
     return redirect("purchase_detail", purchase_id=purchase.id)
 
@@ -229,14 +230,14 @@ def delete_purchase(request, purchase_id):
         if payments.exists():
             messages.error(
                 request,
-                "This bill has payments recorded against it, so it cannot be deleted. "
-                "Delete the payments first, or edit the bill instead.",
+                _("This bill has payments recorded against it, so it cannot be deleted. "
+                  "Delete the payments first, or edit the bill instead."),
             )
             return redirect("purchase_detail", purchase_id=purchase.id)
 
         ref = purchase.purchase_ref or purchase.invoice_no
         purchase.delete()
-        messages.success(request, f"Purchase {ref} deleted, along with its stock lines.")
+        messages.success(request, _("Purchase %(ref)s deleted, along with its stock lines.") % {"ref": ref})
         return redirect("purchase_list")
 
     return render(request, "core/delete_purchase.html", {

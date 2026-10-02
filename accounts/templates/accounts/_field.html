@@ -1,0 +1,16 @@
+{% load i18n %}{# One form field. Context: field, full (bool), hint (bool, show help_text), check (live checker name) #}
+<div class="field{% if full %} auth-full field-full{% endif %}{% if field.errors %} has-error{% endif %}">
+  <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required or needed %} <span class="req" aria-hidden="true">*</span>{% endif %}</label>
+  {% if field.field.widget.input_type == "password" %}
+    <div class="password-wrap">
+      {{ field }}
+      <button type="button" class="password-eye" data-toggle-password="{{ field.id_for_label }}"
+              aria-label="{% translate 'Show password' %}" aria-pressed="false">👁</button>
+    </div>
+  {% else %}
+    {{ field }}
+  {% endif %}
+  {% if check %}<div class="avail" data-avail-for="{{ check }}" aria-live="polite"></div>{% endif %}
+  {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+  {% if hint and field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+</div>

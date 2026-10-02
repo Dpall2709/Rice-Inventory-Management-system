@@ -1,17 +1,18 @@
 {% extends 'core/base.html' %}
+{% load i18n %}
 {% block nav_kind %}form{% endblock %}
 {% block back_url %}{% url 'mill_list' %}{% endblock %}
 {% block content_class %}page-narrow{% endblock %}
-{% block page_title %}Deactivate supplier{% endblock %}
+{% block page_title %}{% translate "Deactivate supplier" %}{% endblock %}
 
 {% block content %}
 
 <div class="page-head">
   <div>
     <div class="crumbs">
-      <a href="{% url 'mill_list' %}">Mills / Suppliers</a> › <span>{{ mill.mill_name }}</span>
+      <a href="{% url 'mill_list' %}">{% translate "Mills / Suppliers" %}</a> › <span>{{ mill.mill_name }}</span>
     </div>
-    <h1>Deactivate “{{ mill.mill_name }}”?</h1>
+    <h1>{% blocktranslate with name=mill.mill_name %}Deactivate “{{ name }}”?{% endblocktranslate %}</h1>
   </div>
 </div>
 
@@ -21,41 +22,45 @@
     <span>{% if can_delete %}⚠️{% else %}🔒{% endif %}</span>
     <div>
       {% if can_delete %}
-        This supplier has no purchases or payments yet, so it can be deleted permanently.
+        {% translate "This supplier has no purchases or payments yet, so it can be deleted permanently." %}
       {% else %}
+        {% blocktranslate trimmed %}
         This supplier has history, so it <strong>cannot be deleted</strong> — deleting it would
         destroy those records and the stock that came from them. Deactivate it instead.
+        {% endblocktranslate %}
       {% endif %}
     </div>
   </div>
 
   <dl class="kv">
-    <dt>Owner</dt><dd>{{ mill.owner_name|default:"—" }}</dd>
-    <dt>Mobile</dt><dd>{{ mill.mobile|default:"—" }}</dd>
-    <dt>Purchases</dt><dd>{{ purchase_count }}</dd>
-    <dt>Payments</dt><dd>{{ payment_count }}</dd>
-    <dt>Used in sales</dt><dd>{{ sale_item_count }} line{{ sale_item_count|pluralize }}</dd>
+    <dt>{% translate "Owner" %}</dt><dd>{{ mill.owner_name|default:"—" }}</dd>
+    <dt>{% translate "Mobile" %}</dt><dd>{{ mill.mobile|default:"—" }}</dd>
+    <dt>{% translate "Purchases" %}</dt><dd>{{ purchase_count }}</dd>
+    <dt>{% translate "Payments" %}</dt><dd>{{ payment_count }}</dd>
+    <dt>{% translate "Used in sales" %}</dt><dd>{% blocktranslate count counter=sale_item_count %}{{ counter }} line{% plural %}{{ counter }} lines{% endblocktranslate %}</dd>
   </dl>
 
   <div class="divider"></div>
 
   <p class="muted">
+    {% blocktranslate trimmed %}
     <strong>Deactivating</strong> hides this supplier from new purchase and sale forms.
     Its ledger, purchases and payments stay exactly as they are, and you can restore it
     at any time from the Inactive tab.
+    {% endblocktranslate %}
   </p>
 
   <form method="POST" class="form-actions" style="border:0; padding-top:0;">
     {% csrf_token %}
-    <button class="btn btn-primary" type="submit" name="action" value="deactivate">🚫 Deactivate</button>
+    <button class="btn btn-primary" type="submit" name="action" value="deactivate">🚫 {% translate "Deactivate" %}</button>
 
     {% if can_delete %}
       <button class="btn btn-danger" type="submit" name="action" value="delete"
-              data-confirm="“{{ mill.mill_name }}” will be removed permanently. This cannot be undone."
-              data-confirm-title="Delete this supplier?">🗑 Delete permanently</button>
+              data-confirm="{% blocktranslate with name=mill.mill_name %}“{{ name }}” will be removed permanently. This cannot be undone.{% endblocktranslate %}"
+              data-confirm-title="{% translate 'Delete this supplier?' %}">🗑 {% translate "Delete permanently" %}</button>
     {% endif %}
 
-    <a class="btn btn-ghost" href="{% url 'mill_list' %}">Cancel</a>
+    <a class="btn btn-ghost" href="{% url 'mill_list' %}">{% translate "Cancel" %}</a>
   </form>
 
 </div>

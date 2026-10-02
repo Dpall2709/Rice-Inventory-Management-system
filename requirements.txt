@@ -19,6 +19,9 @@ et_xmlfile==2.0.0
 qrcode
 num2words
 
+# Reading supplier bills with Claude (purchase -> Scan bill)
+anthropic==1.11.0
+
 # Payments (subscription billing)
 razorpay==2.0.1
 

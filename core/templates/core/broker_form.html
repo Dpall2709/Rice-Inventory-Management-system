@@ -1,0 +1,61 @@
+{% extends 'core/base.html' %}
+{% load i18n form_tags %}
+{% block nav_kind %}form{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
+{% block back_url %}{% if mode == 'edit' %}{% url 'broker_report_detail' broker.id %}{% else %}{% url 'broker_list' %}{% endif %}{% endblock %}
+{% block page_title %}{% if mode == 'edit' %}{% translate "Edit broker" %}{% else %}{% translate "Add broker" %}{% endif %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'broker_list' %}">{% translate "Brokers" %}</a> ›
+      <span>{% if mode == 'edit' %}{{ broker.broker_name }}{% else %}{% translate "New" %}{% endif %}</span>
+    </div>
+    <h1>{% if mode == 'edit' %}{% blocktranslate with name=broker.broker_name %}Edit {{ name }}{% endblocktranslate %}{% else %}{% translate "Add a broker" %}{% endif %}</h1>
+    <p class="muted">{% translate "The commission set here fills in automatically on each sale he brings; you can still change it per sale." %}</p>
+  </div>
+</div>
+
+<form method="POST" class="card card-narrow" novalidate>
+  {% csrf_token %}
+
+  <div class="form-section-title">{% translate "Broker" %}</div>
+  <div class="form-grid">
+    {% for field in form %}
+      {% if field.name|one_of:"broker_name,mobile,city,gst_number,address" %}
+        <div class="field {% if field.errors %}has-error{% endif %} {% if field.name == 'address' %}form-full{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.name == 'broker_name' %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="form-section-title">{% translate "Commission" %}</div>
+  <div class="form-grid">
+    {% for field in form %}
+      {% if field.name|one_of:"commission_type,commission_rate,default_cash_discount_percent,opening_balance" %}
+        <div class="field {% if field.errors %}has-error{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  <div class="form-section-title">{% translate "Notes" %}</div>
+  {{ form.notes }}
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">💾 {% if mode == 'edit' %}{% translate "Save changes" %}{% else %}{% translate "Save broker" %}{% endif %}</button>
+    <a class="btn btn-ghost" href="{% if mode == 'edit' %}{% url 'broker_report_detail' broker.id %}{% else %}{% url 'broker_list' %}{% endif %}">{% translate "Cancel" %}</a>
+  </div>
+</form>
+
+{% endblock %}

@@ -47,14 +47,57 @@ To reach the staff screens (`/billing/manage/` and `/admin/`), create yourself a
 python manage.py createsuperuser
 ```
 
+## Scan a supplier's bill (Purchases → 📷 Scan bill)
+
+Instead of typing a mill's bill, take a photo of it (or upload its PDF):
+
+- **QR code** — a GST e-invoice QR gives the supplier GSTIN, bill number, date and total.
+  It is found automatically in the photo, or scanned with the camera, or typed by a
+  handheld scanner. This works offline and costs nothing, but the QR never contains the rice lines.
+- **Photo / PDF** — Claude reads the whole bill: supplier, every rice line (bags, bag
+  weight, rate per kg, GST), discount, freight and labour. Rates per quintal or per bag
+  are converted to per kg. Switch it on by adding your key to `.env`:
+
+  ```
+  ANTHROPIC_API_KEY=sk-ant-...
+  ```
+
+  Each bill costs roughly ₹1–3 (model `claude-opus-5-5`; change with `BILL_SCAN_MODEL`).
+  The bill image is sent to Anthropic's API to be read.
+
+The supplier is matched by GSTIN or name (a new one is added in one tap), the rice by name.
+The normal purchase form opens pre-filled and shows the bill's total next to the form's
+total. Nothing is saved until you press Save. The original bill file is attached to the
+purchase and only opens for your own company. The camera needs HTTPS (or localhost); on a
+phone over plain HTTP, use "take a photo" instead.
+
+## English / हिन्दी
+
+Every screen can be switched between English and Hindi with the **EN / हिं** button in the
+top bar (and on the login page). The choice is remembered in a cookie for a year.
+
+The Hindi text lives in `locale/hi/LC_MESSAGES/django.po`. After adding or changing any
+on-screen text:
+
+```bash
+python manage.py makemessages -l hi --ignore=venv --ignore=staticfiles   # collect new text
+# translate the new empty msgstr "" entries in django.po
+python manage.py compilemessages -l hi --ignore=venv                      # build django.mo
+```
+
+`compilemessages` needs GNU gettext (`brew install gettext` on macOS,
+`apt install gettext` on Linux). The compiled `django.mo` is committed, so a server only
+needs it when the text changes.
+
 ## Run the tests
 
 ```bash
 python manage.py test
 ```
 
-23 tests cover the rules that must never break: company data isolation, subscription
-expiry and read-only mode, role permissions, and per-company invoice numbering.
+The tests cover the rules that must never break: company data isolation, subscription
+expiry and read-only mode, role permissions, per-company invoice numbering, purchase GST
+maths, stock checks on every sale, customer and broker ledgers, and the language switch.
 
 ---
 

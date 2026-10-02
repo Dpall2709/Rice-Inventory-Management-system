@@ -3,6 +3,7 @@ Top level URL map.
 
     /admin/     Django admin (for you, the developer)
     /billing/   subscription and payment screens
+    /i18n/      language switch (English / Hindi)
     /           the rice billing app itself (core)
 """
 
@@ -16,6 +17,12 @@ urlpatterns = [
     path("admin/", admin.site.urls),
 
     path("billing/", include("billing.urls")),
+
+    # Sign-up with email code, login, business profile.
+    path("account/", include("accounts.urls")),
+
+    # POST /i18n/setlang/ switches the language (English / Hindi).
+    path("i18n/", include("django.conf.urls.i18n")),
 
     # Password reset, using Django's own screens with our templates.
     path(

@@ -1,223 +1,290 @@
 {% extends 'core/base.html' %}
+{% load i18n %}
 {% block back_url %}{% url 'sale_list' %}{% endblock %}
-{% block page_title %}Sale Detail{% endblock %}
+{% block page_title %}{% blocktranslate with no=sale.invoice_no %}Invoice {{ no }}{% endblocktranslate %}{% endblock %}
 
 {% block content %}
-<div class="panel">
 
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> ›
+      <a href="{% url 'sale_list' %}">{% translate "Sales" %}</a> ›
+      <span>{{ sale.invoice_no }}</span>
+    </div>
+    <h1>{% blocktranslate with no=sale.invoice_no %}Invoice {{ no }}{% endblocktranslate %}</h1>
+    <p class="muted">
+      {% if sale.customer_id %}
+        {% translate "To" %} <a href="{% url 'customer_ledger' sale.customer_id %}">{{ sale.customer_name }}</a>
+      {% else %}{% translate "To" %} {{ sale.customer_name }}{% endif %}
+      · {{ sale.sale_date|date:"d M Y" }}
+      · {{ sale.get_tax_type_display }}
+      · {% if sale.unload_date %}<span class="badge badge-green">{% blocktranslate with date=sale.unload_date|date:"d M" %}Unloaded {{ date }}{% endblocktranslate %}</span>{% else %}<span class="badge badge-orange">{% translate "On the way / not unloaded" %}</span>{% endif %}
+      {% if sale.due_date %} · {% translate "due by" %} <strong {% if status.overdue %}class="text-danger"{% endif %}>{{ sale.due_date|date:"d M Y" }}</strong>{% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-outline" href="{% url 'sale_invoice_pdf' sale.id %}">📄 {% translate "Invoice PDF" %}</a>
+    <a class="btn btn-outline" href="{% url 'sale_print' sale.id %}" target="_blank" rel="noopener">🖨 {% translate "Print" %}</a>
+    {% if sale.unload_date %}<a class="btn btn-outline" href="{% url 'sale_statement_pdf' sale.id %}" target="_blank" rel="noopener">🧾 {% translate "Settlement statement" %}</a>{% endif %}
+    {% if sale.customer and sale.customer.whatsapp_number %}
+      <a class="btn btn-outline" target="_blank" rel="noopener"
+         href="https://wa.me/{{ sale.customer.whatsapp_number }}?text={{ share_text|urlencode }}">💬 WhatsApp</a>
+    {% endif %}
+    <a class="btn {% if sale.unload_date %}btn-outline{% else %}btn-primary{% endif %}" href="{% url 'settle_sale' sale.id %}">🚚 {% if sale.unload_date %}{% translate "Edit settlement" %}{% else %}{% translate "Record unloading" %}{% endif %}</a>
+    <a class="btn btn-outline" href="{% url 'edit_sale' sale.id %}">✏️ {% translate "Edit" %}</a>
+    {% if due > 0 %}
+      <a class="btn btn-primary" href="{% url 'add_sale_payment' sale.id %}">💰 {% translate "Receive" %} <span class="inr" data-value="{{ due }}">₹ {{ due }}</span></a>
+    {% endif %}
+    <a class="btn btn-ghost" href="{% url 'delete_sale' sale.id %}" title="{% translate 'Delete' %}">🗑</a>
+  </div>
+</div>
+
+{% if status.overdue %}
+  <div class="banner is-danger">
+    <span>⏰</span>
+    <div>{% blocktranslate with date=sale.due_date|date:"d M Y" %}Payment was due on <strong>{{ date }}</strong> and is still outstanding.{% endblocktranslate %}</div>
+  </div>
+{% endif %}
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-icon">📦</div>
+    <div>
+      <div class="stat-label">{% translate "Bags" %}</div>
+      <div class="stat-value">{{ sale.total_bags }}</div>
+      <div class="stat-hint">{{ sale.total_quantity_kg }} kg</div>
+    </div>
+  </div>
+  <div class="stat">
+    <div class="stat-icon">🧾</div>
+    <div>
+      <div class="stat-label">{% translate "Invoice total" %}</div>
+      <div class="stat-value inr" data-value="{{ sale.total_amount }}">₹ {{ sale.total_amount }}</div>
+      <div class="stat-hint">{% translate "incl. GST" %} ₹ <span class="inr-abs" data-value="{{ sale.gst_amount }}">{{ sale.gst_amount }}</span></div>
+    </div>
+  </div>
+  <div class="stat is-success">
+    <div class="stat-icon">✅</div>
+    <div>
+      <div class="stat-label">{% translate "Received" %}</div>
+      <div class="stat-value inr" data-value="{{ paid }}">₹ {{ paid }}</div>
+      {% if applied_from_account %}
+        <div class="stat-hint">{% translate "incl." %} ₹ <span class="inr-abs" data-value="{{ applied_from_account }}">{{ applied_from_account }}</span> {% translate "from money received on account" %}</div>
+      {% endif %}
+    </div>
+  </div>
+  <div class="stat {% if due > 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">⏳</div>
+    <div>
+      <div class="stat-label">{% translate "Customer owes" %}</div>
+      <div class="stat-value inr" data-value="{{ due }}">₹ {{ due }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="list-header">
+    <div class="list-title">{% translate "Invoice" %}</div>
+    <span class="muted">{% translate "What the customer sees" %}</span>
+  </div>
+
+  <div class="buyer-card" style="margin-top:0; margin-bottom:16px;">
+    <div>
+      <div class="muted small">{% translate "Bill to" %}</div>
+      <div class="bold">{{ sale.customer_name }}</div>
+      <div class="small">{{ sale.billing_address|default:"—" }}</div>
+    </div>
+    <div>
+      <div class="muted small">{% translate "GSTIN" %}</div>
+      <div class="bold">{{ sale.customer_gst|default:"—" }}</div>
+      <div class="muted small" style="margin-top:6px;">{% translate "Place of supply" %}</div>
+      <div>{{ sale.place_of_supply|default:"—" }}</div>
+    </div>
+    <div>
+      <div class="muted small">{% translate "Ship to" %}</div>
+      <div class="small">{{ sale.shipping_address|default:sale.billing_address|default:"—" }}</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table table-cards">
+      <thead>
+        <tr>
+          <th>{% translate "Rice" %}</th><th>HSN</th><th class="right">{% translate "Bag wt" %}</th><th class="right">{% translate "Bags" %}</th>
+          <th class="right">{% translate "Quantity" %}</th><th class="right">{% translate "Rate/kg" %}</th>
+          <th class="right">{% translate "Taxable" %}</th><th class="right">GST</th><th class="right">{% translate "Line total" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td data-label="{% translate 'Rice' %}" class="row-title">{{ item.product.rice_name }}</td>
+          <td data-label="HSN"><span class="muted">{{ item.product.hsn_code|default:"—" }}</span></td>
+          <td data-label="{% translate 'Bag wt' %}" class="right">{{ item.bag_weight }} kg</td>
+          <td data-label="{% translate 'Bags' %}" class="right">{{ item.bag_count }}</td>
+          <td data-label="{% translate 'Quantity' %}" class="right">{{ item.total_weight }} kg</td>
+          <td data-label="{% translate 'Rate/kg' %}" class="right">₹ {{ item.rate_per_kg }}</td>
+          <td data-label="{% translate 'Taxable' %}" class="right inr" data-value="{{ item.amount }}">₹ {{ item.amount }}</td>
+          <td data-label="GST" class="right">
+            {% if item.gst_percent %}
+              <span class="chip">{{ item.gst_percent }}%</span>
+              <span class="inr" data-value="{{ item.gst_amount }}">₹ {{ item.gst_amount }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td data-label="{% translate 'Line total' %}" class="right bold inr" data-value="{{ item.line_total }}">₹ {{ item.line_total }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="muted">{% translate "This invoice has no lines." %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bill-summary">
+    <dl class="kv summary">
+      <dt>{% translate "Taxable amount" %}</dt><dd class="num bold inr" data-value="{{ sale.taxable_amount }}">₹ {{ sale.taxable_amount }}</dd>
+      {% if sale.cgst_amount %}
+        <dt>CGST</dt><dd class="num inr" data-value="{{ sale.cgst_amount }}">₹ {{ sale.cgst_amount }}</dd>
+        <dt>SGST</dt><dd class="num inr" data-value="{{ sale.sgst_amount }}">₹ {{ sale.sgst_amount }}</dd>
+      {% endif %}
+      {% if sale.igst_amount %}
+        <dt>IGST</dt><dd class="num inr" data-value="{{ sale.igst_amount }}">₹ {{ sale.igst_amount }}</dd>
+      {% endif %}
+      {% if sale.round_off %}
+        <dt>{% translate "Round off" %}</dt><dd class="num">{{ sale.round_off }}</dd>
+      {% endif %}
+    </dl>
+    <div class="grand-total">
+      <span>{% translate "Invoice total" %}</span>
+      <span class="num inr" data-value="{{ sale.total_amount }}">₹ {{ sale.total_amount }}</span>
+    </div>
+  </div>
+
+  {% if sale.notes %}
+    <div class="divider"></div>
+    <p class="muted"><strong>{% translate "Note:" %}</strong> {{ sale.notes }}</p>
+  {% endif %}
+</div>
+
+<div class="two-col two-col-even">
+
+  <!-- ===================== MONEY RECEIVED ===================== -->
+  <div class="card">
+    <div class="list-header">
+      <div class="list-title">{% translate "Money received" %}</div>
+      {% if due > 0 %}<a class="btn btn-outline btn-sm" href="{% url 'add_sale_payment' sale.id %}">💰 {% translate "Receive payment" %}</a>{% endif %}
+    </div>
+    <div class="table-wrap">
+      <table class="table table-cards">
+        <thead><tr><th>{% translate "Date" %}</th><th>{% translate "Mode" %}</th><th class="right">{% translate "Amount" %}</th><th></th></tr></thead>
+        <tbody>
+          {% if sale.advance_received %}
+          <tr>
+            <td data-label="{% translate 'Date' %}">{{ sale.sale_date|date:"d M Y" }}</td>
+            <td data-label="{% translate 'Mode' %}">{% if sale.advance_mode %}{% translate sale.advance_mode %}{% else %}—{% endif %} <span class="row-sub">· {% translate "with the invoice" %}</span></td>
+            <td data-label="{% translate 'Amount' %}" class="right inr" data-value="{{ sale.advance_received }}">₹ {{ sale.advance_received }}</td>
+            <td></td>
+          </tr>
+          {% endif %}
+          {% for payment in payments %}
+          <tr>
+            <td data-label="{% translate 'Date' %}">{{ payment.payment_date|date:"d M Y" }}</td>
+            <td data-label="{% translate 'Mode' %}">{% translate payment.payment_mode %}{% if payment.notes %}<div class="row-sub">{{ payment.notes }}</div>{% endif %}</td>
+            <td data-label="{% translate 'Amount' %}" class="right inr" data-value="{{ payment.amount }}">₹ {{ payment.amount }}</td>
+            <td class="right">
+              <form method="POST" action="{% url 'delete_payment' payment.id %}">
+                {% csrf_token %}
+                <button class="btn btn-ghost btn-sm" type="submit" title="{% translate 'Delete payment' %}"
+                        data-confirm="{% translate 'This payment will be removed and the invoice will show as due again.' %}"
+                        data-confirm-title="{% translate 'Delete this payment?' %}">🗑</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          {% if not sale.advance_received and not payments %}
+          <tr><td colspan="4" class="muted">{% translate "Nothing received yet." %}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    {% if applied_from_account %}
+      <p class="field-hint" style="margin-top:8px;">
+        {% blocktranslate with amount=applied_from_account %}₹ {{ amount }} of money the customer paid on account (without naming an invoice) has been applied to this invoice.{% endblocktranslate %}
+      </p>
+    {% endif %}
+  </div>
+
+  <!-- ===================== TRUCK ===================== -->
+  <div class="card">
+    <div class="list-title" style="margin-bottom:12px;">{% translate "Truck & transport" %}</div>
+    <dl class="kv">
+      <dt>{% translate "Vehicle" %}</dt><dd>{{ sale.vehicle_number|default:"—" }}</dd>
+      <dt>{% translate "Driver" %}</dt><dd>{{ sale.driver_name|default:"—" }}{% if sale.driver_mobile %} · {{ sale.driver_mobile }}{% endif %}</dd>
+      <dt>{% translate "Transporter" %}</dt><dd>{{ sale.transporter_name|default:"—" }}</dd>
+      <dt>{% translate "Weight" %}</dt><dd>{{ sale.total_ton|floatformat:3 }} {% translate "ton" %}</dd>
+      <dt>{% translate "Freight" %}</dt><dd>₹ {{ sale.transport_charge }} <span class="muted">(₹ {{ sale.transport_rate_per_ton }} / {% translate "ton" %})</span></dd>
+      <dt>{% translate "Paid by you" %}</dt><dd>₹ {{ sale.transport_paid_by_dealer }}</dd>
+      <dt>{% translate "Paid by customer" %}</dt><dd>₹ {{ sale.transport_paid_by_customer }}</dd>
+      <dt>{% translate "Still due to truck" %}</dt><dd class="{% if sale.transport_due > 0 %}text-danger{% endif %}">₹ {{ sale.transport_due }}</dd>
+    </dl>
+    <p class="field-hint" style="margin-top:8px;">{% translate "Freight is not part of the invoice total." %}</p>
+  </div>
+</div>
+
+<!-- ===================== OWNER ONLY ===================== -->
+<div class="card">
   <div class="list-header">
     <div>
-      <h2 class="list-title">Sale Invoice</h2>
-      <p class="muted">Invoice: <b>{{ sale.invoice_no }}</b></p>
-    </div>
-
-    <div class="list-actions">
-    <a href="{% url 'sale_invoice_pdf' sale.id %}" class="btn btn-primary">⬇ Download PDF Invoice</a>
-    <a href="{% url 'add_sale_payment' sale.id %}" class="btn btn-outline">💳 Add Rice Payment</a>
-    <a href="{% url 'sale_list' %}" class="btn btn-outline">⬅ Back</a>
-  </div>
-  </div>
-
-  <!-- MAIN INFO -->
-  <div class="info-grid">
-    <div class="info-card">
-      <div class="info-label">Customer / Trader</div>
-      <div class="info-value">{{ sale.customer_name }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Broker (internal)</div>
-      <div class="info-value">
-        {% if sale.broker %}{{ sale.broker.broker_name }}{% else %}-{% endif %}
-      </div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Sale Date</div>
-      <div class="info-value">{{ sale.sale_date }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Vehicle</div>
-      <div class="info-value">{{ sale.vehicle_number }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Driver</div>
-      <div class="info-value">{{ sale.driver_name }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Transporter</div>
-      <div class="info-value">{{ sale.transporter_name }}</div>
+      <div class="list-title">🔒 {% translate "Cost & profit (owner only)" %}</div>
+      <p class="muted">{% translate "Which purchase lots these bags came from, and what they really cost you. Never printed on the invoice." %}</p>
     </div>
   </div>
 
-  <hr class="divider">
-
-  <!-- ✅ RICE SELLING (CUSTOMER INVOICE) -->
-  <h3 class="panel-title">Rice Invoice (Selling - Customer/Trader)</h3>
-
-  <div class="info-grid">
-    <div class="info-card">
-      <div class="info-label">Total Bags</div>
-      <div class="info-value"><b>{{ total_bags }}</b></div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Total KG</div>
-      <div class="info-value"><b>{{ total_kg }}</b> KG</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Selling Rate / KG</div>
-      <div class="info-value"><b>₹ {{ selling_rate_per_kg }}</b></div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Taxable Amount</div>
-      <div class="info-value">₹ {{ sale.taxable_amount }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">GST</div>
-      <div class="info-value">₹ {{ sale.gst_amount }} ({{ sale.gst_percent }}%)</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Rice Total (Selling)</div>
-      <div class="info-value"><b>₹ {{ rice_total }}</b></div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Advance Received</div>
-      <div class="info-value">₹ {{ sale.advance_received }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Other Payments Received</div>
-      <div class="info-value">₹ {{ paid_extra }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Total Received</div>
-      <div class="info-value"><b>₹ {{ rice_received_total }}</b></div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Rice Due</div>
-      <div class="info-value"><b style="color:#ef4444;">₹ {{ rice_due }}</b></div>
-    </div>
-  </div>
-
-  <hr class="divider">
-
-  <!-- ✅ TRANSPORT (SEPARATE) -->
-  <h3 class="panel-title">Transport (Separate - Driver Payment)</h3>
-
-  <div class="info-grid">
-    <div class="info-card">
-      <div class="info-label">Transport Total</div>
-      <div class="info-value">₹ {{ sale.transport_charge }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Dealer Paid (Advance)</div>
-      <div class="info-value">₹ {{ sale.transport_paid_by_dealer }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Customer/Broker Paid</div>
-      <div class="info-value">₹ {{ sale.transport_paid_by_customer }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Transport Due (Driver)</div>
-      <div class="info-value"><b style="color:#ef4444;">₹ {{ transport_due }}</b></div>
-    </div>
-  </div>
-
-  <hr class="divider">
-
-  <!-- ✅ INTERNAL BREAKUP (BUYING PRICE) -->
-  <h3 class="panel-title">Internal Mill Breakup (Buying Cost - Owner Only)</h3>
-  <p class="muted">This section shows your BUYING price (from purchase stock). Not shown to customer.</p>
-
+  {% if profit.lots %}
   <div class="table-wrap">
-    <table class="table">
+    <table class="table table-cards">
       <thead>
         <tr>
-          <th>#</th>
-          <th>Mill</th>
-          <th>Product</th>
-          <th class="right">Bag Weight</th>
-          <th class="right">Bags</th>
-          <th class="right">KG</th>
-          <th class="right">Buy Rate/KG</th>
-          <th class="right">Buy Amount</th>
+          <th>{% translate "Lot (mill bill)" %}</th><th>{% translate "Mill" %}</th><th>{% translate "Rice" %}</th>
+          <th class="right">{% translate "Bags" %}</th><th class="right">{% translate "Bill rate/kg" %}</th>
+          <th class="right">{% translate "Landed cost/kg" %}</th><th class="right">{% translate "Cost" %}</th>
         </tr>
       </thead>
-
       <tbody>
-        {% for it in items %}
+        {% for lot in profit.lots %}
         <tr>
-          <td>{{ forloop.counter }}</td>
-          <td><b>{{ it.mill.mill_name }}</b></td>
-          <td>{{ it.product.rice_name }}</td>
-          <td class="right">{{ it.bag_weight }}</td>
-          <td class="right">{{ it.bag_count }}</td>
-          <td class="right">{{ it.total_weight }}</td>
-          <td class="right">₹ {{ it.rate_per_kg }}</td>
-          <td class="right">₹ {{ it.amount }}</td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="8" style="text-align:center; padding:20px;">No internal breakup items found.</td>
+          <td data-label="{% translate 'Lot (mill bill)' %}"><a href="{% url 'purchase_detail' lot.purchase_item.purchase_id %}">{{ lot.purchase_item.purchase.invoice_no }}</a>
+            <div class="row-sub">{{ lot.purchase_item.purchase.purchase_date|date:"d M Y" }}</div></td>
+          <td data-label="{% translate 'Mill' %}"><a href="{% url 'mill_report_detail' lot.mill_id %}">{{ lot.mill.mill_name }}</a></td>
+          <td data-label="{% translate 'Rice' %}">{{ lot.purchase_item.product.rice_name }} · {{ lot.purchase_item.bag_weight }} kg</td>
+          <td data-label="{% translate 'Bags' %}" class="right">{{ lot.bag_count }}</td>
+          <td data-label="{% translate 'Bill rate/kg' %}" class="right">₹ {{ lot.buy_rate_per_kg }}</td>
+          <td data-label="{% translate 'Landed cost/kg' %}" class="right">₹ {{ lot.cost_per_kg }}</td>
+          <td data-label="{% translate 'Cost' %}" class="right inr" data-value="{{ lot.cost_amount }}">₹ {{ lot.cost_amount }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 
-  <div class="total-box" style="margin-top:14px;">
-    Internal Buy Cost Total: <b>₹ {{ buy_cost_total }}</b>
-    &nbsp; | &nbsp;
-    Profit Estimate (Rice Selling - Buy Cost): <b>₹ {{ profit_estimate }}</b>
-  </div>
+  {% endif %}
 
-  <hr class="divider">
+  <div style="margin-top:16px;">{% include "core/partials/truck_account.html" %}</div>
 
-  <!-- ✅ RICE PAYMENTS TABLE -->
-  <h3 class="panel-title">Rice Payments Received</h3>
-  <p class="muted">These payments affect Rice Due only (not Transport).</p>
+  {% if not profit.lots %}
+    <p class="muted">{% translate "This invoice was made before stock lots were tracked, so its cost is not known. Edit and save it once to link its bags to your purchase lots." %}</p>
+  {% endif %}
 
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Mode</th>
-          <th>Notes</th>
-          <th class="right">Amount</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        {% for p in payments %}
-        <tr>
-          <td>{{ p.payment_date }}</td>
-          <td>{{ p.payment_mode }}</td>
-          <td>{{ p.notes|default:"-" }}</td>
-          <td class="right">₹ {{ p.amount }}</td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="4" style="text-align:center; padding:20px;">No payments yet.</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
+  {% if sale.broker %}
+    <div class="divider"></div>
+    <p>
+      🤝 {% translate "Broker" %}: <a href="{% url 'broker_report_detail' sale.broker.id %}"><strong>{{ sale.broker.broker_name }}</strong></a>
+      · {{ sale.get_broker_commission_type_display }} @ {{ sale.broker_commission_rate }}
+      · {% translate "commission" %} <strong>₹ {{ sale.broker_commission }}</strong>
+      {% if sale.broker_paid_by == 'customer' %}· <span class="badge badge-blue">{% translate "paid by the party" %}</span>{% endif %}
+    </p>
+  {% endif %}
 </div>
+
 {% endblock %}

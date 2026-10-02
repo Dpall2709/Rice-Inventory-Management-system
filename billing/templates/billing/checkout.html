@@ -1,30 +1,31 @@
 {% extends "core/base.html" %}
-{% block page_title %}Pay for {{ plan.name }}{% endblock %}
+{% load i18n %}
+{% block page_title %}{% blocktranslate with name=plan.name %}Pay for {{ name }}{% endblocktranslate %}{% endblock %}
 
 {% block content %}
 
 <div class="card">
   <div class="list-header">
-    <div class="list-title">{{ plan.name }} plan</div>
+    <div class="list-title">{% blocktranslate with name=plan.name %}{{ name }} plan{% endblocktranslate %}</div>
     <div class="card-value">₹ {{ plan.price }}</div>
   </div>
 
   <div class="info-grid">
     <div class="info-card">
-      <div class="info-label">Company</div>
+      <div class="info-label">{% translate "Company" %}</div>
       <div class="info-value">{{ company.company_name }}</div>
     </div>
     <div class="info-card">
-      <div class="info-label">Adds</div>
-      <div class="info-value">{{ plan.duration_days }} days</div>
+      <div class="info-label">{% translate "Adds" %}</div>
+      <div class="info-value">{% blocktranslate count days=plan.duration_days %}{{ days }} day{% plural %}{{ days }} days{% endblocktranslate %}</div>
     </div>
   </div>
 
 {% if razorpay_enabled and order_id %}
 
-  <p class="muted">You will pay by UPI, card or netbanking through Razorpay.</p>
+  <p class="muted">{% translate "You will pay by UPI, card or netbanking through Razorpay." %}</p>
 
-  <button id="payBtn" class="btn btn-primary">Pay ₹{{ plan.price }} now</button>
+  <button id="payBtn" class="btn btn-primary">{% blocktranslate with price=plan.price %}Pay ₹{{ price }} now{% endblocktranslate %}</button>
 
   <form id="resultForm" method="POST" action="{% url 'billing:payment_success' %}">
     {% csrf_token %}
@@ -41,7 +42,7 @@
         amount: {{ amount_paise }},
         currency: "INR",
         name: "Rice Billing App",
-        description: "{{ plan.name }} subscription",
+        description: "{% blocktranslate with name=plan.name %}{{ name }} subscription{% endblocktranslate %}",
         order_id: "{{ order_id }}",
         prefill: { name: "{{ company.owner_name }}", email: "{{ company.email }}", contact: "{{ company.mobile }}" },
         theme: { color: "#16a34a" },
@@ -58,12 +59,14 @@
 {% else %}
 
   <p class="muted">
-    Online payment is not switched on yet. Please send <strong>₹{{ plan.price }}</strong> by UPI or
+    {% blocktranslate trimmed with price=plan.price payment_id=payment.id %}
+    Online payment is not switched on yet. Please send <strong>₹{{ price }}</strong> by UPI or
     bank transfer and tell us the reference number — we will activate this plan for you.
-    Your request has been recorded as payment #{{ payment.id }}.
+    Your request has been recorded as payment #{{ payment_id }}.
+    {% endblocktranslate %}
   </p>
 
-  <a class="btn btn-outline" href="{% url 'billing:home' %}">Back to billing</a>
+  <a class="btn btn-outline" href="{% url 'billing:home' %}">{% translate "Back to billing" %}</a>
 
 {% endif %}
 

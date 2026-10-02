@@ -1,0 +1,215 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+{% block page_title %}{% translate "Truck register" %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> › <span>{% translate "Truck register" %}</span></div>
+    <h1>📊 {% translate "Truck register" %}</h1>
+    <p class="muted">{% translate "Every truck from mill to party: what it cost, what the party pays after shortage, CD and brokerage, what came in, and the profit." %}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-outline" href="?{{ export_query }}">⬇️ {% translate "Download Excel" %}</a>
+    <a class="btn btn-primary" href="{% url 'add_sale' %}">➕ {% translate "New sale" %}</a>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-icon">🚚</div>
+    <div>
+      <div class="stat-label">{% translate "Trucks" %}</div>
+      <div class="stat-value">{{ totals.trucks }}</div>
+      <div class="stat-hint">{% blocktranslate with bags=totals.bags kg=totals.weight_kg %}{{ bags }} bags · {{ kg }} kg{% endblocktranslate %}</div>
+    </div>
+  </div>
+  <div class="stat">
+    <div class="stat-icon">💼</div>
+    <div>
+      <div class="stat-label">{% translate "Total investment" %}</div>
+      <div class="stat-value inr" data-value="{{ totals.investment }}">₹ {{ totals.investment }}</div>
+      <div class="stat-hint">{% translate "rice + loading + freight + commission" %}</div>
+    </div>
+  </div>
+  <div class="stat is-success">
+    <div class="stat-icon">✅</div>
+    <div>
+      <div class="stat-label">{% translate "Received" %}</div>
+      <div class="stat-value inr" data-value="{{ totals.received }}">₹ {{ totals.received }}</div>
+      <div class="stat-hint">{% translate "of" %} ₹ <span class="inr-abs" data-value="{{ totals.party_owes }}">{{ totals.party_owes }}</span></div>
+    </div>
+  </div>
+  <div class="stat {% if totals.outstanding > 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">⏳</div>
+    <div>
+      <div class="stat-label">{% translate "Still to receive" %}</div>
+      <div class="stat-value inr" data-value="{{ totals.outstanding }}">₹ {{ totals.outstanding }}</div>
+      {% if totals.on_the_way %}<div class="stat-hint">{% blocktranslate count counter=totals.on_the_way %}{{ counter }} truck on the way{% plural %}{{ counter }} trucks on the way{% endblocktranslate %}</div>{% endif %}
+    </div>
+  </div>
+  <div class="stat {% if totals.profit_settled < 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">📈</div>
+    <div>
+      <div class="stat-label">{% translate "Profit on settled trucks" %}</div>
+      <div class="stat-value inr" data-value="{{ totals.profit_settled }}">₹ {{ totals.profit_settled }}</div>
+      <div class="stat-hint">{% translate "expected on open trucks" %} ₹ <span class="inr-abs" data-value="{{ totals.profit_expected }}">{{ totals.profit_expected }}</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <form class="toolbar" method="GET" data-no-loading>
+    <input class="input" type="date" name="from" value="{{ date_from|date:'Y-m-d' }}" title="{% translate 'From date' %}">
+    <input class="input" type="date" name="to" value="{{ date_to|date:'Y-m-d' }}" title="{% translate 'To date' %}">
+    <select class="select" name="customer">
+      <option value="">{% translate "All customers" %}</option>
+      {% for customer in customers %}<option value="{{ customer.id }}" {% if customer_id == customer.id|stringformat:"s" %}selected{% endif %}>{{ customer.customer_name }}</option>{% endfor %}
+    </select>
+    <select class="select" name="mill">
+      <option value="">{% translate "All mills" %}</option>
+      {% for mill in mills %}<option value="{{ mill.id }}" {% if mill_id == mill.id|stringformat:"s" %}selected{% endif %}>{{ mill.mill_name }}</option>{% endfor %}
+    </select>
+    {% if brokers %}
+    <select class="select" name="broker">
+      <option value="">{% translate "All brokers" %}</option>
+      {% for broker in brokers %}<option value="{{ broker.id }}" {% if broker_id == broker.id|stringformat:"s" %}selected{% endif %}>{{ broker.broker_name }}</option>{% endfor %}
+    </select>
+    {% endif %}
+    <select class="select" name="status">
+      <option value="">{% translate "Every status" %}</option>
+      {% for key, label in statuses %}<option value="{{ key }}" {% if status == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-outline" type="submit">{% translate "Filter" %}</button>
+  </form>
+
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="table table-cards register">
+      <thead>
+        <tr>
+          <th>{% translate "Truck" %}</th>
+          <th>{% translate "Mill · rate × bags" %}</th>
+          <th class="right">{% translate "Weight" %}</th>
+          <th class="right">{% translate "Cost" %}</th>
+          <th>{% translate "Party" %}</th>
+          <th class="right">{% translate "Received weight" %}</th>
+          <th class="right">{% translate "Party owes" %}</th>
+          <th class="right">{% translate "Received" %}</th>
+          <th class="right">{% translate "Profit / loss" %}</th>
+          <th>{% translate "Status" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td data-label="{% translate 'Truck' %}">
+            <a class="row-title" href="{% url 'sale_detail' r.sale.id %}">{{ r.sale.vehicle_number|default:r.sale.invoice_no }}</a>
+            <div class="row-sub">{{ r.sale.sale_date|date:"d M Y" }} · {{ r.sale.invoice_no }}</div>
+          </td>
+          <td data-label="{% translate 'Mill · rate × bags' %}">
+            {% for mill, rate, bags in r.purchase_lines %}
+              <div>{{ mill }} <span class="muted">· ₹{{ rate }} × {{ bags }}</span></div>
+            {% empty %}<span class="muted">—</span>{% endfor %}
+          </td>
+          <td data-label="{% translate 'Weight' %}" class="right">{{ r.weight_kg }} kg<div class="row-sub">{{ r.bags }} {% translate "bags" %}</div></td>
+          <td data-label="{% translate 'Cost' %}" class="right">
+            {% if r.total_cost is not None %}<span class="inr" data-value="{{ r.total_cost }}">₹ {{ r.total_cost }}</span>{% else %}—{% endif %}
+            <div class="row-sub">{% if r.loading %}{% translate "loading" %} ₹{{ r.loading }} · {% endif %}{% if r.freight_cost %}{% translate "freight" %} ₹{{ r.freight_cost }}{% endif %}</div>
+          </td>
+          <td data-label="{% translate 'Party' %}">
+            {% if r.sale.customer_id %}<a href="{% url 'customer_ledger' r.sale.customer_id %}">{{ r.sale.customer_name }}</a>{% else %}{{ r.sale.customer_name }}{% endif %}
+            <div class="row-sub">₹{{ r.sale_rate }}/kg{% if r.sale.broker %} · 🤝 {{ r.sale.broker.broker_name }}{% if r.sale.collect_from == 'broker' %} <span class="badge badge-blue">{% translate "broker pays" %}</span>{% endif %}{% endif %}</div>
+          </td>
+          <td data-label="{% translate 'Received weight' %}" class="right">
+            {% if r.received_kg is not None %}{{ r.received_kg }} kg
+              {% if r.loss_kg %}<div class="row-sub {% if r.loss_kg > 0 %}text-danger{% endif %}">{% translate "short" %} {{ r.loss_kg }} kg</div>{% endif %}
+            {% else %}<a href="{% url 'settle_sale' r.sale.id %}">{% translate "Record" %} →</a>{% endif %}
+          </td>
+          <td data-label="{% translate 'Party owes' %}" class="right">
+            <span class="inr" data-value="{{ r.net_receivable }}">₹ {{ r.net_receivable }}</span>
+            <div class="row-sub">{% if r.cash_discount %}CD ₹{{ r.cash_discount }}{% endif %}{% if r.brokerage_cut %} · {% translate "brokerage" %} ₹{{ r.brokerage_cut }}{% endif %}</div>
+          </td>
+          <td data-label="{% translate 'Received' %}" class="right">
+            <span class="inr" data-value="{{ r.received }}">₹ {{ r.received }}</span>
+            {% if r.last_payment %}<div class="row-sub">{{ r.last_payment|date:"d M Y" }}</div>{% endif %}
+          </td>
+          <td data-label="{% translate 'Profit / loss' %}" class="right bold {% if r.profit is not None and r.profit < 0 %}text-danger{% else %}text-success{% endif %}">
+            {% if r.profit is not None %}<span class="inr" data-value="{{ r.profit }}">₹ {{ r.profit }}</span>{% else %}<span class="muted">—</span>{% endif %}
+          </td>
+          <td data-label="{% translate 'Status' %}">
+            <span class="badge {% if r.status == 'settled' %}badge-green{% elif r.status == 'on_the_way' %}badge-blue{% elif r.status == 'partly_paid' %}badge-orange{% else %}badge-red{% endif %}">{{ r.status_label }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if totals.no_cost %}
+    <p class="field-hint" style="margin-top:10px;">{% blocktranslate count counter=totals.no_cost %}{{ counter }} old sale has no stock-lot data, so its profit is not shown.{% plural %}{{ counter }} old sales have no stock-lot data, so their profit is not shown.{% endblocktranslate %}</p>
+  {% endif %}
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">🚚</div>
+    <div class="empty-title">{% translate "No trucks in this period" %}</div>
+    <p>{% translate "Try a wider date range, or make a sale." %}</p>
+  </div>
+  {% endif %}
+</div>
+
+{% if rows %}
+<div class="two-col two-col-even">
+  <div class="card">
+    <div class="list-title" style="margin-bottom:10px;">🤝 {% translate "Profit by broker" %}</div>
+    <div class="table-wrap">
+      <table class="table table-cards">
+        <thead><tr><th>{% translate "Broker" %}</th><th class="right">{% translate "Trucks" %}</th><th class="right">{% translate "Brokerage" %}</th><th class="right">{% translate "Due" %}</th><th class="right">{% translate "Profit" %}</th></tr></thead>
+        <tbody>
+          {% for g in by_broker %}
+          <tr>
+            <td data-label="{% translate 'Broker' %}" class="row-title">{% if g.id %}<a href="{% url 'broker_report_detail' g.id %}">{{ g.name }}</a>{% else %}{{ g.name }}{% endif %}</td>
+            <td data-label="{% translate 'Trucks' %}" class="right">{{ g.trucks }}{% if g.losses %}<div class="row-sub text-danger">{% blocktranslate count counter=g.losses %}{{ counter }} at a loss{% plural %}{{ counter }} at a loss{% endblocktranslate %}</div>{% endif %}</td>
+            <td data-label="{% translate 'Brokerage' %}" class="right">₹ {{ g.brokerage }}</td>
+            <td data-label="{% translate 'Due' %}" class="right {% if g.due > 0 %}text-danger{% endif %}">₹ {{ g.due }}</td>
+            <td data-label="{% translate 'Profit' %}" class="right bold {% if g.profit < 0 %}text-danger{% else %}text-success{% endif %}"><span class="inr" data-value="{{ g.profit }}">₹ {{ g.profit }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <div class="list-title" style="margin-bottom:10px;">👥 {% translate "Profit by customer" %}</div>
+    <div class="table-wrap">
+      <table class="table table-cards">
+        <thead><tr><th>{% translate "Customer" %}</th><th class="right">{% translate "Trucks" %}</th><th class="right">{% translate "Shortage" %}</th><th class="right">{% translate "Due" %}</th><th class="right">{% translate "Profit" %}</th></tr></thead>
+        <tbody>
+          {% for g in by_customer %}
+          <tr>
+            <td data-label="{% translate 'Customer' %}" class="row-title">{% if g.id %}<a href="{% url 'customer_ledger' g.id %}">{{ g.name }}</a>{% else %}{{ g.name }}{% endif %}</td>
+            <td data-label="{% translate 'Trucks' %}" class="right">{{ g.trucks }}</td>
+            <td data-label="{% translate 'Shortage' %}" class="right">{{ g.loss_kg }} kg</td>
+            <td data-label="{% translate 'Due' %}" class="right {% if g.due > 0 %}text-danger{% endif %}">₹ {{ g.due }}</td>
+            <td data-label="{% translate 'Profit' %}" class="right bold {% if g.profit < 0 %}text-danger{% else %}text-success{% endif %}"><span class="inr" data-value="{{ g.profit }}">₹ {{ g.profit }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="list-title" style="margin-bottom:8px;">{% translate "How the profit is worked out" %}</div>
+  <ol class="muted small" style="padding-left:18px; display:grid; gap:4px;">
+    <li>{% translate "Party value = invoice value on the weight the party received (shortage in transit is your loss)." %}</li>
+    <li>{% translate "Sale income = party value before GST − cash discount − brokerage the party cuts − other deductions." %}</li>
+    <li>{% translate "Cost = rice at landed cost (mill rate + purchase expenses) + loading + freight you carry (advance + balance the party paid the driver) + commission you pay the broker." %}</li>
+    <li>{% translate "Profit = sale income − cost. Freight the party paid the driver is counted once: as your cost, and as a cut from what they pay you." %}</li>
+    <li>{% translate "A truck that is not paid yet is 'awaiting payment', not a loss." %}</li>
+  </ol>
+</div>
+
+{% endblock %}

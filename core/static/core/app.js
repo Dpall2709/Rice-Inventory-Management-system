@@ -40,7 +40,10 @@
     var dark = currentTheme() === "dark";
     document.querySelectorAll("[data-toggle-theme]").forEach(function (btn) {
       btn.textContent = dark ? "☀️" : "🌙";
-      btn.title = dark ? "Switch to light mode" : "Switch to dark mode";
+      // The template supplies the translated titles; English is the fallback.
+      btn.title = dark
+        ? (btn.getAttribute("data-title-light") || "Switch to light mode")
+        : (btn.getAttribute("data-title-dark") || "Switch to dark mode");
     });
   }
 
@@ -212,7 +215,9 @@
     if (!modal) return;
     e.preventDefault();
     pending = el;
-    confirmTitle.textContent = el.getAttribute("data-confirm-title") || "Please confirm";
+    confirmTitle.textContent = el.getAttribute("data-confirm-title")
+      || modal.getAttribute("data-default-title")
+      || "Please confirm";
     confirmText.textContent = el.getAttribute("data-confirm");
     modal.hidden = false;
   });

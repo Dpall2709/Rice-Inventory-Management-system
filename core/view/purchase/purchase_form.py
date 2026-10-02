@@ -9,6 +9,7 @@ import json
 
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 from core.forms import PurchaseForm, PurchaseItemFormSet
 from core.models import Payment, Product, Purchase
@@ -118,7 +119,13 @@ def record_payment(purchase, amount, mode, company):
 
 @login_required
 def add_purchase(request):
+    from .scan import attach_scan, clear_draft, draft_initial, get_draft
+
     company = company_of(request)
+
+    # A bill scanned at /purchase/scan/ arrives here as ?scan=1 with its draft
+    # in the session; the form is pre-filled and the user checks it.
+    scan_draft = get_draft(request) if (request.GET.get("scan") or request.POST.get("scan")) else None
 
     if request.method == "POST":
         form = PurchaseForm(request.POST, company=company)
@@ -168,16 +175,32 @@ def add_purchase(request):
                     company,
                 )
 
+                if scan_draft:
+                    attach_scan(purchase, scan_draft)
+                    purchase.save(update_fields=["bill_file", "entry_source", "irn"])
+
+            if scan_draft:
+                clear_draft(request)
+
             messages.success(
                 request,
-                f"Purchase {purchase.purchase_ref} saved · "
-                f"{purchase.total_bags} bags · ₹ {purchase.total_amount}",
+                _("Purchase %(ref)s saved · %(bags)s bags · ₹ %(total)s") % {
+                    "ref": purchase.purchase_ref,
+                    "bags": purchase.total_bags,
+                    "total": purchase.total_amount,
+                },
             )
 
             if request.POST.get("save_and_new"):
                 return redirect("add_purchase")
 
             return redirect("purchase_detail", purchase_id=purchase.id)
+    elif scan_draft:
+        initial, lines = draft_initial(company, scan_draft)
+        initial["purchase_date"] = initial["purchase_date"] or timezone.localdate()
+        form = PurchaseForm(company=company, initial=initial)
+        formset = PurchaseItemFormSet(initial=lines, form_kwargs={"company": company})
+        formset.extra = max(len(lines), 1)
     else:
         form = PurchaseForm(
             company=company,
@@ -190,6 +213,7 @@ def add_purchase(request):
         "formset": formset,
         "mode": "add",
         "product_tax_json": product_tax_map(company),
+        "scan": scan_draft,
     })
 
 
@@ -235,7 +259,9 @@ def edit_purchase(request, purchase_id):
                     company,
                 )
 
-            messages.success(request, f"Purchase {purchase.purchase_ref or purchase.invoice_no} updated.")
+            messages.success(request, _("Purchase %(ref)s updated.") % {
+                "ref": purchase.purchase_ref or purchase.invoice_no,
+            })
             return redirect("purchase_detail", purchase_id=purchase.id)
     else:
         from core.models import PurchaseExpense

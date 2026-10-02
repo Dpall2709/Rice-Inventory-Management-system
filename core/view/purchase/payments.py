@@ -15,6 +15,8 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
+from django.utils.translation import gettext as _
+from django.utils.translation import gettext_noop
 
 from core.models import Mill, Payment, Purchase
 from core.services.ledger import mill_statement, purchase_payment_status
@@ -22,7 +24,9 @@ from core.tenancy import company_of, tenant_object_or_404
 
 from ..base_imports import *
 
-PAYMENT_MODES = ["Cash", "UPI", "Bank transfer", "Cheque"]
+# Stored in the database as-is (English). gettext_noop only marks them for
+# translation; the template translates the dropdown label, never the value.
+PAYMENT_MODES = [gettext_noop("Cash"), gettext_noop("UPI"), gettext_noop("Bank transfer"), gettext_noop("Cheque")]
 
 
 def read_payment(post):
@@ -35,23 +39,23 @@ def read_payment(post):
         amount = None
 
     if amount is None:
-        errors["amount"] = "Enter the amount paid, in rupees."
+        errors["amount"] = _("Enter the amount paid, in rupees.")
     elif amount <= 0:
-        errors["amount"] = "The amount must be more than zero."
+        errors["amount"] = _("The amount must be more than zero.")
 
     mode = (post.get("payment_mode") or "").strip()
     if not mode:
-        errors["payment_mode"] = "Choose how you paid."
+        errors["payment_mode"] = _("Choose how you paid.")
 
     raw_date = (post.get("payment_date") or "").strip()
     try:
         paid_on = date.fromisoformat(raw_date) if raw_date else timezone.localdate()
     except ValueError:
         paid_on = None
-        errors["payment_date"] = "Enter a valid date."
+        errors["payment_date"] = _("Enter a valid date.")
 
     if paid_on and paid_on > timezone.localdate():
-        errors["payment_date"] = "A payment cannot be dated in the future."
+        errors["payment_date"] = _("A payment cannot be dated in the future.")
 
     return {
         "amount": amount,
@@ -105,14 +109,18 @@ def add_mill_payment(request, mill_id):
         if extra > 0:
             messages.warning(
                 request,
-                f"₹ {values['amount']} saved. That is ₹ {extra} more than you owed "
-                f"{mill.mill_name}, so it is kept as an advance with the mill.",
+                _(
+                    "₹ %(amount)s saved. That is ₹ %(extra)s more than you owed "
+                    "%(mill)s, so it is kept as an advance with the mill."
+                ) % {"amount": values["amount"], "extra": extra, "mill": mill.mill_name},
             )
         else:
             messages.success(
                 request,
-                f"₹ {values['amount']} paid to {mill.mill_name}. "
-                "It has been applied to the oldest unpaid bills first.",
+                _(
+                    "₹ %(amount)s paid to %(mill)s. "
+                    "It has been applied to the oldest unpaid bills first."
+                ) % {"amount": values["amount"], "mill": mill.mill_name},
             )
 
         return redirect("mill_report_detail", mill_id=mill.id)
@@ -159,12 +167,18 @@ def add_purchase_payment(request, purchase_id):
         if extra > 0:
             messages.warning(
                 request,
-                f"Bill {purchase.invoice_no} is settled. The extra ₹ {extra} has been "
-                f"applied to {purchase.mill.mill_name}'s other unpaid bills "
-                "(or kept as advance if none are left).",
+                _(
+                    "Bill %(invoice_no)s is settled. The extra ₹ %(extra)s has been "
+                    "applied to %(mill)s's other unpaid bills "
+                    "(or kept as advance if none are left)."
+                ) % {"invoice_no": purchase.invoice_no, "extra": extra, "mill": purchase.mill.mill_name},
             )
         else:
-            messages.success(request, f"₹ {values['amount']} paid against bill {purchase.invoice_no}.")
+            messages.success(
+                request,
+                _("₹ %(amount)s paid against bill %(invoice_no)s.")
+                % {"amount": values["amount"], "invoice_no": purchase.invoice_no},
+            )
 
         return redirect("purchase_detail", purchase_id=purchase.id)
 

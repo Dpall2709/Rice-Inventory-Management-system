@@ -1384,3 +1384,598 @@ class BillPaymentExplanationTests(TestCase):
         self.assertContains(normal_page, 'data-nav="page"')
         # and falls back to its parent, the purchase list
         self.assertContains(normal_page, f'data-back-fallback="{reverse("purchase_list")}"')
+
+
+# ==========================================================================
+# Selling: customers, stock lots, brokers, ledgers
+# ==========================================================================
+
+from core.models import Broker, Customer, Sale, SaleItem, SaleLot  # noqa: E402
+from core.services.customer_ledger import broker_statement, customer_statement  # noqa: E402
+from core.services.sale_service import (  # noqa: E402
+    broker_commission,
+    product_stock,
+    sale_profit,
+    suggested_tax_type,
+)
+
+
+class SaleTests(TestCase):
+    """A sale is made to a customer, takes bags out of real stock lots, and
+    shows up in the customer's and the broker's ledgers."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Omicron Rice", "omicron_user")
+        self.company.state = "Bihar"
+        self.company.save()
+        self.client.login(username="omicron_user", password="TestPass#2026")
+
+        self.mill = Mill.objects.create(company=self.company, mill_name="Lot Mill", mobile="9876543210")
+        self.product = Product.objects.create(
+            company=self.company, rice_name="Katarni", hsn_code="1006", gst_percent=5
+        )
+        self.customer = Customer.objects.create(
+            company=self.company, customer_name="Ram Traders", state="Bihar",
+            gst_number="10ABCDE1234F1Z5", billing_address="Station Road", city="Patna",
+        )
+        today = timezone.localdate()
+        # Two lots of the same rice: the older one at 30/kg, the newer at 32/kg.
+        self.old_lot = self._lot("OLD-1", today - timedelta(days=10), bags=10, rate="30")
+        self.new_lot = self._lot("NEW-1", today - timedelta(days=2), bags=10, rate="32")
+
+    def _lot(self, invoice_no, when, bags, rate, product=None, weight=50):
+        purchase = Purchase.objects.create(
+            company=self.company, mill=self.mill, invoice_no=invoice_no,
+            purchase_date=when, total_amount=0, tax_type="none",
+        )
+        item = PurchaseItem(
+            purchase=purchase, product=product or self.product,
+            bag_weight=weight, bag_count=bags, purchase_price=Decimal(rate),
+        )
+        item.compute()
+        item.save()
+        purchase.taxable_amount = item.taxable_amount
+        purchase.total_amount = item.line_total
+        purchase.save()
+        return item
+
+    def sale_post(self, **overrides):
+        """8 bags x 50 kg at 40/kg = 16,000 + 5% GST."""
+        data = {
+            "customer": self.customer.id,
+            "sale_date": timezone.localdate().isoformat(),
+            "due_date": "",
+            "tax_type": "cgst_sgst",
+            "broker": "",
+            "broker_commission_type": "per_bag",
+            "broker_commission_rate": "",
+            "vehicle_number": "br01ab1234",
+            "driver_name": "Raju",
+            "driver_mobile": "",
+            "transporter_name": "",
+            "transport_rate_per_ton": "1000",
+            "transport_paid_by_dealer": "0",
+            "transport_paid_by_customer": "0",
+            "advance_received": "",
+            "advance_mode": "",
+            "notes": "",
+            "items-TOTAL_FORMS": "1",
+            "items-INITIAL_FORMS": "0",
+            "items-MIN_NUM_FORMS": "0",
+            "items-MAX_NUM_FORMS": "1000",
+            "items-0-product": self.product.id,
+            "items-0-bag_weight": "50",
+            "items-0-bag_count": "8",
+            "items-0-rate_per_kg": "40",
+            "items-0-gst_percent": "5",
+            "items-0-purchase_item": "",
+        }
+        data.update(overrides)
+        return data
+
+    def make_sale(self, **overrides):
+        before = set(Sale.objects.values_list("id", flat=True))
+        response = self.client.post(reverse("add_sale"), self.sale_post(**overrides))
+        new = Sale.objects.exclude(id__in=before).first()
+        return response, new
+
+    # ---- totals -----------------------------------------------------------
+
+    def test_sale_totals_and_customer_snapshot(self):
+        response, sale = self.make_sale()
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(sale.customer, self.customer)
+        self.assertEqual(sale.customer_name, "Ram Traders")
+        self.assertEqual(sale.customer_gst, "10ABCDE1234F1Z5")
+        self.assertIn("Station Road", sale.billing_address)
+        self.assertEqual(sale.total_bags, 8)
+        self.assertEqual(sale.total_quantity_kg, Decimal("400.00"))
+        self.assertEqual(sale.taxable_amount, Decimal("16000.00"))
+        self.assertEqual(sale.cgst_amount, Decimal("400.00"))
+        self.assertEqual(sale.sgst_amount, Decimal("400.00"))
+        self.assertEqual(sale.total_amount, Decimal("16800.00"))
+        self.assertEqual(sale.transport_charge, Decimal("400.00"))   # 0.4 ton x 1000
+        self.assertEqual(sale.vehicle_number, "BR01AB1234")
+        self.assertTrue(sale.invoice_no.startswith("SAL-"))
+
+    def test_igst_for_a_customer_in_another_state(self):
+        other = Customer.objects.create(company=self.company, customer_name="Delhi Foods", state="Delhi")
+        self.assertEqual(suggested_tax_type(self.company, other), Sale.IGST)
+        self.assertEqual(suggested_tax_type(self.company, self.customer), Sale.CGST_SGST)
+
+        _, sale = self.make_sale(customer=other.id, tax_type="igst")
+        self.assertEqual(sale.igst_amount, Decimal("800.00"))
+        self.assertEqual(sale.cgst_amount, Decimal("0"))
+
+    def test_total_is_rounded_to_whole_rupees(self):
+        _, sale = self.make_sale(**{"items-0-rate_per_kg": "40.33"})
+        # 400 kg x 40.33 = 16132.00 + 806.60 GST = 16938.60 -> 16939
+        self.assertEqual(sale.total_amount, Decimal("16939.00"))
+        self.assertEqual(sale.round_off, Decimal("0.40"))
+
+    def test_later_change_to_customer_does_not_rewrite_the_invoice(self):
+        _, sale = self.make_sale()
+        self.customer.customer_name = "Ram Traders (New)"
+        self.customer.save()
+        sale.refresh_from_db()
+        self.assertEqual(sale.customer_name, "Ram Traders")
+
+    # ---- stock -----------------------------------------------------------
+
+    def test_oldest_lot_is_used_first(self):
+        _, sale = self.make_sale(**{"items-0-bag_count": "12"})
+        lots = {lot.purchase_item_id: lot.bag_count for lot in sale.lots.all()}
+        self.assertEqual(lots, {self.old_lot.id: 10, self.new_lot.id: 2})
+
+    def test_a_chosen_lot_is_used(self):
+        _, sale = self.make_sale(**{"items-0-purchase_item": self.new_lot.id, "items-0-bag_count": "3"})
+        self.assertEqual(list(sale.lots.values_list("purchase_item_id", "bag_count")), [(self.new_lot.id, 3)])
+
+    def test_selling_more_than_stock_is_refused(self):
+        response, sale = self.make_sale(**{"items-0-bag_count": "21"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(sale)
+        self.assertContains(response, "only 20 bags in stock")
+
+        # The refused sale must not use up an invoice number.
+        _, ok = self.make_sale()
+        self.assertTrue(ok.invoice_no.endswith("-0001"))
+
+    def test_more_than_a_chosen_lot_holds_is_refused(self):
+        response, sale = self.make_sale(**{"items-0-purchase_item": self.old_lot.id, "items-0-bag_count": "11"})
+        self.assertIsNone(sale)
+        self.assertContains(response, "only 10 bags left in lot OLD-1")
+
+    def test_a_lot_of_another_rice_is_refused(self):
+        other_rice = Product.objects.create(company=self.company, rice_name="Sona", gst_percent=5)
+        other_lot = self._lot("SONA-1", timezone.localdate(), bags=10, rate="25", product=other_rice)
+        response, sale = self.make_sale(**{"items-0-purchase_item": other_lot.id})
+        self.assertIsNone(sale)
+        self.assertContains(response, "does not match this line")
+
+    def test_bag_size_must_match_the_stock(self):
+        response, sale = self.make_sale(**{"items-0-bag_weight": "30"})
+        self.assertIsNone(sale)
+        self.assertContains(response, "only 0 bags in stock")
+
+    def test_stock_goes_down_and_comes_back_when_the_sale_is_deleted(self):
+        key = (self.product.id, 50)
+        self.assertEqual(product_stock(self.company)[key], 20)
+        _, sale = self.make_sale()
+        self.assertEqual(product_stock(self.company)[key], 12)
+
+        self.client.post(reverse("delete_sale", args=[sale.id]))
+        self.assertFalse(Sale.objects.filter(id=sale.id).exists())
+        self.assertEqual(product_stock(self.company)[key], 20)
+        self.assertFalse(SaleLot.objects.filter(sale_id=sale.id).exists())
+
+    def test_a_sale_with_payments_cannot_be_deleted(self):
+        _, sale = self.make_sale()
+        Payment.objects.create(company=self.company, related_type="sale", sale=sale, customer=self.customer,
+                               amount=100, payment_mode="Cash", payment_date=timezone.localdate())
+        self.client.post(reverse("delete_sale", args=[sale.id]))
+        self.assertTrue(Sale.objects.filter(id=sale.id).exists())
+
+    def test_editing_a_sale_can_reuse_its_own_bags(self):
+        _, sale = self.make_sale(**{"items-0-bag_count": "20"})       # every bag in stock
+        item = sale.items.get()
+        data = self.sale_post(**{
+            "items-INITIAL_FORMS": "1",
+            "items-0-id": item.id,
+            "items-0-sale": sale.id,
+            "items-0-bag_count": "20",
+            "items-0-rate_per_kg": "45",
+        })
+        response = self.client.post(reverse("edit_sale", args=[sale.id]), data)
+        self.assertEqual(response.status_code, 302)
+        sale.refresh_from_db()
+        self.assertEqual(sale.taxable_amount, Decimal("45000.00"))
+        self.assertEqual(sale.lots.aggregate(n=models_sum("bag_count"))["n"], 20)
+
+    def test_product_on_an_invoice_is_deactivated_not_deleted(self):
+        self.make_sale()
+        self.client.post(reverse("delete_product", args=[self.product.id]))
+        self.product.refresh_from_db()
+        self.assertFalse(self.product.is_active)
+
+    # ---- broker and profit -----------------------------------------------
+
+    def test_broker_commission_kinds(self):
+        self.assertEqual(broker_commission("per_bag", 5, 8, 400, 16000), Decimal("40.00"))
+        self.assertEqual(broker_commission("per_quintal", 10, 8, 400, 16000), Decimal("40.00"))
+        self.assertEqual(broker_commission("percent", 1, 8, 400, 16000), Decimal("160.00"))
+        self.assertEqual(broker_commission("per_bag", 0, 8, 400, 16000), Decimal("0.00"))
+
+    def test_broker_commission_is_owed_to_the_broker(self):
+        broker = Broker.objects.create(company=self.company, broker_name="Mohan", commission_type="per_bag",
+                                       commission_rate=5)
+        # Customer pays us; we pay the broker his commission ourselves.
+        _, sale = self.make_sale(broker=broker.id, broker_commission_rate="5", collect_from="customer")
+        self.assertEqual(sale.broker_commission, Decimal("40.00"))
+
+        self.client.post(reverse("add_broker_payment", args=[broker.id]), {
+            "amount": "15", "payment_mode": "Cash", "payment_date": timezone.localdate().isoformat(),
+        })
+        statement = broker_statement(self.company, broker)
+        self.assertEqual(statement["earned"], Decimal("40.00"))
+        self.assertEqual(statement["paid"], Decimal("15.00"))
+        self.assertEqual(statement["owed"], Decimal("25.00"))
+
+    def test_profit_leaves_out_gst_and_takes_off_commission(self):
+        broker = Broker.objects.create(company=self.company, broker_name="Mohan")
+        _, sale = self.make_sale(broker=broker.id, broker_commission_type="per_bag", broker_commission_rate="5",
+                                 collect_from="customer")
+        profit = sale_profit(sale)
+        # 8 bags from the old lot: 400 kg x 30 = 12,000 cost.
+        self.assertEqual(profit["goods_cost"], Decimal("12000.00"))
+        # + 400 freight + 40 commission the trader pays
+        self.assertEqual(profit["cost"], Decimal("12440.00"))
+        # 16,000 (before GST) - 12,000 goods - 40 commission - 400 freight
+        # (0.4 ton x 1,000/ton, which the trader carries by default)
+        self.assertEqual(profit["profit"], Decimal("3560.00"))
+
+    # ---- customer ledger -------------------------------------------------
+
+    def test_money_on_account_settles_the_oldest_invoice_first(self):
+        _, first = self.make_sale(**{"items-0-bag_count": "5"})     # 10,500
+        _, second = self.make_sale(**{"items-0-bag_count": "5"})    # 10,500
+
+        self.client.post(reverse("add_customer_payment", args=[self.customer.id]), {
+            "amount": "12000", "payment_mode": "UPI", "payment_date": timezone.localdate().isoformat(),
+        })
+
+        statement = customer_statement(self.company, self.customer)
+        rows = {row["sale"].id: row for row in statement["rows"]}
+        self.assertEqual(rows[first.id]["due"], Decimal("0"))
+        self.assertEqual(rows[second.id]["due"], Decimal("9000.00"))
+        self.assertEqual(statement["total_due"], Decimal("9000.00"))
+
+    def test_advance_on_the_invoice_counts_as_received(self):
+        _, sale = self.make_sale(advance_received="5000", advance_mode="Cash")
+        statement = customer_statement(self.company, self.customer)
+        self.assertEqual(statement["total_received"], Decimal("5000.00"))
+        self.assertEqual(statement["total_due"], Decimal("11800.00"))
+
+    def test_received_without_a_mode_is_refused(self):
+        response, sale = self.make_sale(advance_received="5000", advance_mode="")
+        self.assertIsNone(sale)
+        self.assertContains(response, "Choose how the money was received.")
+
+    def test_overpayment_becomes_an_advance(self):
+        self.make_sale()
+        self.client.post(reverse("add_customer_payment", args=[self.customer.id]), {
+            "amount": "20000", "payment_mode": "Cash", "payment_date": timezone.localdate().isoformat(),
+        })
+        statement = customer_statement(self.company, self.customer)
+        self.assertEqual(statement["total_due"], Decimal("0"))
+        self.assertEqual(statement["advance"], Decimal("3200.00"))
+
+    # ---- pages -----------------------------------------------------------
+
+    def test_pages_open(self):
+        broker = Broker.objects.create(company=self.company, broker_name="Mohan")
+        _, sale = self.make_sale(broker=broker.id)
+        for name, args in [
+            ("sale_list", []), ("add_sale", []), ("sale_detail", [sale.id]), ("edit_sale", [sale.id]),
+            ("sale_print", [sale.id]), ("delete_sale", [sale.id]), ("add_sale_payment", [sale.id]),
+            ("customer_list", []), ("customer_ledger", [self.customer.id]),
+            ("add_customer_payment", [self.customer.id]),
+            ("broker_list", []), ("add_broker", []), ("broker_report_detail", [broker.id]),
+            ("edit_broker", [broker.id]), ("add_broker_payment", [broker.id]),
+        ]:
+            with self.subTest(page=name):
+                self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 200)
+
+    def test_invoice_pdf(self):
+        _, sale = self.make_sale()
+        response = self.client.get(reverse("sale_invoice_pdf", args=[sale.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(response.content.startswith(b"%PDF"))
+
+    def test_another_company_cannot_see_my_sales_customers_or_brokers(self):
+        broker = Broker.objects.create(company=self.company, broker_name="Mohan")
+        _, sale = self.make_sale()
+        make_company("Pi Rice", "pi_user")
+        self.client.logout()
+        self.client.login(username="pi_user", password="TestPass#2026")
+
+        for name, args in [
+            ("sale_detail", [sale.id]), ("sale_invoice_pdf", [sale.id]), ("sale_print", [sale.id]),
+            ("customer_ledger", [self.customer.id]), ("broker_report_detail", [broker.id]),
+        ]:
+            with self.subTest(page=name):
+                self.assertEqual(self.client.get(reverse(name, args=args)).status_code, 404)
+
+        # Nor sell out of my stock or to my customer.
+        response = self.client.post(reverse("add_sale"), self.sale_post())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Sale.objects.count(), 1)
+
+    def test_broker_form_validates_mobile(self):
+        response = self.client.post(reverse("add_broker"), {
+            "broker_name": "Bad Mobile", "mobile": "abc", "commission_type": "per_bag",
+            "commission_rate": "0", "opening_balance": "0",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Broker.objects.filter(broker_name="Bad Mobile").exists())
+
+
+def models_sum(field):
+    from django.db.models import Sum
+
+    return Sum(field)
+
+
+class LanguageTests(TestCase):
+    """The whole app can be switched to Hindi from the top bar."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Rho Rice", "rho_user")
+        self.client.login(username="rho_user", password="TestPass#2026")
+
+    def test_switching_to_hindi(self):
+        response = self.client.post(reverse("set_language"), {"language": "hi", "next": reverse("sale_list")})
+        self.assertEqual(response.status_code, 302)
+
+        page = self.client.get(reverse("sale_list"))
+        self.assertContains(page, 'lang="hi"')
+        self.assertContains(page, "बिक्री")          # "Sales"
+
+    def test_english_is_the_default(self):
+        page = self.client.get(reverse("sale_list"))
+        self.assertContains(page, 'lang="en"')
+        self.assertContains(page, "Sales")
+
+    def test_language_switch_works_on_an_expired_subscription(self):
+        subscription = subscription_for(self.company)
+        subscription.end_date = timezone.localdate() - timedelta(days=1)
+        subscription.save()
+        response = self.client.post(reverse("set_language"), {"language": "hi", "next": "/"})
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn("billing", response["Location"])
+
+
+# --------------------------------------------------------------------------
+# Dashboard
+# --------------------------------------------------------------------------
+
+from datetime import date  # noqa: E402
+
+from core.services.dashboard import build_dashboard, period_range  # noqa: E402
+from core.services.sale_service import save_sale  # noqa: E402
+
+
+class DashboardTests(TestCase):
+    """The home screen shows real, company-scoped numbers and a to-do list."""
+
+    def setUp(self):
+        self.company, self.user = make_company("Sigma Rice", "sigma_user")
+        self.client.login(username="sigma_user", password="TestPass#2026")
+        self.today = timezone.localdate()
+        self._invoice = 0
+
+    # ---- helpers ---------------------------------------------------------
+
+    def setup_trade(self, company=None, name="Dash"):
+        company = company or self.company
+        mill = Mill.objects.create(company=company, mill_name=f"{name} Mill", mobile="9876543210")
+        product = Product.objects.create(company=company, rice_name=f"{name} Katarni", hsn_code="1006", gst_percent=5)
+        customer = Customer.objects.create(company=company, customer_name=f"{name} Traders", mobile="9123456780")
+        return mill, product, customer
+
+    def buy(self, company, mill, product, when, bags=100, rate="30"):
+        """bags x 50 kg at `rate`/kg + 5% GST (CGST + SGST)."""
+        purchase = Purchase.objects.create(
+            company=company, mill=mill, invoice_no=f"P-{when}-{bags}", purchase_date=when,
+            total_amount=0, tax_type="cgst_sgst",
+        )
+        item = PurchaseItem(purchase=purchase, product=product, bag_weight=50, bag_count=bags,
+                            purchase_price=Decimal(rate), gst_percent=Decimal("5"))
+        item.compute()
+        item.save()
+        purchase.goods_amount = purchase.taxable_amount = item.taxable_amount
+        purchase.cgst_amount = purchase.sgst_amount = item.gst_amount / 2
+        purchase.total_amount = item.line_total
+        purchase.save()
+        return purchase
+
+    def sell(self, company, customer, product, when, bags, rate="40", advance="0", due_date=None):
+        self._invoice += 1
+        sale = Sale(
+            company=company, invoice_no=f"T-{self._invoice}", customer=customer,
+            customer_name=customer.customer_name, sale_date=when, due_date=due_date,
+            tax_type="cgst_sgst", advance_received=Decimal(advance), advance_mode="Cash" if advance != "0" else "",
+            total_quantity_kg=0, taxable_amount=0, gst_amount=0, total_amount=0, balance_amount=0,
+        )
+        item = SaleItem(product=product, bag_weight=50, bag_count=bags,
+                        rate_per_kg=Decimal(rate), gst_percent=Decimal("5"))
+        return save_sale(sale, [item], company)
+
+    # ---- tests -----------------------------------------------------------
+
+    def test_empty_company_shows_onboarding(self):
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Add a mill")
+        self.assertContains(response, "/purchase/scan/")
+        self.assertNotContains(response, "Do this today")
+
+    def test_numbers_for_a_purchase_sale_and_payments(self):
+        mill, product, customer = self.setup_trade()
+        self.buy(self.company, mill, product, self.today)                     # 1,57,500
+        Payment.objects.create(company=self.company, related_type="purchase", mill=mill,
+                               amount=50000, payment_mode="UPI", payment_date=self.today)
+        sale = self.sell(self.company, customer, product, self.today, bags=90, advance="10000")  # 1,89,000
+        Payment.objects.create(company=self.company, related_type="sale", sale=sale, customer=customer,
+                               amount=20000, payment_mode="Cash", payment_date=self.today)
+
+        data = build_dashboard(self.company, "month")
+        kpis, balances = data["kpis"], data["balances"]
+
+        self.assertEqual(kpis["sales_total"], Decimal("189000.00"))
+        self.assertEqual(kpis["sales_bags"], 90)
+        self.assertEqual(kpis["purchases_total"], Decimal("157500.00"))
+        self.assertEqual(kpis["received"], Decimal("30000.00"))
+        self.assertEqual(kpis["paid_to_mills"], Decimal("50000.00"))
+        self.assertEqual(kpis["cash_position"], Decimal("-20000.00"))
+        # 1,80,000 before GST - 4,500 kg x 30 landed cost
+        self.assertEqual(kpis["profit"], Decimal("45000.00"))
+        self.assertEqual(kpis["sales_without_cost"], 0)
+        # 9,000 output GST - 7,500 input GST
+        self.assertEqual(kpis["gst_payable"], Decimal("1500.00"))
+
+        self.assertEqual(balances["customers_owe"], Decimal("159000.00"))
+        self.assertEqual(balances["you_owe_mills"], Decimal("107500.00"))
+        self.assertEqual(balances["stock_value"], Decimal("15000.00"))   # 10 bags x 50 kg x 30
+        self.assertEqual(balances["stock_bags"], 10)
+
+        stock_row = data["stock"]["rows"][0]
+        self.assertEqual(stock_row["avg_cost_per_kg"], Decimal("30.00"))
+        self.assertEqual(stock_row["suggested_per_kg"], Decimal("32.40"))   # 8% default margin
+
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Dash Traders")
+        self.assertContains(response, reverse("add_mill_payment", args=[mill.id]))
+
+    def test_overdue_invoice_appears_with_reminder_buttons(self):
+        mill, product, customer = self.setup_trade()
+        self.buy(self.company, mill, product, self.today - timedelta(days=30))
+        sale = self.sell(self.company, customer, product, self.today - timedelta(days=20), bags=5,
+                         due_date=self.today - timedelta(days=5))
+
+        collect = build_dashboard(self.company)["actions"]["collect"]
+        self.assertEqual(len(collect), 1)
+        self.assertEqual(collect[0]["sale"].id, sale.id)
+        self.assertEqual(collect[0]["days_late"], 5)
+        self.assertEqual(collect[0]["kind"], "overdue")
+
+        response = self.client.get(reverse("dashboard"))
+        self.assertContains(response, reverse("add_sale_payment", args=[sale.id]))
+        self.assertContains(response, "https://wa.me/919123456780?text=")
+        self.assertContains(response, "tel:9123456780")
+
+    def test_old_invoice_without_due_date_counts_as_late(self):
+        mill, product, customer = self.setup_trade()
+        self.buy(self.company, mill, product, self.today - timedelta(days=40))
+        self.sell(self.company, customer, product, self.today - timedelta(days=3), bags=5)     # fresh
+        old = self.sell(self.company, customer, product, self.today - timedelta(days=20), bags=5)
+
+        collect = build_dashboard(self.company)["actions"]["collect"]
+        self.assertEqual([c["sale"].id for c in collect], [old.id])
+        self.assertEqual(collect[0]["kind"], "old")
+
+    def test_low_stock_appears(self):
+        mill, product, _customer = self.setup_trade()
+        self.buy(self.company, mill, product, self.today, bags=15)
+
+        data = build_dashboard(self.company)
+        low = data["actions"]["low_stock"]
+        self.assertEqual(len(low), 1)
+        self.assertEqual(low[0]["bags"], 15)
+        self.assertEqual(data["stock"]["rows"][0]["status"], "low")
+        self.assertContains(self.client.get(reverse("dashboard")), "Buy more")
+
+    def test_plenty_of_stock_is_not_low_and_all_clear(self):
+        mill, product, _customer = self.setup_trade()
+        purchase = self.buy(self.company, mill, product, self.today, bags=200)
+        Payment.objects.create(company=self.company, related_type="purchase", mill=mill, purchase=purchase,
+                               amount=purchase.total_amount, payment_mode="UPI", payment_date=self.today)
+        data = build_dashboard(self.company)
+        self.assertEqual(data["stock"]["rows"][0]["status"], "ok")
+        self.assertEqual(data["actions"]["count"], 0)
+        self.assertContains(self.client.get(reverse("dashboard")), "All clear")
+
+    def test_slow_moving_stock(self):
+        mill, product, _customer = self.setup_trade()
+        self.buy(self.company, mill, product, self.today - timedelta(days=60), bags=100)
+        slow = build_dashboard(self.company)["actions"]["slow_stock"]
+        self.assertEqual(len(slow), 1)
+        self.assertEqual(slow[0]["value"], Decimal("150000.00"))
+
+    def test_another_companys_data_never_appears(self):
+        mill, product, customer = self.setup_trade(name="Mine")
+        self.buy(self.company, mill, product, self.today)
+        self.sell(self.company, customer, product, self.today, bags=5)
+
+        other, _user = make_company("Tau Rice", "tau_user")
+        o_mill, o_product, o_customer = self.setup_trade(company=other, name="Secret")
+        self.buy(other, o_mill, o_product, self.today - timedelta(days=90), bags=10)
+        self.sell(other, o_customer, o_product, self.today - timedelta(days=40), bags=10,
+                  due_date=self.today - timedelta(days=20))
+
+        response = self.client.get(reverse("dashboard"), {"period": "fy"})
+        self.assertEqual(response.status_code, 200)
+        for text in ("Secret Mill", "Secret Katarni", "Secret Traders"):
+            self.assertNotContains(response, text)
+
+        data = build_dashboard(self.company, "fy")
+        self.assertEqual(data["kpis"]["sales_total"], Decimal("10500.00"))
+        self.assertEqual(data["balances"]["customers_owe"], Decimal("10500.00"))
+        self.assertEqual(data["actions"]["collect"], [])
+
+    def test_each_period(self):
+        today = date(2026, 5, 10)
+        self.assertEqual(period_range("fy", today)["start"], date(2026, 4, 1))
+        self.assertEqual(period_range("fy", date(2026, 2, 1))["start"], date(2025, 4, 1))
+        self.assertEqual(period_range("last_month", date(2026, 1, 15))["start"], date(2025, 12, 1))
+        self.assertEqual(period_range("last_month", date(2026, 1, 15))["end"], date(2025, 12, 31))
+        self.assertEqual(period_range("nonsense", today)["key"], "month")
+
+        mill, product, customer = self.setup_trade()
+        self.buy(self.company, mill, product, date(2026, 3, 1), bags=100)
+        for when in (date(2026, 3, 15), date(2026, 4, 2), date(2026, 4, 20), date(2026, 5, 3), today):
+            self.sell(self.company, customer, product, when, bags=2)
+
+        expected = {"today": 1, "month": 2, "last_month": 2, "fy": 4}
+        for period, count in expected.items():
+            with self.subTest(period=period):
+                kpis = build_dashboard(self.company, period, today=today)["kpis"]
+                self.assertEqual(kpis["sales_count"], count)
+                self.assertEqual(kpis["sales_bags"], count * 2)
+
+        for period in ("today", "month", "last_month", "fy", "bad"):
+            with self.subTest(page=period):
+                self.assertEqual(self.client.get(reverse("dashboard"), {"period": period}).status_code, 200)
+
+    def test_sale_without_lot_data_is_listed_for_editing(self):
+        mill, product, customer = self.setup_trade()
+        self.buy(self.company, mill, product, self.today)
+        sale = self.sell(self.company, customer, product, self.today, bags=5)
+        SaleLot.objects.filter(sale=sale).delete()      # like a sale made before lots existed
+
+        data = build_dashboard(self.company)
+        self.assertEqual(data["kpis"]["sales_without_cost"], 1)
+        self.assertEqual([s.id for s in data["actions"]["no_cost"]], [sale.id])
+        self.assertContains(self.client.get(reverse("dashboard")), reverse("edit_sale", args=[sale.id]))
+
+    def test_hindi_page_opens(self):
+        mill, product, customer = self.setup_trade()
+        self.buy(self.company, mill, product, self.today)
+        self.sell(self.company, customer, product, self.today, bags=5)
+        self.client.cookies["django_language"] = "hi"
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'lang="hi"')

@@ -58,6 +58,18 @@ ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "127.0.0.1,localhost" if DEBUG else ""
 
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
+# While developing, allow sharing the local server through an ngrok tunnel
+# (`ngrok http 8000`). Never active in production, where DEBUG is off.
+if DEBUG:
+    ALLOWED_HOSTS += [".ngrok-free.app", ".ngrok-free.dev", ".ngrok.app", ".ngrok.dev", ".ngrok.io"]
+    CSRF_TRUSTED_ORIGINS += [
+        "https://*.ngrok-free.app", "https://*.ngrok-free.dev",
+        "https://*.ngrok.app", "https://*.ngrok.dev", "https://*.ngrok.io",
+    ]
+    # ngrok terminates HTTPS and forwards plain HTTP; trust its header so
+    # Django knows the visitor used HTTPS.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 
 # Application definition
 
@@ -70,11 +82,15 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'core',
     'billing',
+    'accounts',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # Picks English or Hindi for each request, from the language cookie set by
+    # the switcher in the top bar (falls back to the browser's language).
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -95,9 +111,11 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
+                'django.template.context_processors.i18n',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'core.context_processors.asset_version',
+                'accounts.context_processors.business_profile',
             ],
         },
     },
@@ -149,7 +167,20 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'en'
+
+# The whole app can be switched between these two from the top bar.
+LANGUAGES = [
+    ("en", "English"),
+    ("hi", "हिन्दी"),
+]
+
+# Hindi translations live in locale/hi/LC_MESSAGES/django.po. After changing
+# any text, run:  python manage.py makemessages -l hi  then  compilemessages
+LOCALE_PATHS = [BASE_DIR / "locale"]
+
+# Remember the chosen language for a year.
+LANGUAGE_COOKIE_AGE = 60 * 60 * 24 * 365
 
 TIME_ZONE = 'UTC'
 
@@ -207,6 +238,15 @@ SUBSCRIPTION_WARN_DAYS = int(os.getenv("SUBSCRIPTION_WARN_DAYS", "7"))
 
 # Razorpay. Leave empty in development: the billing pages then record a manual
 # payment request instead of opening the payment window.
+# Reading supplier bills (photo / PDF) into the purchase form with Claude.
+# Leave the key empty to switch the photo reader off; QR scanning still works.
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+BILL_SCAN_MODEL = os.getenv("BILL_SCAN_MODEL", "claude-opus-5-5")
+
+# Bill photos are uploaded through Django; allow phone-camera sized files.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
@@ -261,6 +301,26 @@ if not DEBUG:
 # Log the user out after this many seconds of inactivity (default 12 hours).
 SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", str(12 * 60 * 60)))
 SESSION_SAVE_EVERY_REQUEST = True
+
+# ---------------------------------------------------------------------------
+# Accounts (sign-up email code, login throttling) - see accounts/services.py
+#
+# The login throttle and the availability-check limit use Django's cache.
+# No CACHES setting = LocMemCache, which is per process: fine for one process,
+# but with several gunicorn workers set CACHES to Redis/Memcached so all
+# workers share the counters.
+# ---------------------------------------------------------------------------
+ACCOUNTS_SIGNUP_TTL_MINUTES = 30        # pending sign-up lives this long
+ACCOUNTS_OTP_TTL_MINUTES = 10           # one emailed code is valid this long
+ACCOUNTS_OTP_MAX_ATTEMPTS = 5           # wrong guesses before the code dies
+ACCOUNTS_OTP_RESEND_SECONDS = 60        # wait between two codes
+ACCOUNTS_OTP_MAX_SENDS_PER_HOUR = 5     # codes per email address per hour
+ACCOUNTS_LOGIN_MAX_FAILURES = 5         # per identifier and per IP ...
+ACCOUNTS_LOGIN_WINDOW_SECONDS = 15 * 60  # ... within this window
+ACCOUNTS_LOGIN_BLOCK_SECONDS = 15 * 60   # then blocked this long
+# "Keep me signed in": sliding session of this length. Unticked = until the
+# browser closes.
+ACCOUNTS_REMEMBER_ME_SECONDS = int(os.getenv("ACCOUNTS_REMEMBER_ME_SECONDS", str(30 * 24 * 60 * 60)))
 
 LOGGING = {
     "version": 1,

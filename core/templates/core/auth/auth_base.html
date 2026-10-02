@@ -1,34 +1,95 @@
-<!DOCTYPE html>
-<html lang="en">
+{% load static i18n %}{% get_current_language as LANGUAGE_CODE %}<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{% block title %}Rice Billing{% endblock %}</title>
-<style>
-  *{margin:0;padding:0;box-sizing:border-box;font-family:Inter,Arial,sans-serif}
-  body{min-height:100vh;display:flex;justify-content:center;align-items:center;
-       background:linear-gradient(135deg,#0f172a,#1e293b);padding:16px}
-  .wrap{width:100%;max-width:420px}
-  .card{background:#fff;border-radius:20px;padding:36px;box-shadow:0 15px 40px rgba(0,0,0,.15)}
-  h1{font-size:20px;margin-bottom:8px;color:#0f172a}
-  p{font-size:14px;color:#475569;margin-bottom:18px;line-height:1.5}
-  label{display:block;font-size:13px;color:#334155;margin:14px 0 6px}
-  input{width:100%;padding:12px 14px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px}
-  button{width:100%;margin-top:20px;padding:12px;border:0;border-radius:10px;background:#16a34a;
-         color:#fff;font-size:15px;font-weight:600;cursor:pointer}
-  button:hover{background:#15803d}
-  a{color:#16a34a;text-decoration:none;font-size:14px}
-  .foot{text-align:center;margin-top:18px}
-  .err{background:#fef2f2;color:#b91c1c;padding:10px 12px;border-radius:8px;font-size:13px;margin-top:12px}
-  .ok{background:#f0fdf4;color:#15803d;padding:10px 12px;border-radius:8px;font-size:13px;margin-top:12px}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#4f46e5">
+  <title>{% block title %}{% translate "Login" %}{% endblock %} · Rice Billing</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'core/style.css' %}?v={{ asset_version }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>">
+
+  {# Same saved theme as the app, applied before the first paint. #}
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+  {% block extra_head %}{% endblock %}
 </head>
-<body>
-  <div class="wrap">
-    <div class="card">
-      <div style="text-align:center;font-size:26px;margin-bottom:10px">🌾</div>
-      {% block content %}{% endblock %}
-    </div>
+<body class="auth">
+
+  <div class="auth-shell">
+
+    <!-- Brand panel: hidden on phones, where every pixel goes to the form. -->
+    <aside class="auth-brand">
+      <div class="auth-brand-top">
+        <span class="auth-logo">🌾</span>
+        <span class="auth-name">Rice Billing</span>
+      </div>
+
+      <div class="auth-pitch">
+        <h2>{% translate "Billing, stock and dues for rice traders - in one place." %}</h2>
+        <ul>
+          <li><span>🧾</span>{% translate "GST invoices and purchase bills in a minute" %}</li>
+          <li><span>📦</span>{% translate "Live stock by lot, with real cost per kg" %}</li>
+          <li><span>💰</span>{% translate "Know who owes you and whom you owe, every day" %}</li>
+          <li><span>📷</span>{% translate "Scan a mill's bill instead of typing it" %}</li>
+        </ul>
+      </div>
+
+      <div class="auth-brand-foot">{% translate "Works on phone and computer · English / हिन्दी" %}</div>
+    </aside>
+
+    <main class="auth-main">
+      <div class="auth-top">
+        <a class="auth-mobile-brand" href="{% url 'login' %}"><span>🌾</span> Rice Billing</a>
+        <div class="auth-top-actions">
+          {% include "core/partials/language_switch.html" %}
+          <button class="icon-btn" type="button" data-toggle-theme
+                  data-title-light="{% translate 'Switch to light mode' %}"
+                  data-title-dark="{% translate 'Switch to dark mode' %}"
+                  title="{% translate 'Switch light / dark' %}">🌙</button>
+        </div>
+      </div>
+
+      <div class="auth-card {% block card_class %}{% endblock %}">
+        {% if messages %}
+          {% for message in messages %}
+            <div class="auth-msg {% if 'error' in message.tags %}is-error{% elif 'warning' in message.tags %}is-warning{% else %}is-ok{% endif %}" role="alert">
+              <span>{% if 'error' in message.tags %}⛔{% elif 'warning' in message.tags %}⚠️{% else %}✅{% endif %}</span>
+              <div>{{ message }}</div>
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        {% block content %}{% endblock %}
+      </div>
+
+      <div class="auth-foot">© {% now "Y" %} Rice Billing</div>
+    </main>
   </div>
+
+  <script src="{% static 'core/app.js' %}?v={{ asset_version }}"></script>
+  <script>
+    // Show / hide password.
+    document.querySelectorAll("[data-toggle-password]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var input = document.getElementById(btn.getAttribute("data-toggle-password"));
+        if (!input) return;
+        var show = input.type === "password";
+        input.type = show ? "text" : "password";
+        btn.textContent = show ? "🙈" : "👁";
+        btn.setAttribute("aria-pressed", show ? "true" : "false");
+      });
+    });
+  </script>
+  {% block extra_js %}{% endblock %}
 </body>
 </html>

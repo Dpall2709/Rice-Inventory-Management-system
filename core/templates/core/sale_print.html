@@ -1,90 +1,198 @@
-{% extends 'core/base.html' %}
-{% block page_title %}Review Sale{% endblock %}
+{% load i18n %}{% get_current_language as LANGUAGE_CODE %}<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ sale.invoice_no }} · {{ company.company_name }}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  /* A4 printable invoice. The browser's own print (Ctrl+P / Save as PDF) is used. */
+  @page { size: A4; margin: 12mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e5e7eb; color: #111827; font: 12.5px/1.45 "Inter", "Noto Sans Devanagari", Arial, sans-serif; }
+  .sheet { width: 210mm; min-height: 297mm; margin: 16px auto; padding: 12mm; background: #fff; box-shadow: 0 4px 24px rgba(0,0,0,.12); }
+  .toolbar { width: 210mm; margin: 16px auto 0; display: flex; gap: 8px; justify-content: flex-end; }
+  .toolbar button, .toolbar a { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #d1d5db; background: #fff; color: #111827; cursor: pointer; text-decoration: none; }
+  .toolbar button { background: #16a34a; color: #fff; border-color: #16a34a; font-weight: 600; }
+  .box { border: 1px solid #111827; }
+  .row { display: flex; }
+  .row > * { flex: 1 1 0; }
+  .cell { padding: 6px 9px; }
+  .cell + .cell { border-left: 1px solid #111827; }
+  .bt { border-top: 1px solid #111827; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  .muted { color: #4b5563; }
+  .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #4b5563; font-weight: 600; }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  .title { font-weight: 700; letter-spacing: .08em; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 6px 7px; vertical-align: top; }
+  thead th { border-bottom: 1px solid #111827; font-size: 11px; text-align: left; }
+  tbody td { border-bottom: 1px dotted #9ca3af; }
+  th.right, td.right { text-align: right; }
+  .totals td { padding: 4px 9px; }
+  .grand td { font-weight: 700; font-size: 14px; border-top: 1px solid #111827; }
+  .words { font-weight: 600; }
+  .sign { height: 60px; }
+  .wrap { overflow-wrap: anywhere; }
+  .items-scroll { overflow-x: auto; }
+  .items-scroll table { min-width: 520px; }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .sheet { margin: 0; padding: 0; width: auto; min-height: 0; box-shadow: none; }
+    .items-scroll table { min-width: 0; }
+  }
+  @media (max-width: 820px) {
+    .sheet, .toolbar { width: auto; margin: 12px; }
+    .sheet { padding: 12px; min-height: 0; }
+    .row { flex-direction: column; }
+    .cell + .cell { border-left: 0; border-top: 1px solid #111827; }
+  }
+</style>
+</head>
+<body>
 
-{% block content %}
-<div class="panel">
+<div class="toolbar">
+  <a href="{% url 'sale_detail' sale.id %}">← {% translate "Back" %}</a>
+  <a href="{% url 'sale_invoice_pdf' sale.id %}">📄 PDF</a>
+  <button type="button" onclick="window.print()">🖨 {% translate "Print" %}</button>
+</div>
 
-  <div class="list-header">
-    <div>
-      <h2 class="list-title">Review Sale (Before Save)</h2>
-      <p class="muted">Please confirm all values. You can go back and edit.</p>
+<div class="sheet">
+  <div class="box">
+    <div class="row">
+      <div class="cell muted">{% translate "Original for recipient" %}</div>
+      <div class="cell center title">{% if sale.is_tax_invoice %}{% translate "TAX INVOICE" %}{% else %}{% translate "BILL OF SUPPLY" %}{% endif %}</div>
+      <div class="cell right muted">{{ sale.invoice_no }}</div>
+    </div>
+
+    <div class="cell bt center">
+      <h1>{{ company.company_name }}</h1>
+      <div class="wrap">{{ company.address }}{% if company.city %}, {{ company.city }}{% endif %}{% if company.state %}, {{ company.state }}{% endif %}{% if company.pincode %} - {{ company.pincode }}{% endif %}</div>
+      <div>
+        {% if company.mobile %}{% translate "Mobile" %}: {{ company.mobile }}{% endif %}
+        {% if company.email %} · {{ company.email }}{% endif %}
+      </div>
+      <div>
+        {% if company.gst_number %}GSTIN: <strong>{{ company.gst_number }}</strong>{% endif %}
+        {% if company.pan_number %} · PAN: {{ company.pan_number }}{% endif %}
+      </div>
+    </div>
+
+    <div class="row bt">
+      <div class="cell">
+        <div class="label">{% translate "Invoice" %}</div>
+        <div>{% translate "Invoice no." %}: <strong>{{ sale.invoice_no }}</strong></div>
+        <div>{% translate "Date" %}: {{ sale.sale_date|date:"d-m-Y" }}</div>
+        {% if sale.due_date %}<div>{% translate "Due date" %}: {{ sale.due_date|date:"d-m-Y" }}</div>{% endif %}
+        <div>{% translate "Place of supply" %}: {{ sale.place_of_supply|default:"—" }}</div>
+      </div>
+      <div class="cell">
+        <div class="label">{% translate "Transport" %}</div>
+        <div>{% translate "Vehicle" %}: {{ sale.vehicle_number|default:"—" }}</div>
+        <div>{% translate "Driver" %}: {{ sale.driver_name|default:"—" }}{% if sale.driver_mobile %} ({{ sale.driver_mobile }}){% endif %}</div>
+        <div>{% translate "Transporter" %}: {{ sale.transporter_name|default:"—" }}</div>
+      </div>
+    </div>
+
+    <div class="row bt">
+      <div class="cell wrap">
+        <div class="label">{% translate "Bill to" %}</div>
+        <strong>{{ sale.customer_name }}</strong>
+        <div>{{ sale.billing_address|default:"" }}</div>
+        {% if sale.customer_gst %}<div>GSTIN: <strong>{{ sale.customer_gst }}</strong></div>{% endif %}
+        {% if sale.customer.mobile %}<div>{% translate "Mobile" %}: {{ sale.customer.mobile }}</div>{% endif %}
+      </div>
+      <div class="cell wrap">
+        <div class="label">{% translate "Ship to" %}</div>
+        <strong>{{ sale.customer_name }}</strong>
+        <div>{{ sale.shipping_address|default:sale.billing_address }}</div>
+      </div>
+    </div>
+
+    <div class="bt items-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>{% translate "Description" %}</th><th>HSN</th>
+            <th class="right">{% translate "Bags" %}</th><th class="right">{% translate "Qty (kg)" %}</th>
+            <th class="right">{% translate "Rate/kg" %}</th><th class="right">{% translate "Taxable" %}</th>
+            <th class="right">GST</th><th class="right">{% translate "Amount" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><strong>{{ item.product.rice_name }}</strong><div class="muted">{{ item.bag_count }} × {{ item.bag_weight }} kg</div></td>
+            <td>{{ item.product.hsn_code|default:"—" }}</td>
+            <td class="right">{{ item.bag_count }}</td>
+            <td class="right">{{ item.total_weight }}</td>
+            <td class="right">{{ item.rate_per_kg }}</td>
+            <td class="right">{{ item.amount }}</td>
+            <td class="right">{% if item.gst_percent %}{{ item.gst_percent|floatformat:"-2" }}%<div class="muted">{{ item.gst_amount }}</div>{% else %}—{% endif %}</td>
+            <td class="right"><strong>{{ item.line_total }}</strong></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="row bt">
+      <div class="cell">
+        <div class="label">{% translate "Amount in words" %}</div>
+        <div class="words">{{ amount_words }}</div>
+        <div style="margin-top:10px;" class="label">{% translate "Bank details" %}</div>
+        <div>{{ company.bank_account_name|default:company.company_name }}</div>
+        {% if company.bank_account_no %}<div>A/C: {{ company.bank_account_no }}</div>{% endif %}
+        {% if company.bank_name %}<div>{{ company.bank_name }}{% if company.bank_branch %}, {{ company.bank_branch }}{% endif %}</div>{% endif %}
+        {% if company.bank_ifsc %}<div>IFSC: {{ company.bank_ifsc }}</div>{% endif %}
+        {% if company.upi_id %}<div>UPI: {{ company.upi_id }}</div>{% endif %}
+      </div>
+      <div class="cell" style="padding:0;">
+        <table class="totals">
+          <tr><td>{% translate "Total bags" %}</td><td class="right">{{ sale.total_bags }} ({{ sale.total_quantity_kg }} kg)</td></tr>
+          <tr><td>{% translate "Taxable amount" %}</td><td class="right">₹ {{ sale.taxable_amount }}</td></tr>
+          {% if sale.cgst_amount %}<tr><td>CGST</td><td class="right">₹ {{ sale.cgst_amount }}</td></tr>
+          <tr><td>SGST</td><td class="right">₹ {{ sale.sgst_amount }}</td></tr>{% endif %}
+          {% if sale.igst_amount %}<tr><td>IGST</td><td class="right">₹ {{ sale.igst_amount }}</td></tr>{% endif %}
+          {% if sale.round_off %}<tr><td>{% translate "Round off" %}</td><td class="right">{{ sale.round_off }}</td></tr>{% endif %}
+          <tr class="grand"><td>{% translate "Invoice total" %}</td><td class="right">₹ {{ sale.total_amount }}</td></tr>
+          <tr><td>{% translate "Received" %}</td><td class="right">₹ {{ status.paid }}</td></tr>
+          <tr><td><strong>{% translate "Balance due" %}</strong></td><td class="right"><strong>₹ {{ status.due }}</strong></td></tr>
+        </table>
+      </div>
+    </div>
+
+    {% if sale.transport_charge %}
+    <div class="cell bt muted">
+      {% blocktranslate with ton=sale.total_ton|floatformat:3 rate=sale.transport_rate_per_ton freight=sale.transport_charge due=sale.transport_due trimmed %}
+        Freight (for information, not included above): {{ ton }} ton × ₹ {{ rate }} = ₹ {{ freight }} · still due to the truck ₹ {{ due }}
+      {% endblocktranslate %}
+    </div>
+    {% endif %}
+
+    <div class="row bt">
+      <div class="cell">
+        <div class="label">{% translate "Terms" %}</div>
+        {% if company.invoice_terms %}
+          <div style="white-space:pre-line;">{{ company.invoice_terms }}</div>
+        {% else %}
+          <div>1. {% translate "Goods once sold will not be taken back." %}</div>
+          <div>2. {% translate "Interest @ 18% p.a. will be charged if payment is delayed." %}</div>
+          <div>3. {% translate "Subject to local jurisdiction only." %}</div>
+        {% endif %}
+      </div>
+      <div class="cell right">
+        <div>{% blocktranslate with name=company.company_name %}For {{ name }}{% endblocktranslate %}</div>
+        <div class="sign"></div>
+        <div>{% translate "Authorised signatory" %}</div>
+      </div>
     </div>
   </div>
-
-  <div class="info-grid">
-    <div class="info-card"><div class="info-label">Customer</div><div class="info-value"><b>{{ data.customer_name }}</b></div></div>
-    <div class="info-card"><div class="info-label">Sale Date</div><div class="info-value">{{ data.sale_date }}</div></div>
-    <div class="info-card"><div class="info-label">Product</div><div class="info-value">{{ data.product_name }}</div></div>
-    <div class="info-card"><div class="info-label">Bag Weight</div><div class="info-value">{{ data.bag_weight }} KG</div></div>
-    <div class="info-card"><div class="info-label">Total Bags</div><div class="info-value">{{ data.total_bags }}</div></div>
-    <div class="info-card"><div class="info-label">Total KG</div><div class="info-value"><b>{{ data.total_kg }}</b></div></div>
-  </div>
-
-  <hr class="divider">
-
-  <h3 class="panel-title">Rice Invoice</h3>
-  <div class="info-grid">
-    <div class="info-card"><div class="info-label">Rate / KG</div><div class="info-value">₹ {{ data.rate_per_kg }}</div></div>
-    <div class="info-card"><div class="info-label">Taxable</div><div class="info-value">₹ {{ data.taxable_amount }}</div></div>
-    <div class="info-card"><div class="info-label">GST %</div><div class="info-value">{{ data.gst_percent }}%</div></div>
-    <div class="info-card"><div class="info-label">GST Amount</div><div class="info-value">₹ {{ data.gst_amount }}</div></div>
-    <div class="info-card"><div class="info-label">Rice Total</div><div class="info-value"><b>₹ {{ data.rice_total }}</b></div></div>
-    <div class="info-card"><div class="info-label">Advance</div><div class="info-value">₹ {{ data.advance_received }}</div></div>
-    <div class="info-card"><div class="info-label">Rice Due</div><div class="info-value"><b style="color:#ef4444;">₹ {{ data.rice_due }}</b></div></div>
-  </div>
-
-  <hr class="divider">
-
-  <h3 class="panel-title">Transport (Separate)</h3>
-  <div class="info-grid">
-    <div class="info-card"><div class="info-label">Vehicle</div><div class="info-value">{{ data.vehicle_number }}</div></div>
-    <div class="info-card"><div class="info-label">Driver</div><div class="info-value">{{ data.driver_name }}</div></div>
-    <div class="info-card"><div class="info-label">Transporter</div><div class="info-value">{{ data.transporter_name }}</div></div>
-
-    <div class="info-card"><div class="info-label">Rate / Ton</div><div class="info-value">₹ {{ data.transport_rate_per_ton }}</div></div>
-    <div class="info-card"><div class="info-label">Total Ton</div><div class="info-value">{{ data.total_ton }}</div></div>
-    <div class="info-card"><div class="info-label">Transport Charge</div><div class="info-value"><b>₹ {{ data.transport_charge }}</b></div></div>
-    <div class="info-card"><div class="info-label">Dealer Paid</div><div class="info-value">₹ {{ data.transport_paid_by_dealer }}</div></div>
-    <div class="info-card"><div class="info-label">Customer Paid</div><div class="info-value">₹ {{ data.transport_paid_by_customer }}</div></div>
-    <div class="info-card"><div class="info-label">Transport Due</div><div class="info-value"><b style="color:#ef4444;">₹ {{ data.transport_due }}</b></div></div>
-  </div>
-
-  <hr class="divider">
-
-  <h3 class="panel-title">Internal Stock Breakup (Buying)</h3>
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Purchase Invoice</th>
-          <th>Mill</th>
-          <th class="right">Buy Rate/KG</th>
-          <th class="right">Bag Weight</th>
-          <th class="right">Bags</th>
-          <th class="right">KG</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in data.breakup_rows %}
-        <tr>
-          <td>{{ forloop.counter }}</td>
-          <td>{{ r.invoice_no }}</td>
-          <td>{{ r.mill_name }}</td>
-          <td class="right">₹ {{ r.buy_rate }}</td>
-          <td class="right">{{ r.bag_weight }}</td>
-          <td class="right">{{ r.bags }}</td>
-          <td class="right">{{ r.kg }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="form-actions">
-    <button type="button" class="btn btn-primary" onclick="window.print()">🖨 Print</button>
-    <a class="btn btn-outline" href="{% url 'sale_detail' sale.id %}">Back to sale</a>
-  </div>
-
 </div>
-{% endblock %}
+
+</body>
+</html>

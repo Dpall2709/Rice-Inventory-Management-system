@@ -19,6 +19,7 @@ advance instead of disappearing.
 from decimal import Decimal
 
 from django.db.models import Sum
+from django.utils.translation import gettext as _
 
 from core.models import Payment, Purchase
 
@@ -215,13 +216,15 @@ def account_history(mill, purchases, payments):
     for purchase in purchases:
         items = list(purchase.purchaseitem_set.all())
         bags = sum(item.bag_count or 0 for item in items)
-        rice = ", ".join(sorted({item.product.rice_name for item in items})) or "rice"
+        rice = ", ".join(sorted({item.product.rice_name for item in items})) or _("rice")
 
         entries.append({
             "date": purchase.purchase_date,
             "order": (purchase.purchase_date, 0, purchase.id),
             "kind": "bill",
-            "particulars": f"Bill {purchase.invoice_no} - {bags} bags {rice}",
+            "particulars": _("Bill %(no)s - %(bags)s bags %(rice)s") % {
+                "no": purchase.invoice_no, "bags": bags, "rice": rice,
+            },
             "reference": purchase.purchase_ref,
             "purchase": purchase,
             "debit": _money(purchase.total_amount),
@@ -229,12 +232,17 @@ def account_history(mill, purchases, payments):
         })
 
     for payment in payments:
-        against = f"bill {payment.purchase.invoice_no}" if payment.purchase_id else "on account"
+        if payment.purchase_id:
+            against = _("bill %(no)s") % {"no": payment.purchase.invoice_no}
+        else:
+            against = _("on account")
         entries.append({
             "date": payment.payment_date,
             "order": (payment.payment_date, 1, payment.id),
             "kind": "payment",
-            "particulars": f"Payment ({payment.payment_mode or 'cash'}) - {against}",
+            "particulars": _("Payment (%(mode)s) - %(against)s") % {
+                "mode": payment.payment_mode or _("cash"), "against": against,
+            },
             "reference": payment.notes or "",
             "purchase": payment.purchase if payment.purchase_id else None,
             "debit": Decimal("0"),
@@ -247,7 +255,7 @@ def account_history(mill, purchases, payments):
     history = [{
         "date": None,
         "kind": "opening",
-        "particulars": "Opening balance",
+        "particulars": _("Opening balance"),
         "reference": "",
         "purchase": None,
         "debit": balance if balance > 0 else Decimal("0"),

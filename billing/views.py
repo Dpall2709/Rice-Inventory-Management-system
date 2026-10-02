@@ -15,6 +15,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt
 
 from core.models import Company
@@ -46,6 +47,20 @@ def checkout(request, code):
     company = company_of(request)
     plan = get_object_or_404(Plan, code=code, is_active=True)
 
+    # A paying customer's invoices must carry real business details. Trial
+    # users may work with an incomplete profile, but not upgrade with one.
+    # (/account/ stays writable when a subscription has expired, so an
+    # expired owner can still complete the profile and renew.)
+    from accounts.services import profile_status
+
+    if company is not None:
+        if not profile_status(company)["complete"]:
+            messages.warning(
+                request,
+                _("Complete your business details before upgrading - they are printed on every invoice."),
+            )
+            return redirect("accounts:business_profile")
+
     payment, order_id = services.create_order(company, plan)
 
     return render(request, "billing/checkout.html", {
@@ -76,10 +91,10 @@ def payment_success(request):
             signature=request.POST.get("razorpay_signature", ""),
         )
     except ValueError as exc:
-        messages.error(request, f"Payment could not be confirmed: {exc}")
+        messages.error(request, _("Payment could not be confirmed: %(error)s") % {"error": exc})
         return redirect("billing:home")
 
-    messages.success(request, "Payment received. Your subscription is active.")
+    messages.success(request, _("Payment received. Your subscription is active."))
     return redirect("billing:home")
 
 
@@ -149,7 +164,7 @@ def extend_subscription(request, company_id):
         days = plan.duration_days
 
     if days <= 0:
-        messages.error(request, "Enter how many days to add.")
+        messages.error(request, _("Enter how many days to add."))
         return redirect("billing:manage_companies")
 
     subscription.extend(days=days, plan=plan, note=note or "Extended manually by staff.")
@@ -166,6 +181,9 @@ def extend_subscription(request, company_id):
 
     messages.success(
         request,
-        f"{company.company_name} is now active until {subscription.end_date}.",
+        _("%(company)s is now active until %(end_date)s.") % {
+            "company": company.company_name,
+            "end_date": subscription.end_date,
+        },
     )
     return redirect("billing:manage_companies")

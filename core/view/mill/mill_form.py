@@ -2,6 +2,8 @@
 Add and edit a supplier - both use the same form and the same template.
 """
 
+from django.utils.translation import gettext as _
+
 from core.forms import MillForm
 from core.models import Mill
 from core.permissions import manager_required
@@ -22,7 +24,7 @@ def add_mill(request):
             mill.company = company
             mill.save()
 
-            messages.success(request, f"Supplier “{mill.mill_name}” saved.")
+            messages.success(request, _("Supplier “%(mill)s” saved.") % {"mill": mill.mill_name})
 
             # "Save and add another" keeps the user in the form.
             if request.POST.get("save_and_new"):
@@ -49,7 +51,7 @@ def edit_mill(request, mill_id):
 
         if form.is_valid():
             form.save()
-            messages.success(request, f"Supplier “{mill.mill_name}” updated.")
+            messages.success(request, _("Supplier “%(mill)s” updated.") % {"mill": mill.mill_name})
             return redirect("mill_report_detail", mill_id=mill.id)
     else:
         form = MillForm(instance=mill, company=company)

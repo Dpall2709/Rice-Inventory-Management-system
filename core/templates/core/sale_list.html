@@ -1,92 +1,193 @@
 {% extends 'core/base.html' %}
-{% block page_title %}Sales{% endblock %}
+{% load i18n %}
+{% block page_title %}{% translate "Sales" %}{% endblock %}
 
 {% block content %}
-<div class="panel">
 
-  <div class="list-header">
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> › <span>{% translate "Sales" %}</span></div>
+    <h1>{% translate "Sales" %}</h1>
+    <p class="muted">
+      {% blocktranslate count counter=count trimmed %}
+        {{ counter }} invoice · every line here took bags out of stock
+      {% plural %}
+        {{ counter }} invoices · every line here took bags out of stock
+      {% endblocktranslate %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-outline" href="{% url 'customer_list' %}">👥 {% translate "Customers" %}</a>
+    <a class="btn btn-primary" href="{% url 'add_sale' %}">➕ {% translate "New sale" %}</a>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-icon">🚚</div>
     <div>
-      <h2 class="list-title">Sales (Truck Invoices)</h2>
-      <p class="muted">Invoice is generated for customer/trader. Broker is internal optional.</p>
-    </div>
-
-    <div class="list-actions">
-      <form method="GET" class="search-box">
-        <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search customer name...">
-        <button type="submit" class="btn btn-outline">Search</button>
-      </form>
-
-      <a href="{% url 'add_sale' %}" class="btn btn-primary">➕ Add Sale</a>
+      <div class="stat-label">{% translate "Bags sold" %}</div>
+      <div class="stat-value">{{ total_bags }}</div>
+      <div class="stat-hint">{% blocktranslate count counter=count %}{{ counter }} invoice{% plural %}{{ counter }} invoices{% endblocktranslate %}</div>
     </div>
   </div>
+  <div class="stat">
+    <div class="stat-icon">💰</div>
+    <div>
+      <div class="stat-label">{% translate "Sales value" %}</div>
+      <div class="stat-value inr" data-value="{{ total_value }}">₹ {{ total_value }}</div>
+      <div class="stat-hint">{% translate "incl. GST" %} ₹ <span class="inr-abs" data-value="{{ total_tax }}">{{ total_tax }}</span></div>
+    </div>
+  </div>
+  <div class="stat is-success">
+    <div class="stat-icon">✅</div>
+    <div>
+      <div class="stat-label">{% translate "Received" %}</div>
+      <div class="stat-value inr" data-value="{{ total_received }}">₹ {{ total_received }}</div>
+    </div>
+  </div>
+  <div class="stat {% if total_due > 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">⏳</div>
+    <div>
+      <div class="stat-label">{% translate "Customers owe you" %}</div>
+      <div class="stat-value inr" data-value="{{ total_due }}">₹ {{ total_due }}</div>
+    </div>
+  </div>
+</div>
 
+<div class="card">
+  <form class="toolbar" method="GET" data-no-loading>
+    <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Invoice no, customer, broker, truck…' %}" style="min-width:230px;">
+
+    <select class="select" name="customer">
+      <option value="">{% translate "All customers" %}</option>
+      {% for customer in customers %}
+        <option value="{{ customer.id }}" {% if customer_id == customer.id|stringformat:"s" %}selected{% endif %}>{{ customer.customer_name }}</option>
+      {% endfor %}
+    </select>
+
+    {% if brokers %}
+    <select class="select" name="broker">
+      <option value="">{% translate "All brokers" %}</option>
+      {% for broker in brokers %}
+        <option value="{{ broker.id }}" {% if broker_id == broker.id|stringformat:"s" %}selected{% endif %}>{{ broker.broker_name }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+
+    <select class="select" name="status">
+      <option value="">{% translate "Paid & unpaid" %}</option>
+      <option value="due" {% if status == 'due' %}selected{% endif %}>{% translate "Only unpaid" %}</option>
+      <option value="overdue" {% if status == 'overdue' %}selected{% endif %}>{% translate "Only overdue" %}</option>
+      <option value="paid" {% if status == 'paid' %}selected{% endif %}>{% translate "Only settled" %}</option>
+    </select>
+
+    <input class="input" type="date" name="from" value="{{ date_from }}" title="{% translate 'From date' %}">
+    <input class="input" type="date" name="to" value="{{ date_to }}" title="{% translate 'To date' %}">
+
+    <button class="btn btn-outline" type="submit">{% translate "Filter" %}</button>
+    {% if q or customer_id or broker_id or status or date_from or date_to %}
+      <a class="btn btn-ghost" href="{% url 'sale_list' %}">{% translate "Clear" %}</a>
+    {% endif %}
+  </form>
+
+  {% if sales %}
   <div class="table-wrap">
-    <table class="table">
+    <table class="table table-cards">
       <thead>
         <tr>
-          <th>Date</th>
-          <th>Invoice</th>
-          <th>Customer</th>
-          <th>Broker</th>
-          <th class="right">Total</th>
-          <th class="right">Paid</th>
-          <th class="right">Due</th>
-          <th>Status</th>
-          <th>Action</th>
+          <th>{% translate "Invoice" %}</th><th>{% translate "Customer" %}</th><th>{% translate "Date" %}</th>
+          <th class="right">{% translate "Bags" %}</th><th class="right">{% translate "Total" %}</th>
+          <th class="right">{% translate "Received" %}</th><th class="right">{% translate "Due" %}</th>
+          <th class="right">{% translate "Actions" %}</th>
         </tr>
       </thead>
-
       <tbody>
-        {% for r in rows %}
+        {% for sale in sales %}
         <tr>
-          <td>{{ r.sale_date }}</td>
-
-          <td>
-            <a class="link-btn" href="{% url 'sale_detail' r.id %}">
-              <b>{{ r.invoice_no }}</b>
-            </a>
+          <td data-label="{% translate 'Invoice' %}">
+            <a class="row-title" href="{% url 'sale_detail' sale.id %}">{{ sale.invoice_no }}</a>
+            <div class="row-sub">
+              {% if sale.tax_type == 'none' %}<span class="badge badge-muted">{% translate "No GST" %}</span>
+              {% elif sale.tax_type == 'igst' %}<span class="badge badge-blue">IGST</span>
+              {% else %}<span class="badge badge-blue">CGST+SGST</span>{% endif %}
+              {% if sale.vehicle_number %}· {{ sale.vehicle_number }}{% endif %}
+            </div>
           </td>
-
-          <td>{{ r.customer_name }}</td>
-
-          <td>
-            {% if r.broker %}
-              {{ r.broker.broker_name }}
+          <td data-label="{% translate 'Customer' %}">
+            {% if sale.customer_id %}
+              <a href="{% url 'customer_ledger' sale.customer_id %}">{{ sale.customer_name }}</a>
+            {% else %}{{ sale.customer_name }}{% endif %}
+            {% if sale.broker %}<div class="row-sub">🤝 {{ sale.broker.broker_name }}</div>{% endif %}
+          </td>
+          <td data-label="{% translate 'Date' %}" class="nowrap">
+            {{ sale.sale_date|date:"d M Y" }}
+            {% if sale.due_date %}<div class="row-sub">{% translate "due" %} {{ sale.due_date|date:"d M" }}</div>{% endif %}
+          </td>
+          <td data-label="{% translate 'Bags' %}" class="right">{{ sale.total_bags }}</td>
+          <td data-label="{% translate 'Total' %}" class="right bold inr" data-value="{{ sale.total_amount }}">₹ {{ sale.total_amount }}</td>
+          <td data-label="{% translate 'Received' %}" class="right inr" data-value="{{ sale.paid }}">₹ {{ sale.paid }}</td>
+          <td data-label="{% translate 'Due' %}" class="right">
+            {% if sale.due > 0 %}
+              <span class="bold text-danger inr" data-value="{{ sale.due }}">₹ {{ sale.due }}</span>
+              <div>
+                {% if sale.overdue %}<span class="badge badge-red"><span class="dot"></span>{% translate "Overdue" %}</span>
+                {% elif sale.status == 'partial' %}<span class="badge badge-orange">{% translate "Partial" %}</span>
+                {% else %}<span class="badge badge-red"><span class="dot"></span>{% translate "Due" %}</span>{% endif %}
+              </div>
             {% else %}
-              -
+              <span class="badge badge-green">{% translate "Paid" %}</span>
             {% endif %}
           </td>
-
-          <td class="right">Rs. {{ r.total_amount }}</td>
-          <td class="right">Rs. {{ r.paid }}</td>
-          <td class="right"><b>Rs. {{ r.due }}</b></td>
-
-          <td>
-            {% if r.status == "PAID" %}
-              <span class="badge badge-green">PAID</span>
-            {% elif r.status == "PARTIAL" %}
-              <span class="badge badge-orange">PARTIAL</span>
-            {% else %}
-              <span class="badge badge-red">DUE</span>
-            {% endif %}
-          </td>
-
-          <td>
-            <!-- <a href="{% url 'sale_detail' r.id %}" class="btn btn-outline" style="padding:6px 10px;">👁 View</a> -->
-            <a href="{% url 'add_sale_payment' r.id %}" class="btn btn-primary" style="padding:6px 10px;">💳 Pay</a>
-          </td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="9" style="text-align:center; padding:20px;">
-            No sales found.
+          <td data-label="{% translate 'Actions' %}">
+            <div class="actions">
+              <a class="btn btn-outline btn-sm" href="{% url 'sale_detail' sale.id %}">{% translate "View" %}</a>
+              {% if sale.due > 0 %}
+                <a class="btn btn-ghost btn-sm" href="{% url 'add_sale_payment' sale.id %}" title="{% translate 'Receive payment' %}">💰</a>
+              {% endif %}
+              <a class="btn btn-ghost btn-sm" href="{% url 'sale_invoice_pdf' sale.id %}" title="{% translate 'Invoice PDF' %}">📄</a>
+            </div>
           </td>
         </tr>
         {% endfor %}
       </tbody>
-
     </table>
   </div>
 
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="pagination">
+    <div class="muted">{% blocktranslate with page=page_obj.number pages=page_obj.paginator.num_pages %}Page {{ page }} of {{ pages }}{% endblocktranslate %}</div>
+    <div class="pages">
+      <a class="page-link {% if not page_obj.has_previous %}disabled{% endif %}"
+         href="?{{ querystring }}&page={% if page_obj.has_previous %}{{ page_obj.previous_page_number }}{% else %}1{% endif %}">‹</a>
+      {% for num in page_obj.paginator.page_range %}
+        {% if num == page_obj.number %}
+          <span class="page-link active">{{ num }}</span>
+        {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+          <a class="page-link" href="?{{ querystring }}&page={{ num }}">{{ num }}</a>
+        {% endif %}
+      {% endfor %}
+      <a class="page-link {% if not page_obj.has_next %}disabled{% endif %}"
+         href="?{{ querystring }}&page={% if page_obj.has_next %}{{ page_obj.next_page_number }}{% else %}{{ page_obj.number }}{% endif %}">›</a>
+    </div>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">🚚</div>
+    <div class="empty-title">{% if q or customer_id or broker_id or status %}{% translate "No invoice matches this filter" %}{% else %}{% translate "No sales yet" %}{% endif %}</div>
+    <p>
+      {% if q or customer_id or broker_id or status %}{% translate "Try a wider date range or clear the filters." %}
+      {% else %}{% translate "Make your first invoice - pick a customer and the rice, and the bags come out of your stock." %}{% endif %}
+    </p>
+    {% if q or customer_id or broker_id or status %}
+      <a class="btn btn-outline" href="{% url 'sale_list' %}">{% translate "Clear filters" %}</a>
+    {% else %}
+      <a class="btn btn-primary" href="{% url 'add_sale' %}">➕ {% translate "Make your first sale" %}</a>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
+
 {% endblock %}

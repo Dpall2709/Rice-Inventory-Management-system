@@ -23,6 +23,8 @@ class SubscriptionMiddleware:
         "/login/",
         "/logout/",
         "/register/",
+        "/i18n/",
+        "/account/",
         "/admin/",
         "/static/",
         "/media/",
