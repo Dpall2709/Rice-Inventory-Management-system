@@ -197,16 +197,23 @@ def customer_ledger(request, customer_id):
     # Profit on everything this customer bought, direct or through a broker.
     from decimal import Decimal
 
-    from core.services.sale_service import sale_profit
+    from core.models import Sale
+    from core.services.trade_register import register_rows
 
-    profit_total = Decimal("0")
+    rows = {r["sale"].id: r for r in register_rows(company, Sale.objects.for_company(company).filter(customer=customer))}
+    profit_total = profit_earned = Decimal("0")
     for sale in [row["sale"] for row in statement["rows"]] + statement["broker_sales"]:
-        sale.profit = sale_profit(sale)["profit"]
+        row = rows.get(sale.id)
+        sale.profit = row["profit"] if row else None
+        sale.profit_earned = row["profit_earned"] if row else None
+        sale.profit_pending = row["profit_pending"] if row else None
         if sale.profit is not None:
             profit_total += sale.profit
+            profit_earned += sale.profit_earned
 
     return render(request, "core/customer_ledger.html", {
         "profit_total": profit_total,
+        "profit_earned": profit_earned,
         "broker_sales": list(reversed(statement["broker_sales"])),
         "customer": customer,
         "statement": statement,

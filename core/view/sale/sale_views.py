@@ -30,11 +30,14 @@ from core.services.customer_ledger import (
 from core.services.sale_service import (
     StockError,
     sale_profit,
+    earned_profit,
+    payment_status,
     save_sale,
     stock_lots,
     product_stock,
     suggested_tax_type,
 )
+from core.services.trade_register import register_rows
 from core.tenancy import company_of, tenant_object_or_404
 
 from ..base_imports import *
@@ -78,17 +81,22 @@ def sale_list(request):
     if date_to:
         sales = sales.filter(sale_date__lte=date_to)
 
+    # Money, cost and profit come from the truck register rows, so this list,
+    # the register, the party pages and the dashboard always agree.
+    register = {row["sale"].id: row for row in register_rows(company, sales)}
+    settled = status_map_for_sales(company, list(sales))
     sales = list(sales)
-
-    # Money received on account is applied the same way the customer ledger
-    # does it, so the list and the ledger always agree.
-    settled = status_map_for_sales(company, sales)
     for sale in sales:
-        row = settled.get(sale.id) or {}
-        sale.paid = row.get("paid", Decimal("0"))
-        sale.due = row.get("due", sale.total_amount)
-        sale.status = row.get("status", "due")
-        sale.overdue = row.get("overdue", False)
+        row = register[sale.id]
+        sale.paid = row["received"]
+        sale.due = row["due"]
+        sale.party_owes = row["net_receivable"]
+        sale.cost = row["total_cost"]
+        sale.profit = row["profit"]
+        sale.profit_earned = row["profit_earned"]
+        sale.profit_pending = row["profit_pending"]
+        sale.status = row["payment_status"]
+        sale.overdue = (settled.get(sale.id) or {}).get("overdue", False)
 
     if status == "due":
         sales = [s for s in sales if s.due > 0]
@@ -103,6 +111,9 @@ def sale_list(request):
         "total_due": sum((s.due for s in sales), Decimal("0")),
         "total_bags": sum((int(s.total_bags or 0) for s in sales)),
         "total_tax": sum((s.gst_amount or 0 for s in sales), Decimal("0")),
+        "total_cost": sum((s.cost for s in sales if s.profit is not None), Decimal("0")),
+        "total_profit_earned": sum((s.profit_earned for s in sales if s.profit is not None), Decimal("0")),
+        "total_profit": sum((s.profit for s in sales if s.profit is not None), Decimal("0")),
     }
 
     page = Paginator(sales, 25).get_page(request.GET.get("page"))
@@ -332,6 +343,11 @@ def sale_detail(request, sale_id):
     )
 
     profit = sale_profit(sale)
+    # Same rule as the truck register: profit counts as earned only as the
+    # money comes in.
+    profit["sale_amount"] = profit["settlement"]["net_receivable"]
+    profit["earned"], profit["pending"] = earned_profit(profit["profit"], profit["sale_amount"], status["paid"])
+    profit["payment_status"] = payment_status(status["paid"], status["due"])
 
     share_text = _(
         "Invoice %(no)s dated %(date)s\n%(bags)s bags · ₹ %(total)s\nBalance due: ₹ %(due)s\n- %(company)s"

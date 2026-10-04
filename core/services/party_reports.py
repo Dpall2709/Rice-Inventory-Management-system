@@ -38,7 +38,7 @@ ZERO = Decimal("0")
 # --------------------------------------------------------------------------
 
 def parse_period(params, today=None):
-    """(start, end, label) from ?month=YYYY-MM or ?from=&to=; default this month."""
+    """(start, end, label) from ?month=YYYY-MM or ?from=&to=; default every date so far."""
     today = today or timezone.localdate()
 
     month = (params.get("month") or "").strip()
@@ -60,8 +60,9 @@ def parse_period(params, today=None):
     start = _date(params.get("from"))
     end = _date(params.get("to"))
     if not start and not end:
-        start = today.replace(day=1)
-        end = today
+        # Nothing chosen: the whole account. Defaulting to this month made
+        # downloads look empty whenever the trucks were from earlier months.
+        return date(2000, 1, 1), today, str(_("All dates up to %(day)s") % {"day": f"{today:%d %b %Y}"})
     start = start or date(2000, 1, 1)
     end = end or today
     if start > end:
@@ -225,9 +226,22 @@ def report_excel(company, report, label, internal=False):
     for entry in report["entries"]:
         ws.append([entry["date"], str(entry["particulars"]), num(entry["debit"]) or None,
                    num(entry["credit"]) or None, num(entry["balance"])])
+    if not report["entries"]:
+        ws.append([None, _("No bills or payments in this period.")])
     ws.append([None, _("Closing balance"), num(report["billed"]), num(report["received"]), num(report["closing"])])
     for cell in ws[ws.max_row]:
         cell.font = Font(bold=True)
+    if report["kind"] == "customer" and report["broker_sales"]:
+        # These trucks are paid to us through the broker, so they are on his
+        # account, not this one - list them so the sheet is never blank.
+        ws.append([])
+        ws.append([None, _("Trucks paid through the broker (on the broker's account)")])
+        ws.cell(row=ws.max_row, column=2).font = Font(bold=True)
+        for row in report["broker_sales"]:
+            sale = row["sale"]
+            ws.append([sale.sale_date, f"{sale.invoice_no} · {sale.vehicle_number or ''} · "
+                       f"{_('Broker')}: {sale.broker.broker_name if sale.broker else ''}",
+                       num(row["figures"]["net_receivable"])])
     finish(ws, [14, 52, 16, 16, 16])
 
     # ---- trucks / invoices ----
@@ -270,7 +284,8 @@ def report_excel(company, report, label, internal=False):
 
     safe = "".join(ch for ch in report["name"] if ch.isalnum() or ch in " -_").strip().replace(" ", "_")
     copy = "_internal" if internal else ""
-    return _xlsx_response(wb, f"{report['kind']}_{safe}_{label.replace(' ', '')}{copy}.xlsx")
+    period = "".join(ch for ch in label if ch.isalnum() or ch == "-")
+    return _xlsx_response(wb, f"{report['kind']}_{safe}_{period}{copy}.xlsx")
 
 
 # --------------------------------------------------------------------------
@@ -395,5 +410,5 @@ def report_pdf(company, report, label, internal=False):
     safe = "".join(ch for ch in report["name"] if ch.isalnum() or ch in " -_").strip().replace(" ", "_")
     response = HttpResponse(out.getvalue(), content_type="application/pdf")
     copy = "_internal" if internal else ""
-    response["Content-Disposition"] = f'inline; filename="{report["kind"]}_{safe}_{label.replace(" ", "")}{copy}.pdf"'
+    response["Content-Disposition"] = f'inline; filename="{report["kind"]}_{safe}_{"".join(ch for ch in label if ch.isalnum() or ch == "-")}{copy}.pdf"'
     return response

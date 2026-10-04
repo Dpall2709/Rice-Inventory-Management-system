@@ -5,8 +5,9 @@
 
 {% block extra_head %}
 <style>
-  .dash-quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s-3); margin-bottom: var(--s-5); }
-  .dash-quick .btn { justify-content: center; }
+  .dash-quick { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--s-5); }
+  .dash-quick .btn { height: 38px; padding: 0 14px; }
+  @media (max-width: 720px) { .dash-quick .btn { flex: 1 1 calc(50% - 8px); } }
   .dash-period { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); flex-wrap: wrap; margin-bottom: var(--s-2); }
   .dash-period .tabs { margin-bottom: 0; }
   .dash-section-title { font-size: 12px; font-weight: 650; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin: var(--s-2) 0 var(--s-3); }
@@ -175,23 +176,68 @@
       {% if kpis.paid_to_brokers %}<div class="stat-hint">{% translate "Brokers" %} ₹ <span class="inr-abs" data-value="{{ kpis.paid_to_brokers }}">{{ kpis.paid_to_brokers }}</span></div>{% endif %}
     </div>
   </div>
-  <div class="stat {% if kpis.profit < 0 %}is-danger{% else %}is-success{% endif %}">
-    <div class="stat-icon">📈</div>
-    <div>
-      <div class="stat-label">{% translate "Gross profit" %}</div>
-      <div class="stat-value inr {% if kpis.profit < 0 %}is-neg{% endif %}" data-value="{{ kpis.profit }}">₹ {{ kpis.profit }}</div>
-      <div class="stat-hint">
-        {% if kpis.profit_margin is not None %}{% blocktranslate with margin=kpis.profit_margin %}{{ margin }}% margin{% endblocktranslate %}{% endif %}
-        {% if kpis.sales_without_cost %}<span class="text-warning">· {% blocktranslate count counter=kpis.sales_without_cost %}{{ counter }} sale has no cost data{% plural %}{{ counter }} sales have no cost data{% endblocktranslate %}</span>{% endif %}
-      </div>
-    </div>
-  </div>
   <div class="stat {% if kpis.gst_payable > 0 %}is-warning{% else %}is-success{% endif %}">
     <div class="stat-icon">🧾</div>
     <div>
       <div class="stat-label">{% if kpis.gst_payable >= 0 %}{% translate "GST to pay" %}{% else %}{% translate "GST credit left" %}{% endif %}</div>
       <div class="stat-value">₹ <span class="inr-abs" data-value="{{ kpis.gst_payable }}">{{ kpis.gst_payable }}</span></div>
       <div class="stat-hint">{% translate "on sales" %} ₹ <span class="inr-abs" data-value="{{ kpis.output_gst }}">{{ kpis.output_gst }}</span> − {% translate "on purchases" %} ₹ <span class="inr-abs" data-value="{{ kpis.input_gst }}">{{ kpis.input_gst }}</span></div>
+    </div>
+  </div>
+</div>
+
+<h2 class="dash-section-title">{% blocktranslate with label=period.label %}Profit after payments - bills of {{ label }}{% endblocktranslate %}</h2>
+<div class="stats">
+  <div class="stat">
+    <div class="stat-icon">🧾</div>
+    <div>
+      <div class="stat-label">{% translate "Total sale" %}</div>
+      <div class="stat-value inr" data-value="{{ kpis.bill_amount }}">₹ {{ kpis.bill_amount }}</div>
+      <div class="stat-hint">{% translate "what the parties owe after shortage, CD and brokerage" %}</div>
+    </div>
+  </div>
+  <div class="stat is-success">
+    <div class="stat-icon">✅</div>
+    <div>
+      <div class="stat-label">{% translate "Received" %}</div>
+      <div class="stat-value inr" data-value="{{ kpis.bill_received }}">₹ {{ kpis.bill_received }}</div>
+      <div class="stat-hint">{% blocktranslate with paid=kpis.bills_paid part=kpis.bills_partial due=kpis.bills_due %}{{ paid }} paid · {{ part }} part paid · {{ due }} unpaid{% endblocktranslate %}</div>
+    </div>
+  </div>
+  <div class="stat {% if kpis.bill_due > 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">⏳</div>
+    <div>
+      <div class="stat-label">{% translate "Outstanding" %}</div>
+      <div class="stat-value inr" data-value="{{ kpis.bill_due }}">₹ {{ kpis.bill_due }}</div>
+      <div class="stat-hint"><a href="{% url 'sale_list' %}?status=due">{% translate "See unpaid bills" %} →</a></div>
+    </div>
+  </div>
+  <div class="stat">
+    <div class="stat-icon">💼</div>
+    <div>
+      <div class="stat-label">{% translate "Total cost" %}</div>
+      <div class="stat-value inr" data-value="{{ kpis.cost }}">₹ {{ kpis.cost }}</div>
+      <div class="stat-hint">{% translate "rice + loading + freight + commission" %}</div>
+    </div>
+  </div>
+  <div class="stat {% if kpis.profit_earned < 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">💰</div>
+    <div>
+      <div class="stat-label">{% translate "Profit earned" %}</div>
+      <div class="stat-value inr {% if kpis.profit_earned < 0 %}is-neg{% endif %}" data-value="{{ kpis.profit_earned }}">₹ {{ kpis.profit_earned }}</div>
+      <div class="stat-hint">{% translate "after all costs, on money received" %}{% if kpis.profit_pending %} · {% translate "comes with dues" %} ₹ <span class="inr-abs" data-value="{{ kpis.profit_pending }}">{{ kpis.profit_pending }}</span>{% endif %}</div>
+    </div>
+  </div>
+  <div class="stat {% if kpis.profit < 0 %}is-danger{% endif %}">
+    <div class="stat-icon">📈</div>
+    <div>
+      <div class="stat-label">{% translate "Full profit when all is paid" %}</div>
+      <div class="stat-value inr {% if kpis.profit < 0 %}is-neg{% endif %}" data-value="{{ kpis.profit }}">₹ {{ kpis.profit }}</div>
+      <div class="stat-hint">
+        {% if kpis.loss %}<span class="text-danger">{% translate "loss" %} ₹ <span class="inr-abs" data-value="{{ kpis.loss }}">{{ kpis.loss }}</span></span> · {% endif %}
+        {% if kpis.profit_margin is not None %}{% blocktranslate with margin=kpis.profit_margin %}{{ margin }}% margin{% endblocktranslate %}{% endif %}
+        {% if kpis.sales_without_cost %}<span class="text-warning">· {% blocktranslate count counter=kpis.sales_without_cost %}{{ counter }} sale has no cost data{% plural %}{{ counter }} sales have no cost data{% endblocktranslate %}</span>{% endif %}
+      </div>
     </div>
   </div>
 </div>

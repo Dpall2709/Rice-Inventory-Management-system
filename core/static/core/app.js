@@ -56,88 +56,26 @@
 
   /* ------------------------------------------------------------ back button */
 
-  // The browser's own history is the wrong thing to follow here: after saving a
-  // payment it would take you straight back into the payment form you just
-  // submitted. Instead the app keeps a short trail of the pages you actually
-  // browse (lists, ledgers, bills) and leaves forms out of it, so Back always
-  // lands on a page you would want to see again.
-
-  var TRAIL_KEY = "rb:trail";
-  var isFormPage = body.getAttribute("data-nav") === "form";
-
-  function here() {
-    return window.location.pathname + window.location.search;
-  }
-
-  function readTrail() {
-    try {
-      var saved = JSON.parse(window.sessionStorage.getItem(TRAIL_KEY));
-      return Array.isArray(saved) ? saved : [];
-    } catch (e) {
-      return [];
+  // Back goes ONE LEVEL UP - to the parent page named in the breadcrumb
+  // ("Dashboard › Purchases › Bill 245" -> "← Purchases") - never to some
+  // page in your history. The template's back_url is the fallback.
+  var backLink = document.querySelector("[data-back]");
+  if (backLink) {
+    var crumbs = document.querySelectorAll(".page-head .crumbs a");
+    var parent = crumbs.length ? crumbs[crumbs.length - 1] : null;
+    if (parent && parent.getAttribute("href")) {
+      backLink.setAttribute("href", parent.getAttribute("href"));
+      var label = backLink.querySelector(".back-label");
+      if (label) label.textContent = parent.textContent.trim();
+      backLink.title = parent.textContent.trim();
     }
   }
 
-  function writeTrail(trail) {
-    try {
-      window.sessionStorage.setItem(TRAIL_KEY, JSON.stringify(trail.slice(-40)));
-    } catch (e) {}
-  }
-
-  // Record this page, unless it is a form.
-  if (!isFormPage) {
-    var trail = readTrail();
-    var current = here();
-
-    // Reloading, or landing back here after saving a form, changes nothing.
-    if (trail[trail.length - 1] !== current) {
-      var seenAt = trail.lastIndexOf(current);
-      var entry = (window.performance && performance.getEntriesByType)
-        ? performance.getEntriesByType("navigation")[0]
-        : null;
-      var viaBrowserBack = entry && entry.type === "back_forward";
-
-      if (viaBrowserBack && seenAt !== -1) {
-        // The browser's own Back button: step back along the trail.
-        trail = trail.slice(0, seenAt + 1);
-      } else {
-        // Clicked through to a page seen earlier: it is now the latest page,
-        // and the page you came from stays behind it.
-        if (seenAt !== -1) {
-          trail.splice(seenAt, 1);
-        }
-        trail.push(current);
-      }
-      writeTrail(trail);
-    }
-  }
-
-  on("[data-back]", "click", function (e, button) {
-    e.preventDefault();
-
-    var trail = readTrail();
-    var current = here();
-    var at = trail.lastIndexOf(current);
-
-    // Step off the current page (a form page is not on the trail at all, so
-    // the last entry is exactly the page the form was opened from).
-    if (at !== -1) {
-      trail = trail.slice(0, at);
-    }
-
-    var target = trail.length ? trail[trail.length - 1] : button.getAttribute("data-back-fallback") || "/";
-    writeTrail(trail);
-    window.location.href = target;
-  });
-
-  // Alt + ArrowLeft does the same thing from the keyboard.
+  // Alt + ArrowLeft goes up one level from the keyboard.
   document.addEventListener("keydown", function (e) {
-    if (e.altKey && e.key === "ArrowLeft" && !e.target.matches("input, textarea, select")) {
-      var button = document.querySelector("[data-back]");
-      if (button) {
-        e.preventDefault();
-        button.click();
-      }
+    if (e.altKey && e.key === "ArrowLeft" && !e.target.matches("input, textarea, select") && backLink) {
+      e.preventDefault();
+      window.location.href = backLink.getAttribute("href");
     }
   });
 

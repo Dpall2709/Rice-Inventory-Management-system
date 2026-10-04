@@ -1382,8 +1382,8 @@ class BillPaymentExplanationTests(TestCase):
 
         normal_page = self.client.get(reverse("purchase_detail", args=[purchase.id]))
         self.assertContains(normal_page, 'data-nav="page"')
-        # and falls back to its parent, the purchase list
-        self.assertContains(normal_page, f'data-back-fallback="{reverse("purchase_list")}"')
+        # and its Back link goes one level up, to the purchase list
+        self.assertContains(normal_page, f'href="{reverse("purchase_list")}" data-back')
 
 
 # ==========================================================================

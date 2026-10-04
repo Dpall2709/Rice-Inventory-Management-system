@@ -161,16 +161,13 @@ def period_kpis(company, start, end):
     paid_to_mills = _d(payments.filter(related_type="purchase").aggregate(s=Sum("amount"))["s"])
     paid_to_brokers = _d(payments.filter(related_type="broker").aggregate(s=Sum("amount"))["s"])
 
-    profit = ZERO
-    revenue_with_cost = ZERO
-    without_cost = 0
-    for sale in _sales_with_cost(company).filter(sale_date__range=(start, end)):
-        income, value = _profit_of(sale)
-        if value is None:
-            without_cost += 1
-            continue
-        profit += value
-        revenue_with_cost += income
+    # Bills, money in, cost and profit: the truck register's numbers, so the
+    # dashboard never disagrees with the register or the party pages.
+    from core.services.trade_register import register_rows, register_totals
+    rows = register_rows(company, sales)
+    bills = register_totals(rows)
+    # sale income on costed trucks (profit = income - cost), for the margin
+    revenue_with_cost = sum((r["profit"] + r["total_cost"] for r in rows if r["profit"] is not None), ZERO)
 
     received = _d(totals["advance"]) + received_later
     output_gst = _d(totals["gst"])
@@ -190,9 +187,21 @@ def period_kpis(company, start, end):
         "paid_to_brokers": money(paid_to_brokers),
         "cash_position": money(received - paid_to_mills),
 
-        "profit": money(profit),
-        "profit_margin": money(profit / revenue_with_cost * 100) if revenue_with_cost else None,
-        "sales_without_cost": without_cost,
+        # bills raised in the period and where their money stands
+        "bill_amount": bills["sale_amount"],
+        "bill_received": bills["received"],
+        "bill_due": bills["outstanding"],
+        "cost": bills["cost"],
+        "bills_paid": bills["bills_paid"],
+        "bills_partial": bills["bills_partial"],
+        "bills_due": bills["bills_due"],
+
+        "profit": bills["profit_total"],                 # full profit once every bill is paid
+        "profit_earned": bills["profit_earned"],         # on the money already in
+        "profit_pending": bills["profit_pending"],
+        "loss": bills["loss_total"],
+        "profit_margin": money(bills["profit_total"] / revenue_with_cost * 100) if revenue_with_cost else None,
+        "sales_without_cost": bills["no_cost"],
 
         "output_gst": money(output_gst),
         "input_gst": money(input_gst),

@@ -1,7 +1,7 @@
 {% extends 'core/base.html' %}
 {% load static i18n form_tags %}
 {% block nav_kind %}form{% endblock %}
-{% block back_url %}{% url 'purchase_list' %}{% endblock %}
+{% block back_url %}{% if supplier %}{% url 'mill_report_detail' supplier.id %}{% else %}{% url 'purchase_list' %}{% endif %}{% endblock %}
 {% block page_title %}{% if mode == 'edit' %}{% translate "Edit purchase" %}{% else %}{% translate "Add purchase" %}{% endif %}{% endblock %}
 {% block browser_title %}{% if mode == 'edit' %}{% translate "Edit purchase" %}{% else %}{% translate "Add purchase" %}{% endif %}{% endblock %}
 
@@ -11,10 +11,15 @@
   <div>
     <div class="crumbs">
       <a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> ›
-      <a href="{% url 'purchase_list' %}">{% translate "Purchases" %}</a> ›
+      {% if supplier %}
+        <a href="{% url 'mill_list' %}">{% translate "Mills / Suppliers" %}</a> ›
+        <a href="{% url 'mill_report_detail' supplier.id %}">{{ supplier.mill_name }}</a> ›
+      {% else %}
+        <a href="{% url 'purchase_list' %}">{% translate "Purchases" %}</a> ›
+      {% endif %}
       <span>{% if mode == 'edit' %}{{ purchase.purchase_ref|default:purchase.invoice_no }}{% else %}{% translate "New bill" %}{% endif %}</span>
     </div>
-    <h1>{% if mode == 'edit' %}{% translate "Edit purchase bill" %}{% else %}{% translate "Enter a purchase bill" %}{% endif %}</h1>
+    <h1>{% if mode == 'edit' %}{% translate "Edit purchase bill" %}{% elif supplier %}{% blocktranslate with name=supplier.mill_name %}New bill from {{ name }}{% endblocktranslate %}{% else %}{% translate "Enter a purchase bill" %}{% endif %}</h1>
     <p class="muted">
       {% translate "What you bought from a mill. Each line adds that rice into your stock." %}
       {% blocktranslate trimmed %}Rate is <strong>per kg</strong>; total = bags × bag weight × rate.{% endblocktranslate %}
@@ -22,7 +27,6 @@
   </div>
   <div class="page-actions">
     {% if mode == 'add' %}<a class="btn btn-outline" href="{% url 'scan_purchase_bill' %}">📷 {% translate "Scan bill" %}</a>{% endif %}
-    <a class="btn btn-outline" href="{% url 'purchase_list' %}">📋 {% translate "All purchases" %}</a>
   </div>
 </div>
 
@@ -44,17 +48,26 @@
   {% csrf_token %}
   {{ formset.management_form }}
   {% if scan %}<input type="hidden" name="scan" value="1">{% endif %}
+  {% if supplier %}<input type="hidden" name="locked_mill" value="{{ supplier.id }}">{% endif %}
 
   <!-- ===================== BILL HEADER ===================== -->
   <div class="card">
     <div class="form-section-title">{% translate "The mill's bill" %}</div>
 
     <div class="form-grid">
+      {% if supplier %}
+        <div class="field">
+          <label>{% translate "Mill / Supplier" %}</label>
+          <div class="locked-supplier">🏭 <strong>{{ supplier.mill_name }}</strong>
+            <a class="small" href="{% url 'add_purchase' %}">{% translate "Change" %}</a></div>
+          {{ form.mill }}
+        </div>
+      {% endif %}
       {% for field in form %}
-        {% if field.name|one_of:"mill,invoice_no,purchase_date,tax_type" %}
+        {% if field.name|one_of:"mill,invoice_no,purchase_date,tax_type" and not supplier or field.name|one_of:"invoice_no,purchase_date,tax_type" %}
           <div class="field {% if field.errors %}has-error{% endif %}">
             <label for="{{ field.id_for_label }}">
-              {{ field.label }}{% if field.name != 'tax_type' %} <span class="req">*</span>{% endif %}
+              {{ field.label }}{% if field.name|one_of:"mill,purchase_date" %} <span class="req">*</span>{% endif %}
             </label>
             {{ field }}
             {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
@@ -330,6 +343,11 @@
 
 {% block extra_head %}
 <style>
+  .locked-supplier {
+    display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2);
+  }
+  .locked-supplier a { margin-left: auto; }
   .two-col { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
   .summary-card { position: sticky; top: 84px; }
   .kv.summary { grid-template-columns: 1fr auto; gap: 7px 16px; }
@@ -387,6 +405,20 @@
 {% block extra_js %}
 <script>
   window.PRODUCT_TAX = {{ product_tax_json|safe }};
+  // "Leave empty for BILL-004": each supplier's next automatic bill number.
+  (function () {
+    var next = {{ next_bill_numbers|default:"{}"|safe }};
+    var mill = document.getElementById("id_mill");
+    var billNo = document.getElementById("id_invoice_no");
+    if (!mill || !billNo) return;
+    var word = "{% filter escapejs %}{% translate 'Leave empty for' %}{% endfilter %}";
+    function hint() {
+      var n = next[mill.value];
+      billNo.placeholder = n ? word + " " + n : "{% filter escapejs %}{% translate 'Number printed on the mill bill' %}{% endfilter %}";
+    }
+    mill.addEventListener("change", hint);
+    hint();
+  })();
 </script>
 <script src="{% static 'core/purchase_form.js' %}?v={{ asset_version }}"></script>
 {% endblock %}

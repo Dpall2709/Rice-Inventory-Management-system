@@ -25,13 +25,16 @@
   </div>
 
   <div class="page-actions">
-    {% if mill.mobile %}
-      <a class="btn btn-ghost" href="https://wa.me/{{ mill.whatsapp_number }}" target="_blank" rel="noopener">💬 WhatsApp</a>
+    {% if mill.is_active %}
+      <a class="btn btn-primary" href="{% url 'add_purchase' %}?mill={{ mill.id }}">➕ {% translate "Add purchase bill" %}</a>
     {% endif %}
-    <a class="btn btn-outline" href="{% url 'mill_report_excel' mill.id %}">📊 {% translate "Excel" %}</a>
-    <a class="btn btn-outline" href="{% url 'mill_report_pdf' mill.id %}">📄 {% translate "PDF" %}</a>
-    <a class="btn btn-outline" href="{% url 'edit_mill' mill.id %}">✏️ {% translate "Edit" %}</a>
-    <a class="btn btn-primary" href="{% url 'add_mill_payment' mill.id %}">💳 {% translate "Add payment" %}</a>
+    <a class="btn btn-outline" href="{% url 'add_mill_payment' mill.id %}">💳 {% translate "Pay" %}</a>
+    <span class="action-group">
+      {% if mill.mobile %}<a class="btn btn-ghost" href="https://wa.me/{{ mill.whatsapp_number }}" target="_blank" rel="noopener" title="WhatsApp">💬</a>{% endif %}
+      <a class="btn btn-ghost" href="{% url 'mill_report_excel' mill.id %}" title="{% translate 'Download Excel' %}">📊 Excel</a>
+      <a class="btn btn-ghost" href="{% url 'mill_report_pdf' mill.id %}" title="{% translate 'Download PDF' %}">📄 PDF</a>
+      <a class="btn btn-ghost" href="{% url 'edit_mill' mill.id %}" title="{% translate 'Edit supplier' %}">✏️ {% translate "Edit" %}</a>
+    </span>
   </div>
 </div>
 
@@ -81,14 +84,14 @@
 </div>
 
 <div class="tabs" id="millTabs">
-  <a class="tab active" href="#history" data-tab="history">📒 {% translate "Account history" %}</a>
-  <a class="tab" href="#purchases" data-tab="purchases">🧾 {% translate "Purchases" %}</a>
+  <a class="tab active" href="#purchases" data-tab="purchases">🧾 {% translate "Bill history" %}</a>
+  <a class="tab" href="#history" data-tab="history">📒 {% translate "Account history" %}</a>
   <a class="tab" href="#payments" data-tab="payments">💳 {% translate "Payments" %}</a>
   <a class="tab" href="#details" data-tab="details">📋 {% translate "Supplier details" %}</a>
 </div>
 
 <!-- ============================ HISTORY ============================== -->
-<section class="card" data-panel="history">
+<section class="card" data-panel="history" hidden>
   <div class="list-header">
     <div>
       <div class="list-title">{% translate "Account history" %}</div>
@@ -160,7 +163,7 @@
 </section>
 
 <!-- ============================ PURCHASES ============================ -->
-<section class="card" data-panel="purchases" hidden>
+<section class="card" data-panel="purchases">
   {% if opening_due or advance or on_account or statement.overpaid_on_bills %}
     <div class="banner">
       <span>ℹ️</span>
@@ -185,7 +188,11 @@
   {% endif %}
 
   <div class="list-header">
-    <div class="list-title">{% translate "Purchase invoices" %}</div>
+    <div>
+      <div class="list-title">🧾 {% translate "Bill history" %}</div>
+      <p class="muted small">{% translate "Every bill from this supplier: bill number, date, amount, what is paid and what is still due." %}</p>
+    </div>
+    {% if mill.is_active %}<a class="btn btn-primary btn-sm" href="{% url 'add_purchase' %}?mill={{ mill.id }}">➕ {% translate "Add purchase bill" %}</a>{% endif %}
     <input class="input" type="search" data-filter="#purchaseTable" placeholder="{% translate 'Filter invoices…' %}" style="max-width:240px;">
   </div>
 
@@ -208,12 +215,12 @@
       <tbody>
         {% for row in purchase_rows %}
         <tr class="bill-row status-{{ row.status }}" data-bill-row>
-          <td>
+          <td class="bill-expander">
             <button class="btn btn-ghost btn-sm expander" type="button"
                     data-expand="bill-{{ row.id }}" title="{% translate 'Show what is on this bill' %}">▸</button>
           </td>
 
-          <td>
+          <td data-label="{% translate 'Bill' %}">
             <a class="bill-no" href="{% url 'purchase_detail' row.id %}">{{ row.invoice_no }}</a>
             <div class="bill-meta">
               {% if row.tax_type == 'none' %}<span class="badge badge-muted">{% translate "No GST" %}</span>
@@ -223,17 +230,17 @@
             </div>
           </td>
 
-          <td class="nowrap">
+          <td data-label="{% translate 'Date' %}" class="nowrap">
             <div>{{ row.purchase_date|date:"d M Y" }}</div>
             <div class="row-sub">{{ row.purchase_date|date:"l" }}</div>
           </td>
 
-          <td class="right nowrap">
+          <td data-label="{% translate 'Quantity' %}" class="right nowrap">
             <div class="bold">{% blocktranslate with bags=row.total_bags %}{{ bags }} bags{% endblocktranslate %}</div>
             <div class="row-sub">{{ row.total_kg|floatformat:0 }} kg</div>
           </td>
 
-          <td class="right nowrap">
+          <td data-label="{% translate 'Rate / kg' %}" class="right nowrap">
             {% if row.single_rate %}
               <div class="bold">₹ {{ row.single_rate|floatformat:2 }}</div>
             {% else %}
@@ -242,11 +249,11 @@
             {% if row.gst_amount %}<div class="row-sub">+ {% translate "GST" %}</div>{% endif %}
           </td>
 
-          <td class="right nowrap bold">
+          <td data-label="{% translate 'Bill amount' %}" class="right nowrap bold">
             <span class="inr" data-value="{{ row.total_amount }}">₹ {{ row.total_amount }}</span>
           </td>
 
-          <td class="right">
+          <td data-label="{% translate 'Paid' %}" class="right">
             <div class="inr nowrap" data-value="{{ row.paid }}">₹ {{ row.paid }}</div>
             <div class="paid-bar" title="{% blocktranslate with paid=row.paid total=row.total_amount %}{{ paid }} of {{ total }}{% endblocktranslate %}">
               <span style="width: {% widthratio row.paid row.total_amount 100 %}%;"></span>
@@ -258,7 +265,7 @@
             {% endif %}
           </td>
 
-          <td class="right nowrap">
+          <td data-label="{% translate 'Due' %}" class="right nowrap">
             {% if row.status == 'paid' %}
               <span class="badge badge-green">✓ {% translate "Paid" %}</span>
             {% else %}
@@ -271,7 +278,7 @@
             {% endif %}
           </td>
 
-          <td class="right">
+          <td data-cell-actions class="right">
             <div class="actions">
               {% if row.due > 0 %}
                 <a class="btn btn-outline btn-sm" href="{% url 'add_purchase_payment' row.id %}">💳 {% translate "Pay" %}</a>
@@ -419,6 +426,28 @@
 {% endblock %}
 
 {% block extra_head %}
+<style>
+  /* Phones: every bill becomes a card - number, date, amount, paid, due. */
+  @media (max-width: 720px) {
+    .bills-table thead, .bills-table tfoot, .bills-table .bill-expander { display: none; }
+    .bills-table, .bills-table tbody { display: block; width: 100%; }
+    .bills-table tr.bill-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px;
+      padding: 12px; margin-bottom: 10px; border: 1px solid var(--border);
+      border-radius: var(--r); background: var(--surface);
+    }
+    .bills-table tr.bill-row td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+    .bills-table tr.bill-row td[data-label]::before {
+      content: attr(data-label); display: block; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted);
+    }
+    .bills-table tr.bill-row td[data-cell-actions] { grid-column: 1 / -1; }
+    .bills-table tr.bill-row td.bill-expander { display: none; }
+    .bills-table tr.bill-row.status-due, .bills-table tr.bill-row.status-partial { border-left: 4px solid var(--danger); }
+    .bills-table tr.bill-row td[data-cell-actions] .actions { justify-content: flex-start; }
+    .table-wrap:has(> .bills-table) { border: 0; background: none; overflow: visible; }
+  }
+</style>
 <style>
   .expander { font-size: 15px; line-height: 1; padding: 4px 8px; }
   .expander.open { transform: rotate(90deg); }

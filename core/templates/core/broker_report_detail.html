@@ -71,9 +71,9 @@
   <div class="stat {% if profit_total < 0 %}is-danger{% else %}is-success{% endif %}">
     <div class="stat-icon">📈</div>
     <div>
-      <div class="stat-label">{% translate "Your profit on his trucks" %}</div>
-      <div class="stat-value inr" data-value="{{ profit_total }}">₹ {{ profit_total }}</div>
-      <div class="stat-hint">{% blocktranslate count counter=profit_known %}{{ counter }} truck with known cost{% plural %}{{ counter }} trucks with known cost{% endblocktranslate %}</div>
+      <div class="stat-label">{% translate "Profit earned on his trucks" %}</div>
+      <div class="stat-value inr" data-value="{{ profit_earned }}">₹ {{ profit_earned }}</div>
+      <div class="stat-hint">{% translate "full profit when all is paid" %} ₹ <span class="inr-abs" data-value="{{ profit_total }}">{{ profit_total }}</span> · {% blocktranslate count counter=profit_known %}{{ counter }} truck with known cost{% plural %}{{ counter }} trucks with known cost{% endblocktranslate %}</div>
     </div>
   </div>
 </div>
@@ -129,7 +129,7 @@
         <tr>
           <th>{% translate "Invoice" %}</th><th>{% translate "Customer" %}</th><th>{% translate "Date" %}</th>
           <th class="right">{% translate "Bags" %}</th><th class="right">{% translate "Invoice total" %}</th>
-          <th>{% translate "Commission" %}</th><th class="right">{% translate "Amount" %}</th><th class="right">{% translate "Your profit" %}</th>
+          <th>{% translate "Commission" %}</th><th class="right">{% translate "Amount" %}</th><th class="right">{% translate "Profit earned" %}</th>
         </tr>
       </thead>
       <tbody>
@@ -142,7 +142,7 @@
           <td data-label="{% translate 'Invoice total' %}" class="right inr" data-value="{{ sale.total_amount }}">₹ {{ sale.total_amount }}</td>
           <td data-label="{% translate 'Commission' %}">{% if sale.broker_commission_rate %}{{ sale.broker_commission_rate }} · {{ sale.get_broker_commission_type_display }}{% else %}—{% endif %}</td>
           <td data-label="{% translate 'Amount' %}" class="right bold inr" data-value="{{ sale.broker_commission }}">₹ {{ sale.broker_commission }}</td>
-          <td data-label="{% translate 'Your profit' %}" class="right {% if sale.profit is not None and sale.profit < 0 %}text-danger{% else %}text-success{% endif %}">{% if sale.profit is not None %}<span class="inr" data-value="{{ sale.profit }}">₹ {{ sale.profit }}</span>{% else %}—{% endif %}</td>
+          <td data-label="{% translate 'Profit earned' %}" class="right {% if sale.profit is not None and sale.profit < 0 %}text-danger{% else %}text-success{% endif %}">{% if sale.profit is not None %}<span class="inr" data-value="{{ sale.profit_earned }}">₹ {{ sale.profit_earned }}</span>{% if sale.profit_pending %}<div class="row-sub">{% translate "of" %} ₹{{ sale.profit }}</div>{% endif %}{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

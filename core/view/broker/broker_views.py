@@ -122,14 +122,18 @@ def broker_report_detail(request, broker_id):
     # Profit on every truck he brought - for judging which broker deals pay.
     from decimal import Decimal
 
-    from core.services.sale_service import sale_profit
+    from core.models import Sale
+    from core.services.trade_register import register_rows
 
-    profit_total = Decimal("0")
+    rows = {r["sale"].id: r for r in register_rows(company, Sale.objects.for_company(company).filter(broker=broker))}
+    profit_total = profit_earned = Decimal("0")
     profit_known = 0
     for sale in statement["sales"]:
-        sale.profit = sale_profit(sale)["profit"]
+        row = rows[sale.id]
+        sale.profit, sale.profit_earned, sale.profit_pending = row["profit"], row["profit_earned"], row["profit_pending"]
         if sale.profit is not None:
             profit_total += sale.profit
+            profit_earned += sale.profit_earned
             profit_known += 1
 
     return render(request, "core/broker_report_detail.html", {
@@ -140,6 +144,7 @@ def broker_report_detail(request, broker_id):
         "sales": statement["sales"],
         "history": statement["history"],
         "profit_total": profit_total,
+        "profit_earned": profit_earned,
         "profit_known": profit_known,
     })
 

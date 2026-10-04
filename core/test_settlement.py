@@ -278,7 +278,7 @@ class TruckSettlementTests(TestCase):
         start, end, _label = parse_period({"from": "2026-09-10", "to": "2026-09-01"})
         self.assertEqual((start, end), (date(2026, 9, 1), date(2026, 9, 10)))   # swapped into order
         start, end, _label = parse_period({}, today=date(2026, 10, 2))
-        self.assertEqual((start, end), (date(2026, 10, 1), date(2026, 10, 2)))
+        self.assertEqual((start, end), (date(2000, 1, 1), date(2026, 10, 2)))   # no dates: whole account
 
     def test_broker_statement_downloads(self):
         sale = self.settle(self.make_truck())

@@ -559,3 +559,40 @@ def sale_profit(sale):
         "profit": money(profit),
         "margin_percent": money(margin),
     }
+
+
+# --------------------------------------------------------------------------
+# Profit earned so far - one rule for every screen
+# --------------------------------------------------------------------------
+
+PAID = "paid"
+PART_PAID = "partial"
+UNPAID = "due"
+
+
+def payment_status(received, due):
+    if due <= 0:
+        return PAID
+    return PART_PAID if received > 0 else UNPAID
+
+
+def earned_profit(total_profit, sale_amount, received):
+    """
+    How much of a sale's profit is really in hand.
+
+        profit earned = total profit x (received / what the party owes)
+
+    Half the money in -> half the profit earned; all of it in -> the full
+    profit. A LOSS is counted in full at once: it does not shrink just
+    because the party has not paid yet. Returns (earned, pending); both are
+    None when the sale's cost is unknown.
+    """
+    if total_profit is None:
+        return None, None
+    total_profit = Decimal(total_profit)
+    if total_profit <= 0:
+        return money(total_profit), Decimal("0.00")
+    sale_amount = Decimal(sale_amount or 0)
+    share = min(Decimal(received or 0) / sale_amount, Decimal("1")) if sale_amount > 0 else Decimal("0")
+    earned = money(total_profit * share)
+    return earned, money(total_profit - earned)

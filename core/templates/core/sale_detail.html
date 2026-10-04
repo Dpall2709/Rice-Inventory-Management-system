@@ -241,6 +241,20 @@
     </div>
   </div>
 
+  <div class="bill-money">
+    <div><span>{% translate "Bill amount" %}</span><strong>₹ {{ profit.sale_amount }}</strong></div>
+    <div><span>{% translate "Received" %}</span><strong class="text-success">₹ {{ paid }}</strong></div>
+    <div><span>{% translate "Due" %}</span><strong class="{% if due > 0 %}text-danger{% endif %}">₹ {{ due }}</strong></div>
+    <div><span>{% translate "Cost" %}</span><strong>{% if profit.profit is not None %}₹ {{ profit.cost }}{% else %}—{% endif %}</strong></div>
+    <div><span>{% translate "Profit earned" %}</span>
+      <strong class="{% if profit.profit is not None and profit.profit < 0 %}text-danger{% else %}text-success{% endif %}">{% if profit.profit is not None %}₹ {{ profit.earned }}{% else %}—{% endif %}</strong>
+      {% if profit.pending %}<small class="muted">{% translate "of" %} ₹ {{ profit.profit }} · {% translate "rest comes with the due" %}</small>{% endif %}</div>
+    <div><span>{% translate "Status" %}</span>
+      {% if profit.payment_status == 'paid' %}<span class="badge badge-green">{% translate "Paid" %}</span>
+      {% elif profit.payment_status == 'partial' %}<span class="badge badge-orange">{% translate "Partially paid" %}</span>
+      {% else %}<span class="badge badge-red">{% translate "Due" %}</span>{% endif %}</div>
+  </div>
+
   {% if profit.lots %}
   <div class="table-wrap">
     <table class="table table-cards">

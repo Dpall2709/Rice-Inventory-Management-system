@@ -53,6 +53,14 @@
       <div class="stat-value inr" data-value="{{ total_due }}">₹ {{ total_due }}</div>
     </div>
   </div>
+  <div class="stat {% if total_profit_earned < 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">📈</div>
+    <div>
+      <div class="stat-label">{% translate "Profit earned" %}</div>
+      <div class="stat-value inr" data-value="{{ total_profit_earned }}">₹ {{ total_profit_earned }}</div>
+      <div class="stat-hint">{% translate "of" %} ₹ <span class="inr-abs" data-value="{{ total_profit }}">{{ total_profit }}</span> · {% translate "cost" %} ₹ <span class="inr-abs" data-value="{{ total_cost }}">{{ total_cost }}</span></div>
+    </div>
+  </div>
 </div>
 
 <div class="card">
@@ -99,6 +107,7 @@
           <th>{% translate "Invoice" %}</th><th>{% translate "Customer" %}</th><th>{% translate "Date" %}</th>
           <th class="right">{% translate "Bags" %}</th><th class="right">{% translate "Total" %}</th>
           <th class="right">{% translate "Received" %}</th><th class="right">{% translate "Due" %}</th>
+          <th class="right">{% translate "Cost" %}</th><th class="right">{% translate "Profit earned" %}</th>
           <th class="right">{% translate "Actions" %}</th>
         </tr>
       </thead>
@@ -125,19 +134,26 @@
             {% if sale.due_date %}<div class="row-sub">{% translate "due" %} {{ sale.due_date|date:"d M" }}</div>{% endif %}
           </td>
           <td data-label="{% translate 'Bags' %}" class="right">{{ sale.total_bags }}</td>
-          <td data-label="{% translate 'Total' %}" class="right bold inr" data-value="{{ sale.total_amount }}">₹ {{ sale.total_amount }}</td>
+          <td data-label="{% translate 'Total' %}" class="right bold"><span class="inr" data-value="{{ sale.total_amount }}">₹ {{ sale.total_amount }}</span>
+            {% if sale.party_owes != sale.total_amount %}<div class="row-sub">{% translate "party owes" %} ₹{{ sale.party_owes }}</div>{% endif %}</td>
           <td data-label="{% translate 'Received' %}" class="right inr" data-value="{{ sale.paid }}">₹ {{ sale.paid }}</td>
           <td data-label="{% translate 'Due' %}" class="right">
             {% if sale.due > 0 %}
               <span class="bold text-danger inr" data-value="{{ sale.due }}">₹ {{ sale.due }}</span>
               <div>
                 {% if sale.overdue %}<span class="badge badge-red"><span class="dot"></span>{% translate "Overdue" %}</span>
-                {% elif sale.status == 'partial' %}<span class="badge badge-orange">{% translate "Partial" %}</span>
+                {% elif sale.status == 'partial' %}<span class="badge badge-orange">{% translate "Partially paid" %}</span>
                 {% else %}<span class="badge badge-red"><span class="dot"></span>{% translate "Due" %}</span>{% endif %}
               </div>
             {% else %}
               <span class="badge badge-green">{% translate "Paid" %}</span>
             {% endif %}
+          </td>
+          <td data-label="{% translate 'Cost' %}" class="right">{% if sale.profit is not None %}<span class="inr" data-value="{{ sale.cost }}">₹ {{ sale.cost }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td data-label="{% translate 'Profit earned' %}" class="right bold {% if sale.profit is not None and sale.profit < 0 %}text-danger{% else %}text-success{% endif %}">
+            {% if sale.profit is not None %}<span class="inr" data-value="{{ sale.profit_earned }}">₹ {{ sale.profit_earned }}</span>
+              {% if sale.profit_pending %}<div class="row-sub">{% translate "of" %} ₹{{ sale.profit }}</div>{% endif %}
+            {% else %}<span class="muted">—</span>{% endif %}
           </td>
           <td data-label="{% translate 'Actions' %}">
             <div class="actions">

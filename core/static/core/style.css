@@ -409,11 +409,21 @@ body.sidebar-collapsed .brand { justify-content: center; }
 .lang-switch button.is-active { background: var(--primary); color: var(--on-primary); }
 
 .back-btn {
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--text-soft);
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 34px; padding: 0 12px; max-width: 220px;
+  border: 1px solid var(--border); border-radius: var(--r-full);
+  background: var(--surface-2); color: var(--text-soft);
+  font-size: 13px; font-weight: 600; white-space: nowrap;
 }
 .back-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.back-label { overflow: hidden; text-overflow: ellipsis; }
+
+/* Header buttons: one size everywhere, labels never wrap, the main action stands out. */
+.page-actions .btn { height: 38px; padding: 0 14px; font-size: 13.5px; }
+.page-actions .btn-ghost { padding: 0 10px; }
+/* Secondary actions sit together, quieter than the main ones. */
+.action-group { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface); }
+.action-group .btn { height: 32px; }
 
 .search-box { position: relative; }
 
@@ -1132,6 +1142,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   .stat-hint { font-size: 11px; }
   .page-head { gap: var(--s-3); }
   .page-actions .btn { flex: 1 1 auto; }
+  .action-group { width: 100%; justify-content: space-around; }
 
   /* Tables become cards: each cell shows its own label. */
   .table-cards thead { display: none; }
@@ -1174,8 +1185,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
   .topbar { gap: var(--s-2); padding: 0 var(--s-3); }
   .topbar-left, .topbar-right { gap: 6px; }
   .topbar-title { display: none; }
-  .back-btn { padding-inline: 10px; }
-  .back-label { display: none; }
+  .back-btn { padding-inline: 10px; max-width: 150px; }
   .lang-switch button { min-width: 32px; padding: 0 8px; height: 28px; }
   .icon-btn { width: 34px; height: 34px; }
 
@@ -1374,3 +1384,11 @@ body.auth { display: block; min-height: 100vh; min-height: 100dvh; }
   .auth-grid { grid-template-columns: 1fr; }
   .auth-head h1, .auth-card > h1 { font-size: 21px; }
 }
+
+/* Money strip on a sale bill: amount, received, due, cost, profit earned, status */
+.bill-money { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.bill-money > div { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); }
+.bill-money span { font-size: 12px; color: var(--text-muted); }
+.bill-money strong { font-size: 16px; white-space: nowrap; }
+.bill-money small { font-size: 11.5px; }
+.bill-money .badge { align-self: flex-start; }

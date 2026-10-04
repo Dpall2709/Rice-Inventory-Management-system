@@ -24,7 +24,7 @@ from django.utils.translation import gettext_lazy
 
 from core.models import Payment, Sale
 from core.services.customer_ledger import status_map_for_sales
-from core.services.sale_service import money, sale_profit
+from core.services.sale_service import earned_profit, money, payment_status, sale_profit
 
 ON_THE_WAY = "on_the_way"
 AWAITING = "awaiting_payment"
@@ -81,6 +81,7 @@ def register_rows(company, sales):
             status = AWAITING
 
         kg = Decimal(sale.total_quantity_kg or 0)
+        earned, pending = earned_profit(profit["profit"], figures["net_receivable"], paid)
         rows.append({
             "sale": sale,
             "mills": sorted({lot.mill.mill_name for lot in profit["lots"]}),
@@ -105,11 +106,21 @@ def register_rows(company, sales):
             "received": money(paid),
             "due": money(due),
             "last_payment": last_paid.get(sale.id) or (sale.sale_date if sale.advance_received else None),
-            "profit": profit["profit"],
+            "profit": profit["profit"],            # total profit when fully paid
+            "profit_earned": earned,               # in hand, by money received
+            "profit_pending": pending,             # comes in with the rest of the money
+            "payment_status": payment_status(paid, due),
             "status": status,
             "status_label": STATUS_LABELS[status],
         })
     return rows
+
+
+PAYMENT_LABELS = {
+    "paid": gettext_lazy("Paid"),
+    "partial": gettext_lazy("Partially paid"),
+    "due": gettext_lazy("Due"),
+}
 
 
 def register_totals(rows):
@@ -118,7 +129,17 @@ def register_totals(rows):
 
     settled = [r for r in rows if r["status"] == SETTLED and r["profit"] is not None]
     open_rows = [r for r in rows if r["status"] != SETTLED and r["profit"] is not None]
+    costed = [r for r in rows if r["profit"] is not None]
     return {
+        "sale_amount": total("net_receivable"),
+        "cost": money(sum((r["total_cost"] for r in costed), Decimal("0"))),
+        "profit_total": money(sum((r["profit"] for r in costed), Decimal("0"))),
+        "profit_earned": money(sum((r["profit_earned"] for r in costed), Decimal("0"))),
+        "profit_pending": money(sum((r["profit_pending"] for r in costed), Decimal("0"))),
+        "loss_total": money(-sum((r["profit"] for r in costed if r["profit"] < 0), Decimal("0"))),
+        "bills_paid": sum(1 for r in rows if r["payment_status"] == "paid"),
+        "bills_partial": sum(1 for r in rows if r["payment_status"] == "partial"),
+        "bills_due": sum(1 for r in rows if r["payment_status"] == "due"),
         "trucks": len(rows),
         "bags": sum(int(r["bags"] or 0) for r in rows),
         "weight_kg": total("weight_kg"),
@@ -153,6 +174,7 @@ def group_summary(rows, key):
             "weight_kg": Decimal("0"), "loss_kg": Decimal("0"), "party_owes": Decimal("0"),
             "received": Decimal("0"), "due": Decimal("0"), "cash_discount": Decimal("0"),
             "brokerage": Decimal("0"), "profit": Decimal("0"), "losses": 0,
+            "cost": Decimal("0"), "profit_earned": Decimal("0"), "profit_pending": Decimal("0"),
         })
         group["trucks"] += 1
         group["weight_kg"] += r["weight_kg"] or 0
@@ -164,11 +186,15 @@ def group_summary(rows, key):
         group["brokerage"] += r["commission"] if sale.broker_id else 0
         if r["profit"] is not None:
             group["profit"] += r["profit"]
+            group["cost"] += r["total_cost"]
+            group["profit_earned"] += r["profit_earned"]
+            group["profit_pending"] += r["profit_pending"]
             if r["profit"] < 0:
                 group["losses"] += 1
     result = list(groups.values())
     for group in result:
-        for field in ("weight_kg", "loss_kg", "party_owes", "received", "due", "cash_discount", "brokerage", "profit"):
+        for field in ("weight_kg", "loss_kg", "party_owes", "received", "due", "cash_discount", "brokerage",
+                      "profit", "cost", "profit_earned", "profit_pending"):
             group[field] = money(group[field])
     result.sort(key=lambda g: g["profit"], reverse=True)
     return result
@@ -197,7 +223,7 @@ def register_excel(company, rows, totals, title):
         _("Unloaded on"), _("Party weight (kg)"), _("Shortage (kg)"), _("Party value"), _("Broker"),
         _("Who pays us"),
         _("Cash discount"), _("Brokerage"), _("Party owes"), _("Received"), _("Last payment"),
-        _("Due"), _("Profit / loss"), _("Status"),
+        _("Due"), _("Full profit / loss"), _("Profit earned"), _("Payment"), _("Status"),
     ]
     ws.append(headers)
     header_row = ws.max_row
@@ -221,23 +247,30 @@ def register_excel(company, rows, totals, title):
             num(r["loss_kg"]), num(r["party_value"]), sale.broker.broker_name if sale.broker else "",
             str(sale.get_collect_from_display()) if sale.broker_id else str(_("Customer pays us")),
             num(r["cash_discount"]), num(r["commission"]), num(r["net_receivable"]), num(r["received"]),
-            r["last_payment"], num(r["due"]), num(r["profit"]), str(r["status_label"]),
+            r["last_payment"], num(r["due"]), num(r["profit"]), num(r["profit_earned"]),
+            str(PAYMENT_LABELS[r["payment_status"]]), str(r["status_label"]),
         ])
-        profit_cell = ws.cell(row=ws.max_row, column=28)
         if r["profit"] is not None:
-            profit_cell.font = Font(color="B91C1C" if r["profit"] < 0 else "15803D", bold=True)
+            for column in (28, 29):
+                ws.cell(row=ws.max_row, column=column).font = Font(
+                    color="B91C1C" if r["profit"] < 0 else "15803D", bold=True)
 
     ws.append([])
     for label, value in [
         (_("Trucks"), totals["trucks"]),
-        (_("Total investment"), num(totals["investment"])),
-        (_("Parties owe in all"), num(totals["party_owes"])),
+        (_("Paid"), totals["bills_paid"]),
+        (_("Part paid"), totals["bills_partial"]),
+        (_("Unpaid"), totals["bills_due"]),
+        (_("Total sale"), num(totals["sale_amount"])),
+        (_("Total cost"), num(totals["investment"])),
         (_("Received"), num(totals["received"])),
         (_("Still to receive"), num(totals["outstanding"])),
-        (_("Profit on settled trucks"), num(totals["profit_settled"])),
-        (_("Expected profit on open trucks"), num(totals["profit_expected"])),
+        (_("Profit earned (on money received)"), num(totals["profit_earned"])),
+        (_("Profit still to come with the dues"), num(totals["profit_pending"])),
+        (_("Full profit when all is paid"), num(totals["profit_total"])),
+        (_("Loss"), num(totals["loss_total"])),
     ]:
-        ws.append([label, value])
+        ws.append([label, None, None, None, value])  # label spills over the empty cells
         ws.cell(row=ws.max_row, column=1).font = Font(bold=True)
 
     for column in range(1, len(headers) + 1):

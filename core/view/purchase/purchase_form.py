@@ -8,13 +8,14 @@ charges, and whatever you paid at that moment.
 import json
 
 from django.db import transaction
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
 from core.forms import PurchaseForm, PurchaseItemFormSet
 from core.models import Payment, Product, Purchase
 from core.permissions import manager_required
-from core.services.invoice_number import next_purchase_ref
+from core.services.invoice_number import next_purchase_ref, next_supplier_bill_no
 from core.services.purchase_service import apply_totals, suggested_tax_type
 from core.tenancy import company_of, tenant_object_or_404
 
@@ -34,6 +35,39 @@ def product_tax_map(company):
             "name": p.rice_name,
         }
         for p in products
+    })
+
+
+def _supplier_from(request, company):
+    """The supplier named in ?mill=<id> (or the posted lock), if it is this company's."""
+    raw = request.GET.get("mill") or request.POST.get("locked_mill") or ""
+    if not raw.isdigit():
+        return None
+    from core.models import Mill
+
+    return Mill.objects.for_company(company).filter(pk=int(raw), is_active=True).first()
+
+
+def _lock_supplier(form, supplier):
+    """The bill belongs to this supplier: no dropdown to pick another one."""
+    from django import forms as django_forms
+
+    form.fields["mill"].widget = django_forms.HiddenInput()
+    form.fields["mill"].initial = supplier.id
+    if form.is_bound:
+        data = form.data.copy()
+        data["mill"] = str(supplier.id)
+        form.data = data
+
+
+def next_bill_numbers(company):
+    """{mill id: next automatic bill number} - shown as a hint in the form."""
+    from core.models import Mill
+    from core.services.invoice_number import peek_supplier_bill_no
+
+    return json.dumps({
+        str(mill.id): peek_supplier_bill_no(mill)
+        for mill in Mill.objects.for_company(company).filter(is_active=True)
     })
 
 
@@ -127,9 +161,15 @@ def add_purchase(request):
     # in the session; the form is pre-filled and the user checks it.
     scan_draft = get_draft(request) if (request.GET.get("scan") or request.POST.get("scan")) else None
 
+    # Opened from a supplier's page ("Add purchase bill"): the supplier is
+    # fixed, and saving goes back to that supplier.
+    supplier = _supplier_from(request, company)
+
     if request.method == "POST":
         form = PurchaseForm(request.POST, company=company)
         formset = PurchaseItemFormSet(request.POST, form_kwargs={"company": company})
+        if supplier:
+            _lock_supplier(form, supplier)
 
         if form.is_valid() and formset.is_valid():
             with transaction.atomic():
@@ -137,6 +177,8 @@ def add_purchase(request):
                 purchase.company = company
                 purchase.total_amount = 0
                 purchase.purchase_ref = next_purchase_ref(company, purchase.purchase_date)
+                if not purchase.invoice_no:
+                    purchase.invoice_no = next_supplier_bill_no(purchase.mill)
                 purchase.save()
 
                 items = []
@@ -192,8 +234,12 @@ def add_purchase(request):
             )
 
             if request.POST.get("save_and_new"):
+                if supplier:
+                    return redirect(f"{reverse('add_purchase')}?mill={supplier.id}")
                 return redirect("add_purchase")
 
+            if supplier:
+                return redirect("mill_report_detail", mill_id=supplier.id)
             return redirect("purchase_detail", purchase_id=purchase.id)
     elif scan_draft:
         initial, lines = draft_initial(company, scan_draft)
@@ -202,10 +248,12 @@ def add_purchase(request):
         formset = PurchaseItemFormSet(initial=lines, form_kwargs={"company": company})
         formset.extra = max(len(lines), 1)
     else:
-        form = PurchaseForm(
-            company=company,
-            initial={"purchase_date": timezone.localdate()},
-        )
+        initial = {"purchase_date": timezone.localdate()}
+        if supplier:
+            initial["mill"] = supplier.id
+        form = PurchaseForm(company=company, initial=initial)
+        if supplier:
+            _lock_supplier(form, supplier)
         formset = PurchaseItemFormSet(form_kwargs={"company": company})
 
     return render(request, "core/purchase_form.html", {
@@ -214,6 +262,8 @@ def add_purchase(request):
         "mode": "add",
         "product_tax_json": product_tax_map(company),
         "scan": scan_draft,
+        "supplier": supplier,
+        "next_bill_numbers": next_bill_numbers(company),
     })
 
 
@@ -248,6 +298,8 @@ def edit_purchase(request, purchase_id):
                 for item in items:
                     item.save()
 
+                if not purchase.invoice_no:
+                    purchase.invoice_no = next_supplier_bill_no(purchase.mill)
                 purchase.save()
 
                 save_own_expenses(purchase, form)

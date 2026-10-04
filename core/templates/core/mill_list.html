@@ -127,7 +127,8 @@
 
           <td data-label="{% translate 'Actions' %}">
             <div class="actions">
-              <a class="btn btn-outline btn-sm" href="{% url 'mill_report_detail' mill.id %}">📑 {% translate "Ledger" %}</a>
+              {% if mill.is_active %}<a class="btn btn-primary btn-sm" href="{% url 'add_purchase' %}?mill={{ mill.id }}" title="{% translate 'Add purchase bill' %}">➕ {% translate "Bill" %}</a>{% endif %}
+              <a class="btn btn-outline btn-sm" href="{% url 'mill_report_detail' mill.id %}">📑 {% translate "Open" %}</a>
               <a class="btn btn-outline btn-sm" href="{% url 'add_mill_payment' mill.id %}">💳 {% translate "Pay" %}</a>
               <a class="btn btn-ghost btn-sm" href="{% url 'edit_mill' mill.id %}" title="{% translate 'Edit' %}">✏️</a>
               {% if mill.is_active %}
