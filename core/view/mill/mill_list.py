@@ -10,7 +10,7 @@ queries no matter how many suppliers there are.
 """
 
 from django.core.paginator import Paginator
-from django.db.models import DecimalField, F, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import Count, DecimalField, F, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 
 from core.models import Mill, Payment, Purchase
@@ -51,6 +51,20 @@ def mill_queryset(company):
         .values("total")[:1]
     )
 
+    bills = (
+        Purchase.objects
+        .filter(company=company, mill=OuterRef("pk"))
+        .values("mill")
+        .annotate(n=Count("id"))
+        .values("n")[:1]
+    )
+    last_bill = (
+        Purchase.objects
+        .filter(company=company, mill=OuterRef("pk"))
+        .order_by("-purchase_date")
+        .values("purchase_date")[:1]
+    )
+
     zero = Value(0, output_field=money)
 
     return (
@@ -59,6 +73,8 @@ def mill_queryset(company):
         .annotate(
             purchased=Coalesce(Subquery(purchased, output_field=money), zero),
             paid=Coalesce(Subquery(paid, output_field=money), zero),
+            bill_count=Coalesce(Subquery(bills), Value(0)),
+            last_bill=Subquery(last_bill),
         )
         .annotate(
             balance=F("opening_balance") + F("purchased") - F("paid"),
@@ -73,6 +89,7 @@ def mill_list(request):
     q = request.GET.get("q", "").strip()
     status = request.GET.get("status", "active")
     sort = request.GET.get("sort", "name")
+    balance = request.GET.get("balance", "")
 
     mills = mill_queryset(company)
 
@@ -90,6 +107,13 @@ def mill_list(request):
             | Q(city__icontains=q)
         )
 
+    if balance == "owe":
+        mills = mills.filter(balance__gt=0)
+    elif balance == "settled":
+        mills = mills.filter(balance=0)
+    elif balance == "advance":
+        mills = mills.filter(balance__lt=0)
+
     mills = mills.order_by(SORT_FIELDS.get(sort, "mill_name"))
 
     # Totals for the tiles, over everything the filter matched (not just page 1).
@@ -103,6 +127,9 @@ def mill_list(request):
     )
 
     page = Paginator(mills, 25).get_page(request.GET.get("page"))
+    for mill in page.object_list:
+        owed_in_all = mill.opening_balance + mill.purchased
+        mill.paid_percent = min(int(mill.paid * 100 / owed_in_all), 100) if owed_in_all > 0 else 100
 
     # Keeps the search and sort when moving between pages.
     params = request.GET.copy()
@@ -114,6 +141,9 @@ def mill_list(request):
         "q": q,
         "status": status,
         "sort": sort,
+        "balance": balance,
+        "filtered": bool(q or balance or status != "active" or sort != "name"),
+        "owe_count": mill_queryset(company).filter(balance__gt=0).count(),
         "querystring": params.urlencode(),
         "total_count": page.paginator.count,
         "active_count": mill_queryset(company).filter(is_active=True).count(),

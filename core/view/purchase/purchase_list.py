@@ -9,11 +9,13 @@ from django.db.models.functions import Coalesce
 from decimal import Decimal, InvalidOperation
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.translation import gettext as _
 
 from core.models import Mill, Payment, Purchase, PurchaseExpense, PurchaseItem
 from core.services.costing import line_costing, purchase_costing
 from core.services.ledger import paid_map_for_purchases, purchase_payment_status
+from core.services.periods import date_range, period_chips
 from core.permissions import manager_required
 from core.tenancy import company_of, tenant_object_or_404
 
@@ -29,28 +31,15 @@ def purchase_list(request):
     q = request.GET.get("q", "").strip()
     mill_id = request.GET.get("mill", "")
     status = request.GET.get("status", "")
-    date_from = request.GET.get("from", "")
-    date_to = request.GET.get("to", "")
-
-    paid = (
-        Payment.objects
-        .filter(company=company, related_type="purchase", purchase=OuterRef("pk"))
-        .values("purchase")
-        .annotate(total=Sum("amount"))
-        .values("total")[:1]
-    )
-
-    zero = Value(0, output_field=money)
+    date_from, date_to = date_range(request.GET)
 
     purchases = (
         Purchase.objects
         .for_company(company)
         .select_related("mill")
-        .annotate(
-            paid=Coalesce(Subquery(paid, output_field=money), zero),
-            bags=Coalesce(Sum("purchaseitem__bag_count"), Value(0)),
-        )
-        .annotate(due=F("total_amount") - F("paid"))
+        .prefetch_related("purchaseitem_set__product")
+        .annotate(bags=Coalesce(Sum("purchaseitem__bag_count"), Value(0)))
+        .order_by("-purchase_date", "-id")
     )
 
     if q:
@@ -59,42 +48,50 @@ def purchase_list(request):
             | Q(purchase_ref__icontains=q)
             | Q(mill__mill_name__icontains=q)
         )
-
     if mill_id.isdigit():
         purchases = purchases.filter(mill_id=int(mill_id))
-
     if date_from:
         purchases = purchases.filter(purchase_date__gte=date_from)
     if date_to:
         purchases = purchases.filter(purchase_date__lte=date_to)
 
+    # Paid / due per bill the way the supplier ledger works it out: money paid
+    # to the mill without naming a bill also settles its oldest bills. The
+    # Paid / Unpaid filter and the totals use the same figures, so a bill the
+    # list shows as paid never turns up under "Only unpaid".
+    purchases = list(purchases)
+    settled = paid_map_for_purchases(company, purchases)
+    for purchase in purchases:
+        row = settled.get(purchase.id) or {}
+        purchase.paid = row.get("paid", Decimal("0"))
+        purchase.due = row.get("due", purchase.total_amount)
+        purchase.applied_from_account = row.get("applied_from_account", Decimal("0"))
+        purchase.paid_percent = (
+            min(int(purchase.paid * 100 / purchase.total_amount), 100) if purchase.total_amount else 100
+        )
+        purchase.weight_kg = sum((item.total_kg for item in purchase.purchaseitem_set.all()), Decimal("0"))
+        purchase.rice = sorted({item.product.rice_name for item in purchase.purchaseitem_set.all()})
+
     if status == "due":
-        purchases = purchases.filter(due__gt=0)
+        purchases = [p for p in purchases if p.due > 0]
+    elif status == "partial":
+        purchases = [p for p in purchases if p.due > 0 and p.paid > 0]
     elif status == "paid":
-        purchases = purchases.filter(due__lte=0)
+        purchases = [p for p in purchases if p.due <= 0]
 
-    totals = purchases.aggregate(
-        total_value=Coalesce(Sum("total_amount"), zero),
-        total_paid=Coalesce(Sum("paid"), zero),
-        total_tax=Coalesce(
-            Sum(F("cgst_amount") + F("sgst_amount") + F("igst_amount")), zero
-        ),
-    )
-    totals["total_due"] = totals["total_value"] - totals["total_paid"]
+    totals = {
+        "total_value": sum((p.total_amount for p in purchases), Decimal("0")),
+        "total_paid": sum((p.paid for p in purchases), Decimal("0")),
+        "total_due": sum((p.due for p in purchases if p.due > 0), Decimal("0")),
+        "total_tax": sum((p.cgst_amount + p.sgst_amount + p.igst_amount for p in purchases), Decimal("0")),
+        "total_bags": sum((int(p.bags or 0) for p in purchases)),
+        "total_kg": sum((p.weight_kg for p in purchases), Decimal("0")),
+        "bills_paid": sum(1 for p in purchases if p.due <= 0),
+        "bills_partial": sum(1 for p in purchases if p.due > 0 and p.paid > 0),
+        "bills_due": sum(1 for p in purchases if p.due > 0 and p.paid <= 0),
+    }
 
-    page = Paginator(purchases.order_by("-purchase_date", "-id"), 25).get_page(
-        request.GET.get("page")
-    )
-
-    # Payments made to a mill without naming a bill still count. This applies
-    # them the same way the supplier ledger does, so both screens agree.
-    settled = paid_map_for_purchases(company, page.object_list)
-    for purchase in page.object_list:
-        row = settled.get(purchase.id)
-        if row:
-            purchase.paid = row["paid"]
-            purchase.due = row["due"]
-            purchase.applied_from_account = row["applied_from_account"]
+    page = Paginator(purchases, 25).get_page(request.GET.get("page"))
 
     params = request.GET.copy()
     params.pop("page", None)
@@ -108,6 +105,8 @@ def purchase_list(request):
         "status": status,
         "date_from": date_from,
         "date_to": date_to,
+        "periods": period_chips(timezone.localdate(), date_from, date_to),
+        "filtered": bool(q or mill_id or status or date_from or date_to),
         "querystring": params.urlencode(),
         "count": page.paginator.count,
         **totals,

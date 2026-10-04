@@ -1,0 +1,20 @@
+{% load i18n %}
+{# Page links that keep the filters. Needs `page_obj` and `querystring`. #}
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="pagination">
+  <div class="muted">{% blocktranslate with page=page_obj.number pages=page_obj.paginator.num_pages %}Page {{ page }} of {{ pages }}{% endblocktranslate %}</div>
+  <div class="pages">
+    {% if page_obj.has_previous %}<a class="page-link" href="?{{ querystring }}&page={{ page_obj.previous_page_number }}">‹</a>
+    {% else %}<span class="page-link disabled">‹</span>{% endif %}
+    {% for num in page_obj.paginator.page_range %}
+      {% if num == page_obj.number %}
+        <span class="page-link active">{{ num }}</span>
+      {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+        <a class="page-link" href="?{{ querystring }}&page={{ num }}">{{ num }}</a>
+      {% endif %}
+    {% endfor %}
+    {% if page_obj.has_next %}<a class="page-link" href="?{{ querystring }}&page={{ page_obj.next_page_number }}">›</a>
+    {% else %}<span class="page-link disabled">›</span>{% endif %}
+  </div>
+</div>
+{% endif %}

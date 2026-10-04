@@ -8,7 +8,7 @@
   <div>
     <div class="crumbs"><a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> › <span>{% translate "Purchases" %}</span></div>
     <h1>{% translate "Purchases" %}</h1>
-    <p class="muted">{% blocktranslate count counter=count %}{{ counter }} bill{% plural %}{{ counter }} bills{% endblocktranslate %} · {% translate "every line here added stock" %}</p>
+    <p class="muted">{% translate "Every mill bill: what you bought, what it cost, what you paid and what you still owe." %}</p>
   </div>
   <div class="page-actions">
     <a class="btn btn-outline" href="{% url 'scan_purchase_bill' %}">📷 {% translate "Scan bill" %}</a>
@@ -16,20 +16,58 @@
   </div>
 </div>
 
-<div class="stats">
+<!-- ===================== FILTERS ===================== -->
+<div class="card filter-panel">
+  <form class="filter-bar" method="GET" data-no-loading data-filter-form>
+    {% include "core/partials/period_chips.html" %}
+    <div class="filter-grid">
+      <label class="filter-field filter-wide"><span>{% translate "Search" %}</span>
+        <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Bill no, our ref, or mill…' %}"></label>
+      <label class="filter-field"><span>{% translate "From" %}</span>
+        <input class="input" type="date" name="from" value="{{ date_from|date:'Y-m-d' }}"></label>
+      <label class="filter-field"><span>{% translate "To" %}</span>
+        <input class="input" type="date" name="to" value="{{ date_to|date:'Y-m-d' }}"></label>
+      <label class="filter-field"><span>{% translate "Mill" %}</span>
+        <select class="select" name="mill">
+          <option value="">{% translate "All mills" %}</option>
+          {% for mill in mills %}<option value="{{ mill.id }}" {% if mill_id == mill.id|stringformat:"s" %}selected{% endif %}>{{ mill.mill_name }}</option>{% endfor %}
+        </select></label>
+      <label class="filter-field"><span>{% translate "Payment" %}</span>
+        <select class="select" name="status">
+          <option value="">{% translate "Paid & unpaid" %}</option>
+          <option value="due" {% if status == 'due' %}selected{% endif %}>{% translate "Only unpaid" %}</option>
+          <option value="partial" {% if status == 'partial' %}selected{% endif %}>{% translate "Only partially paid" %}</option>
+          <option value="paid" {% if status == 'paid' %}selected{% endif %}>{% translate "Only settled" %}</option>
+        </select></label>
+    </div>
+    <div class="filter-foot">
+      <span class="muted small">
+        {% blocktranslate count counter=count %}Showing {{ counter }} bill{% plural %}Showing {{ counter }} bills{% endblocktranslate %}{% if date_from or date_to %} · {{ date_from|date:"d M Y"|default:"…" }} – {{ date_to|date:"d M Y"|default:"…" }}{% endif %}
+      </span>
+      <span class="filter-actions">
+        <button class="btn btn-outline btn-sm" type="submit">🔍 {% translate "Search" %}</button>
+        {% if filtered %}<a class="btn btn-ghost btn-sm" href="{% url 'purchase_list' %}">✕ {% translate "Clear filters" %}</a>{% endif %}
+      </span>
+    </div>
+  </form>
+</div>
+
+<!-- ===================== TOTALS ===================== -->
+<div class="stats stats-4">
   <div class="stat">
     <div class="stat-icon">🧾</div>
     <div>
-      <div class="stat-label">{% translate "Bills" %}</div>
-      <div class="stat-value">{{ count }}</div>
+      <div class="stat-label">{% translate "Purchase value" %}</div>
+      <div class="stat-value inr" data-value="{{ total_value }}">₹ {{ total_value }}</div>
+      <div class="stat-hint">{% blocktranslate count counter=count with bags=total_bags %}{{ counter }} bill · {{ bags }} bags{% plural %}{{ counter }} bills · {{ bags }} bags{% endblocktranslate %}</div>
     </div>
   </div>
   <div class="stat">
-    <div class="stat-icon">💰</div>
+    <div class="stat-icon">🏛</div>
     <div>
-      <div class="stat-label">{% translate "Purchase value" %}</div>
-      <div class="stat-value inr" data-value="{{ total_value }}">₹ {{ total_value }}</div>
-      <div class="stat-hint">{% translate "incl. GST" %} ₹ {{ total_tax }}</div>
+      <div class="stat-label">{% translate "GST in these bills" %}</div>
+      <div class="stat-value inr" data-value="{{ total_tax }}">₹ {{ total_tax }}</div>
+      <div class="stat-hint">{% translate "you can claim it as input credit" %}</div>
     </div>
   </div>
   <div class="stat is-success">
@@ -37,134 +75,100 @@
     <div>
       <div class="stat-label">{% translate "Paid" %}</div>
       <div class="stat-value inr" data-value="{{ total_paid }}">₹ {{ total_paid }}</div>
+      <div class="stat-hint">{% blocktranslate with paid=bills_paid part=bills_partial due=bills_due %}{{ paid }} paid · {{ part }} part paid · {{ due }} unpaid{% endblocktranslate %}</div>
     </div>
   </div>
   <div class="stat {% if total_due > 0 %}is-danger{% else %}is-success{% endif %}">
     <div class="stat-icon">⏳</div>
     <div>
-      <div class="stat-label">{% translate "Still due" %}</div>
+      <div class="stat-label">{% translate "You still owe" %}</div>
       <div class="stat-value inr" data-value="{{ total_due }}">₹ {{ total_due }}</div>
+      <div class="stat-hint">{% translate "on these bills" %}</div>
     </div>
   </div>
 </div>
 
-<div class="card">
-  <form class="toolbar filter-bar" method="GET" data-no-loading data-filter-form>
-    <label class="filter-field filter-search"><span>{% translate "Search" %}</span><input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Bill no, our ref, or mill…' %}" style="min-width:230px;"></label>
+<!-- ===================== BILLS (newest first) ===================== -->
+<div class="list-header" style="margin:4px 0 10px;">
+  <div class="list-title">🧾 {% translate "Mill bills" %} <span class="muted small">· {% translate "newest first" %}</span></div>
+</div>
 
-    <label class="filter-field"><span>{% translate "Mill" %}</span>
-
-    <select class="select" name="mill">
-      <option value="">{% translate "All mills" %}</option>
-      {% for mill in mills %}
-        <option value="{{ mill.id }}" {% if mill_id == mill.id|stringformat:"s" %}selected{% endif %}>{{ mill.mill_name }}</option>
-      {% endfor %}
-    </select></label>
-
-    <label class="filter-field"><span>{% translate "Status" %}</span>
-
-    <select class="select" name="status">
-      <option value="">{% translate "Paid &amp; unpaid" %}</option>
-      <option value="due" {% if status == 'due' %}selected{% endif %}>{% translate "Only unpaid" %}</option>
-      <option value="paid" {% if status == 'paid' %}selected{% endif %}>{% translate "Only settled" %}</option>
-    </select></label>
-
-    <label class="filter-field"><span>{% translate "From" %}</span><input class="input" type="date" name="from" value="{{ date_from }}" title="{% translate 'From date' %}"></label>
-    <label class="filter-field"><span>{% translate "To" %}</span><input class="input" type="date" name="to" value="{{ date_to }}" title="{% translate 'To date' %}"></label>
-
-    <button class="btn btn-outline" type="submit">🔍 {% translate "Search" %}</button>
-    {% if q or mill_id or status or date_from or date_to %}
-      <a class="btn btn-ghost" href="{% url 'purchase_list' %}">✕ {% translate "Clear filters" %}</a>
-    {% endif %}
-  </form>
-
-  {% if purchases %}
-  <div class="table-wrap">
-    <table class="table table-cards">
-      <thead>
-        <tr>
-          <th>{% translate "Bill" %}</th><th>{% translate "Mill" %}</th><th>{% translate "Date" %}</th><th class="right">{% translate "Bags" %}</th>
-          <th class="right">{% translate "Taxable" %}</th><th class="right">{% translate "GST" %}</th><th class="right">{% translate "Total" %}</th>
-          <th class="right">{% translate "Due" %}</th><th class="right">{% translate "Actions" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for purchase in purchases %}
-        <tr>
-          <td data-label="{% translate 'Bill' %}">
-            <a class="row-title" href="{% url 'purchase_detail' purchase.id %}">{{ purchase.invoice_no }}</a>
-            <div class="row-sub">{{ purchase.purchase_ref|default:"—" }}</div>
-          </td>
-          <td data-label="{% translate 'Mill' %}">
-            <a href="{% url 'mill_report_detail' purchase.mill.id %}">{{ purchase.mill.mill_name }}</a>
-            <div class="row-sub">
-              {% if purchase.tax_type == 'none' %}<span class="badge badge-muted">{% translate "No GST" %}</span>
-              {% elif purchase.tax_type == 'igst' %}<span class="badge badge-blue">{% translate "IGST" %}</span>
-              {% else %}<span class="badge badge-blue">{% translate "CGST+SGST" %}</span>{% endif %}
-            </div>
-          </td>
-          <td data-label="{% translate 'Date' %}" class="nowrap">{{ purchase.purchase_date|date:"d M Y" }}</td>
-          <td data-label="{% translate 'Bags' %}" class="right">{{ purchase.bags }}</td>
-          <td data-label="{% translate 'Taxable' %}" class="right inr" data-value="{{ purchase.taxable_amount }}">₹ {{ purchase.taxable_amount }}</td>
-          <td data-label="{% translate 'GST' %}" class="right inr" data-value="{{ purchase.gst_amount }}">₹ {{ purchase.gst_amount }}</td>
-          <td data-label="{% translate 'Total' %}" class="right bold inr" data-value="{{ purchase.total_amount }}">₹ {{ purchase.total_amount }}</td>
-          <td data-label="{% translate 'Due' %}" class="right">
-            {% if purchase.due > 0 %}
-              <span class="bold text-danger inr" data-value="{{ purchase.due }}">₹ {{ purchase.due }}</span>
-              <div><span class="badge badge-red"><span class="dot"></span>{% translate "Due" %}</span></div>
-            {% else %}
-              <span class="badge badge-green">{% translate "Paid" %}</span>
-            {% endif %}
-          </td>
-          <td data-label="{% translate 'Actions' %}">
-            <div class="actions">
-              <a class="btn btn-outline btn-sm" href="{% url 'purchase_detail' purchase.id %}">{% translate "View" %}</a>
-              {% if purchase.due > 0 %}
-                <a class="btn btn-ghost btn-sm" href="{% url 'add_purchase_payment' purchase.id %}" title="{% translate 'Pay' %}">💳</a>
-              {% endif %}
-              <a class="btn btn-ghost btn-sm" href="{% url 'edit_purchase' purchase.id %}" title="{% translate 'Edit' %}">✏️</a>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  {% if page_obj.paginator.num_pages > 1 %}
-  <div class="pagination">
-    <div class="muted">{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages %}Page {{ number }} of {{ total }}{% endblocktranslate %}</div>
-    <div class="pages">
-      <a class="page-link {% if not page_obj.has_previous %}disabled{% endif %}"
-         href="?{{ querystring }}&page={{ page_obj.previous_page_number|default:1 }}">‹</a>
-      {% for num in page_obj.paginator.page_range %}
-        {% if num == page_obj.number %}
-          <span class="page-link active">{{ num }}</span>
-        {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
-          <a class="page-link" href="?{{ querystring }}&page={{ num }}">{{ num }}</a>
-        {% endif %}
-      {% endfor %}
-      <a class="page-link {% if not page_obj.has_next %}disabled{% endif %}"
-         href="?{{ querystring }}&page={{ page_obj.next_page_number|default:page_obj.number }}">›</a>
+{% for purchase in purchases %}
+<article class="doc-card {% if purchase.due <= 0 %}tone-success{% elif purchase.paid > 0 %}tone-warning{% else %}tone-danger{% endif %}">
+  <header class="doc-head">
+    <div class="doc-id">
+      <a class="doc-no" href="{% url 'purchase_detail' purchase.id %}">{% translate "Bill" %} {{ purchase.invoice_no }}</a>
+      <span class="muted small">{{ purchase.purchase_date|date:"d M Y" }}{% if purchase.purchase_ref %} · {% translate "our ref" %} {{ purchase.purchase_ref }}{% endif %}</span>
     </div>
-  </div>
-  {% endif %}
+    <div class="doc-badges">
+      {% if purchase.due <= 0 %}<span class="badge badge-green">✓ {% translate "Paid" %}</span>
+      {% elif purchase.paid > 0 %}<span class="badge badge-orange">{% translate "Partially paid" %}</span>
+      {% else %}<span class="badge badge-red">{% translate "Unpaid" %}</span>{% endif %}
+      {% if purchase.tax_type == 'none' %}<span class="badge badge-muted">{% translate "No GST" %}</span>
+      {% elif purchase.tax_type == 'igst' %}<span class="badge badge-blue">IGST</span>
+      {% else %}<span class="badge badge-blue">CGST + SGST</span>{% endif %}
+    </div>
+    <div class="doc-amount">
+      {% if purchase.due > 0 %}
+        <span class="muted small">{% translate "You owe" %}</span>
+        <strong class="text-danger inr" data-value="{{ purchase.due }}">₹ {{ purchase.due }}</strong>
+      {% else %}
+        <span class="muted small">{% translate "Fully paid" %}</span>
+        <strong class="text-success inr" data-value="{{ purchase.total_amount }}">₹ {{ purchase.total_amount }}</strong>
+      {% endif %}
+    </div>
+  </header>
 
-  {% else %}
+  <div class="doc-body">
+    <section class="doc-col">
+      <h4>① {% translate "Bought from" %}</h4>
+      <div class="line"><span>{% translate "Mill" %}</span><a href="{% url 'mill_report_detail' purchase.mill.id %}">{{ purchase.mill.mill_name }}</a></div>
+      <div class="line"><span>{% translate "Rice" %}</span><span>{{ purchase.rice|join:", "|default:"—" }}</span></div>
+      <div class="line"><span>{% translate "Bags" %}</span><span>{{ purchase.bags }} · {{ purchase.weight_kg|floatformat:"-2g" }} kg</span></div>
+    </section>
+
+    <section class="doc-col">
+      <h4>② {% translate "Bill amount" %}</h4>
+      <div class="line"><span>{% translate "Before GST" %}</span><span class="inr" data-value="{{ purchase.taxable_amount }}">₹ {{ purchase.taxable_amount }}</span></div>
+      <div class="line"><span>{% translate "GST" %}</span><span class="inr" data-value="{{ purchase.gst_amount }}">₹ {{ purchase.gst_amount }}</span></div>
+      <div class="line total"><span>{% translate "Bill total" %}</span><span class="inr" data-value="{{ purchase.total_amount }}">₹ {{ purchase.total_amount }}</span></div>
+    </section>
+
+    <section class="doc-col">
+      <h4>③ {% translate "Payment" %}</h4>
+      <div class="line"><span>{% translate "Paid" %}</span><span class="text-success inr" data-value="{{ purchase.paid }}">₹ {{ purchase.paid }}</span></div>
+      {% if purchase.applied_from_account %}<div class="muted small">{% blocktranslate with amount=purchase.applied_from_account %}incl. ₹ {{ amount }} from money paid to the mill on account{% endblocktranslate %}</div>{% endif %}
+      <div class="line total"><span>{% translate "Due" %}</span>
+        {% if purchase.due > 0 %}<span class="text-danger inr" data-value="{{ purchase.due }}">₹ {{ purchase.due }}</span>{% else %}<span class="text-success">₹ 0</span>{% endif %}</div>
+      <div class="pay-bar" title="{{ purchase.paid_percent }}%"><span style="width: {{ purchase.paid_percent }}%"></span></div>
+      <div class="muted small">{% blocktranslate with pct=purchase.paid_percent %}{{ pct }}% paid{% endblocktranslate %}</div>
+    </section>
+  </div>
+
+  <footer class="doc-foot">
+    <a class="btn btn-outline btn-sm" href="{% url 'purchase_detail' purchase.id %}">👁 {% translate "View" %}</a>
+    {% if purchase.due > 0 %}<a class="btn btn-primary btn-sm" href="{% url 'add_purchase_payment' purchase.id %}">💳 {% translate "Pay this bill" %}</a>{% endif %}
+    <a class="btn btn-ghost btn-sm" href="{% url 'edit_purchase' purchase.id %}">✏️ {% translate "Edit" %}</a>
+  </footer>
+</article>
+{% empty %}
+<div class="card">
   <div class="empty">
     <div class="empty-icon">🧾</div>
-    <div class="empty-title">{% if q or mill_id or status %}{% translate "No bill matches this filter" %}{% else %}{% translate "No purchases yet" %}{% endif %}</div>
+    <div class="empty-title">{% if filtered %}{% translate "No bill matches this filter" %}{% else %}{% translate "No purchases yet" %}{% endif %}</div>
     <p>
-      {% if q or mill_id or status %}{% translate "Try a wider date range or clear the filters." %}
+      {% if filtered %}{% translate "Try a wider date range or clear the filters." %}
       {% else %}{% translate "Enter the bills your mills give you — that is what puts rice into your stock." %}{% endif %}
     </p>
-    {% if q or mill_id or status %}
-      <a class="btn btn-outline" href="{% url 'purchase_list' %}">{% translate "Clear filters" %}</a>
+    {% if filtered %}
+      <a class="btn btn-outline" href="{% url 'purchase_list' %}">✕ {% translate "Clear filters" %}</a>
     {% else %}
       <a class="btn btn-primary" href="{% url 'add_purchase' %}">➕ {% translate "Enter your first bill" %}</a>
     {% endif %}
   </div>
-  {% endif %}
 </div>
+{% endfor %}
+
+{% include "core/partials/pagination.html" %}
 
 {% endblock %}

@@ -9,14 +9,60 @@
   <div>
     <div class="crumbs"><a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> › <span>{% translate "Mills / Suppliers" %}</span></div>
     <h1>{% translate "Mills / Suppliers" %}</h1>
-    <p class="muted">{% blocktranslate count counter=total_count %}{{ counter }} supplier shown · click a name to open its ledger{% plural %}{{ counter }} suppliers shown · click a name to open its ledger{% endblocktranslate %}</p>
+    <p class="muted">{% translate "Every mill you buy from: what you bought, what you paid and what you still owe. Open a mill to enter its bills." %}</p>
   </div>
   <div class="page-actions">
     <a class="btn btn-primary" href="{% url 'add_mill' %}">➕ {% translate "Add supplier" %}</a>
   </div>
 </div>
 
-<div class="stats">
+<!-- ===================== FILTERS ===================== -->
+<div class="card filter-panel">
+  <form class="filter-bar" method="GET" data-no-loading data-filter-form>
+    <div class="period-chips" role="group" aria-label="{% translate 'Show' %}">
+      <a class="chip {% if status == 'active' and not balance %}active{% endif %}" href="?status=active">{% blocktranslate %}Active ({{ active_count }}){% endblocktranslate %}</a>
+      <a class="chip {% if balance == 'owe' %}active{% endif %}" href="?status=all&balance=owe">{% blocktranslate %}You owe money ({{ owe_count }}){% endblocktranslate %}</a>
+      <a class="chip {% if status == 'inactive' %}active{% endif %}" href="?status=inactive">{% blocktranslate %}Inactive ({{ inactive_count }}){% endblocktranslate %}</a>
+      <a class="chip {% if status == 'all' and not balance %}active{% endif %}" href="?status=all">{% translate "All" %}</a>
+    </div>
+    <div class="filter-grid">
+      <label class="filter-field filter-wide"><span>{% translate "Search" %}</span>
+        <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Search name, owner, mobile, GST, city…' %}"></label>
+      <label class="filter-field"><span>{% translate "Show" %}</span>
+        <select class="select" name="status">
+          <option value="active" {% if status == 'active' %}selected{% endif %}>{% translate "Active" %}</option>
+          <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>{% translate "Inactive" %}</option>
+          <option value="all" {% if status == 'all' %}selected{% endif %}>{% translate "All" %}</option>
+        </select></label>
+      <label class="filter-field"><span>{% translate "Balance" %}</span>
+        <select class="select" name="balance">
+          <option value="">{% translate "Any balance" %}</option>
+          <option value="owe" {% if balance == 'owe' %}selected{% endif %}>{% translate "You owe money" %}</option>
+          <option value="settled" {% if balance == 'settled' %}selected{% endif %}>{% translate "Settled" %}</option>
+          <option value="advance" {% if balance == 'advance' %}selected{% endif %}>{% translate "Advance with mill" %}</option>
+        </select></label>
+      <label class="filter-field"><span>{% translate "Sort by" %}</span>
+        <select class="select" name="sort">
+          <option value="name" {% if sort == 'name' %}selected{% endif %}>{% translate "Name A–Z" %}</option>
+          <option value="-name" {% if sort == '-name' %}selected{% endif %}>{% translate "Name Z–A" %}</option>
+          <option value="-balance" {% if sort == '-balance' %}selected{% endif %}>{% translate "Highest due first" %}</option>
+          <option value="balance" {% if sort == 'balance' %}selected{% endif %}>{% translate "Lowest due first" %}</option>
+          <option value="-purchased" {% if sort == '-purchased' %}selected{% endif %}>{% translate "Most purchased" %}</option>
+          <option value="new" {% if sort == 'new' %}selected{% endif %}>{% translate "Newest added" %}</option>
+        </select></label>
+    </div>
+    <div class="filter-foot">
+      <span class="muted small">{% blocktranslate count counter=total_count %}Showing {{ counter }} supplier{% plural %}Showing {{ counter }} suppliers{% endblocktranslate %}</span>
+      <span class="filter-actions">
+        <button class="btn btn-outline btn-sm" type="submit">🔍 {% translate "Search" %}</button>
+        {% if filtered %}<a class="btn btn-ghost btn-sm" href="{% url 'mill_list' %}">✕ {% translate "Clear filters" %}</a>{% endif %}
+      </span>
+    </div>
+  </form>
+</div>
+
+<!-- ===================== TOTALS ===================== -->
+<div class="stats stats-4">
   <div class="stat">
     <div class="stat-icon">🏭</div>
     <div>
@@ -49,143 +95,98 @@
   </div>
 </div>
 
+<!-- ===================== SUPPLIERS ===================== -->
+{% for mill in mills %}
+<article class="doc-card {% if not mill.is_active %}tone-muted{% elif mill.balance > 0 %}tone-danger{% elif mill.balance < 0 %}tone-warning{% else %}tone-success{% endif %}">
+  <header class="doc-head">
+    <div class="doc-id">
+      <a class="doc-no" href="{% url 'mill_report_detail' mill.id %}">🏭 {{ mill.mill_name }}</a>
+      <span class="muted small">{{ mill.owner_name|default:"—" }}{% if mill.city %} · {{ mill.city }}{% endif %}</span>
+    </div>
+    <div class="doc-badges">
+      {% if not mill.is_active %}<span class="badge badge-muted">{% translate "Inactive" %}</span>{% endif %}
+      {% if mill.balance > 0 %}<span class="badge badge-red">{% translate "You owe" %}</span>
+      {% elif mill.balance < 0 %}<span class="badge badge-orange">{% translate "Advance with mill" %}</span>
+      {% else %}<span class="badge badge-green">✓ {% translate "Settled" %}</span>{% endif %}
+    </div>
+    <div class="doc-amount">
+      {% if mill.balance > 0 %}
+        <span class="muted small">{% translate "You owe" %}</span>
+        <strong class="text-danger inr" data-value="{{ mill.balance }}">₹ {{ mill.balance }}</strong>
+      {% elif mill.balance < 0 %}
+        <span class="muted small">{% translate "Advance with mill" %}</span>
+        <strong class="text-warning">₹ <span class="inr-abs" data-value="{{ mill.balance }}">{{ mill.balance }}</span></strong>
+      {% else %}
+        <span class="muted small">{% translate "Nothing to pay" %}</span>
+        <strong class="text-success">₹ 0</strong>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="doc-body">
+    <section class="doc-col">
+      <h4>① {% translate "Contact" %}</h4>
+      <div class="line"><span>{% translate "Mobile" %}</span>
+        <span>{% if mill.mobile %}{{ mill.mobile }}
+          <a class="btn btn-ghost btn-sm" href="tel:{{ mill.mobile }}" title="{% translate 'Call' %}">📞</a>
+          <a class="btn btn-ghost btn-sm" href="https://wa.me/{{ mill.whatsapp_number }}" target="_blank" rel="noopener" title="WhatsApp">💬</a>
+        {% else %}—{% endif %}</span></div>
+      <div class="line"><span>{% translate "GST" %}</span><span>{{ mill.gst_number|default:"—" }}</span></div>
+    </section>
+
+    <section class="doc-col">
+      <h4>② {% translate "Purchases" %}</h4>
+      <div class="line"><span>{% translate "Bills" %}</span><span>{{ mill.bill_count }}</span></div>
+      <div class="line"><span>{% translate "Last bill" %}</span><span>{{ mill.last_bill|date:"d M Y"|default:"—" }}</span></div>
+      {% if mill.opening_balance %}<div class="line"><span>{% translate "Opening balance" %}</span><span class="inr" data-value="{{ mill.opening_balance }}">₹ {{ mill.opening_balance }}</span></div>{% endif %}
+      <div class="line total"><span>{% translate "Total purchased" %}</span><span class="inr" data-value="{{ mill.purchased }}">₹ {{ mill.purchased }}</span></div>
+    </section>
+
+    <section class="doc-col">
+      <h4>③ {% translate "Payment" %}</h4>
+      <div class="line"><span>{% translate "Paid" %}</span><span class="text-success inr" data-value="{{ mill.paid }}">₹ {{ mill.paid }}</span></div>
+      <div class="line total"><span>{% translate "Balance" %}</span>
+        <span class="{% if mill.balance > 0 %}text-danger{% elif mill.balance < 0 %}text-warning{% else %}text-success{% endif %} inr" data-value="{{ mill.balance }}">₹ {{ mill.balance }}</span></div>
+      <div class="pay-bar" title="{{ mill.paid_percent }}%"><span style="width: {{ mill.paid_percent }}%"></span></div>
+      <div class="muted small">{% blocktranslate with pct=mill.paid_percent %}{{ pct }}% paid{% endblocktranslate %}</div>
+    </section>
+  </div>
+
+  <footer class="doc-foot">
+    {% if mill.is_active %}<a class="btn btn-primary btn-sm" href="{% url 'add_purchase' %}?mill={{ mill.id }}">➕ {% translate "Add bill" %}</a>{% endif %}
+    <a class="btn btn-outline btn-sm" href="{% url 'mill_report_detail' mill.id %}">📑 {% translate "Bills & ledger" %}</a>
+    {% if mill.balance > 0 %}<a class="btn btn-outline btn-sm" href="{% url 'add_mill_payment' mill.id %}">💳 {% translate "Pay" %}</a>{% endif %}
+    <a class="btn btn-ghost btn-sm" href="{% url 'edit_mill' mill.id %}">✏️ {% translate "Edit" %}</a>
+    {% if mill.is_active %}
+      <a class="btn btn-ghost btn-sm" href="{% url 'delete_mill' mill.id %}">🚫 {% translate "Deactivate" %}</a>
+    {% else %}
+      <form method="POST" action="{% url 'restore_mill' mill.id %}" style="display:inline;">
+        {% csrf_token %}
+        <button class="btn btn-ghost btn-sm" type="submit">♻️ {% translate "Restore" %}</button>
+      </form>
+    {% endif %}
+  </footer>
+</article>
+{% empty %}
 <div class="card">
-
-  <div class="tabs">
-    <a class="tab {% if status == 'active' %}active{% endif %}" href="?status=active{% if q %}&q={{ q }}{% endif %}">{% blocktranslate %}Active ({{ active_count }}){% endblocktranslate %}</a>
-    <a class="tab {% if status == 'inactive' %}active{% endif %}" href="?status=inactive{% if q %}&q={{ q }}{% endif %}">{% blocktranslate %}Inactive ({{ inactive_count }}){% endblocktranslate %}</a>
-    <a class="tab {% if status == 'all' %}active{% endif %}" href="?status=all{% if q %}&q={{ q }}{% endif %}">{% translate "All" %}</a>
-  </div>
-
-  <form class="toolbar filter-bar" method="GET" data-no-loading data-filter-form>
-    <input type="hidden" name="status" value="{{ status }}">
-    <input class="input" type="search" name="q" value="{{ q }}"
-           placeholder="{% translate 'Search name, owner, mobile, GST, city…' %}" style="min-width:280px;">
-    <select class="select" name="sort">
-      <option value="name" {% if sort == 'name' %}selected{% endif %}>{% translate "Name A–Z" %}</option>
-      <option value="-name" {% if sort == '-name' %}selected{% endif %}>{% translate "Name Z–A" %}</option>
-      <option value="-balance" {% if sort == '-balance' %}selected{% endif %}>{% translate "Highest due first" %}</option>
-      <option value="balance" {% if sort == 'balance' %}selected{% endif %}>{% translate "Lowest due first" %}</option>
-      <option value="-purchased" {% if sort == '-purchased' %}selected{% endif %}>{% translate "Most purchased" %}</option>
-      <option value="new" {% if sort == 'new' %}selected{% endif %}>{% translate "Newest added" %}</option>
-    </select>
-    <button class="btn btn-outline" type="submit">🔍 {% translate "Search" %}</button>
-    {% if q %}<a class="btn btn-ghost" href="?status={{ status }}">✕ {% translate "Clear filters" %}</a>{% endif %}
-  </form>
-
-  {% if mills %}
-  <div class="table-wrap">
-    <table class="table table-cards">
-      <thead>
-        <tr>
-          <th>{% translate "Supplier" %}</th>
-          <th>{% translate "Contact" %}</th>
-          <th>{% translate "GST" %}</th>
-          <th class="right">{% translate "Purchased" %}</th>
-          <th class="right">{% translate "Paid" %}</th>
-          <th class="right">{% translate "Balance" %}</th>
-          <th class="right">{% translate "Actions" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for mill in mills %}
-        <tr>
-          <td data-label="{% translate 'Supplier' %}">
-            <a class="row-title" href="{% url 'mill_report_detail' mill.id %}">{{ mill.mill_name }}</a>
-            {% if not mill.is_active %}<span class="badge badge-muted">{% translate "Inactive" %}</span>{% endif %}
-            <div class="row-sub">
-              {{ mill.owner_name|default:"—" }}{% if mill.city %} · {{ mill.city }}{% endif %}
-            </div>
-          </td>
-
-          <td data-label="{% translate 'Contact' %}">
-            {% if mill.mobile %}
-              <div class="nowrap">{{ mill.mobile }}</div>
-              <div class="btn-group" style="margin-top:4px;">
-                <a class="btn btn-ghost btn-sm" href="tel:{{ mill.mobile }}" title="{% translate 'Call' %}">📞</a>
-                <a class="btn btn-ghost btn-sm" href="https://wa.me/{{ mill.whatsapp_number }}" target="_blank" rel="noopener" title="WhatsApp">💬</a>
-              </div>
-            {% else %}—{% endif %}
-          </td>
-
-          <td data-label="{% translate 'GST' %}"><span class="muted">{{ mill.gst_number|default:"—" }}</span></td>
-
-          <td data-label="{% translate 'Purchased' %}" class="right"><span class="inr" data-value="{{ mill.purchased }}">₹ {{ mill.purchased }}</span></td>
-          <td data-label="{% translate 'Paid' %}" class="right"><span class="inr" data-value="{{ mill.paid }}">₹ {{ mill.paid }}</span></td>
-
-          <td data-label="{% translate 'Balance' %}" class="right">
-            <div class="bold inr {% if mill.balance > 0 %}text-danger{% elif mill.balance < 0 %}text-warning{% endif %}"
-                 data-value="{{ mill.balance }}">₹ {{ mill.balance }}</div>
-            {% if mill.balance > 0 %}
-              <span class="badge badge-red"><span class="dot"></span>{% translate "Due" %}</span>
-            {% elif mill.balance < 0 %}
-              <span class="badge badge-orange">{% translate "Advance" %}</span>
-            {% else %}
-              <span class="badge badge-green">{% translate "Settled" %}</span>
-            {% endif %}
-          </td>
-
-          <td data-label="{% translate 'Actions' %}">
-            <div class="actions">
-              {% if mill.is_active %}<a class="btn btn-primary btn-sm" href="{% url 'add_purchase' %}?mill={{ mill.id }}" title="{% translate 'Add purchase bill' %}">➕ {% translate "Bill" %}</a>{% endif %}
-              <a class="btn btn-outline btn-sm" href="{% url 'mill_report_detail' mill.id %}">📑 {% translate "Open" %}</a>
-              <a class="btn btn-outline btn-sm" href="{% url 'add_mill_payment' mill.id %}">💳 {% translate "Pay" %}</a>
-              <a class="btn btn-ghost btn-sm" href="{% url 'edit_mill' mill.id %}" title="{% translate 'Edit' %}">✏️</a>
-              {% if mill.is_active %}
-                <a class="btn btn-ghost btn-sm" href="{% url 'delete_mill' mill.id %}" title="{% translate 'Deactivate' %}">🚫</a>
-              {% else %}
-                <form method="POST" action="{% url 'restore_mill' mill.id %}" style="display:inline;">
-                  {% csrf_token %}
-                  <button class="btn btn-ghost btn-sm" type="submit" title="{% translate 'Restore' %}">♻️</button>
-                </form>
-              {% endif %}
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-
-  {% if page_obj.paginator.num_pages > 1 %}
-  <div class="pagination">
-    <div class="muted">
-      {% blocktranslate with number=page_obj.number num_pages=page_obj.paginator.num_pages count counter=page_obj.paginator.count %}Page {{ number }} of {{ num_pages }} · {{ counter }} supplier{% plural %}Page {{ number }} of {{ num_pages }} · {{ counter }} suppliers{% endblocktranslate %}
-    </div>
-    <div class="pages">
-      <a class="page-link {% if not page_obj.has_previous %}disabled{% endif %}"
-         href="?{{ querystring }}&page={{ page_obj.previous_page_number|default:1 }}">‹</a>
-      {% for num in page_obj.paginator.page_range %}
-        {% if num == page_obj.number %}
-          <span class="page-link active">{{ num }}</span>
-        {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
-          <a class="page-link" href="?{{ querystring }}&page={{ num }}">{{ num }}</a>
-        {% endif %}
-      {% endfor %}
-      <a class="page-link {% if not page_obj.has_next %}disabled{% endif %}"
-         href="?{{ querystring }}&page={{ page_obj.next_page_number|default:page_obj.number }}">›</a>
-    </div>
-  </div>
-  {% endif %}
-
-  {% else %}
   <div class="empty">
     <div class="empty-icon">🏭</div>
     <div class="empty-title">
-      {% if q %}{% blocktranslate %}No supplier matches “{{ q }}”{% endblocktranslate %}{% else %}{% translate "No suppliers yet" %}{% endif %}
+      {% if filtered %}{% translate "No supplier matches this filter" %}{% else %}{% translate "No suppliers yet" %}{% endif %}
     </div>
     <p>
-      {% if q %}{% translate "Try a different name, or clear the search." %}
+      {% if filtered %}{% translate "Try a different name, or clear the filters." %}
       {% else %}{% translate "A supplier is the mill you buy rice from. Add your first one to start recording purchases." %}{% endif %}
     </p>
-    {% if q %}
-      <a class="btn btn-outline" href="?status={{ status }}">{% translate "Clear search" %}</a>
+    {% if filtered %}
+      <a class="btn btn-outline" href="{% url 'mill_list' %}">✕ {% translate "Clear filters" %}</a>
     {% else %}
       <a class="btn btn-primary" href="{% url 'add_mill' %}">➕ {% translate "Add your first supplier" %}</a>
     {% endif %}
   </div>
-  {% endif %}
-
 </div>
+{% endfor %}
+
+{% include "core/partials/pagination.html" %}
 
 {% endblock %}

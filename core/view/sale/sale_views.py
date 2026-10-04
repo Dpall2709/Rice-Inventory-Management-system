@@ -37,6 +37,7 @@ from core.services.sale_service import (
     product_stock,
     suggested_tax_type,
 )
+from core.services.periods import date_range, period_chips
 from core.services.trade_register import register_rows
 from core.tenancy import company_of, tenant_object_or_404
 
@@ -55,8 +56,7 @@ def sale_list(request):
     customer_id = request.GET.get("customer", "")
     broker_id = request.GET.get("broker", "")
     status = request.GET.get("status", "")
-    date_from = request.GET.get("from", "")
-    date_to = request.GET.get("to", "")
+    date_from, date_to = date_range(request.GET)
 
     sales = (
         Sale.objects
@@ -97,9 +97,13 @@ def sale_list(request):
         sale.profit_pending = row["profit_pending"]
         sale.status = row["payment_status"]
         sale.overdue = (settled.get(sale.id) or {}).get("overdue", False)
+        sale.paid_percent = row["paid_percent"]
+        sale.unloaded = bool(sale.unload_date)
 
     if status == "due":
         sales = [s for s in sales if s.due > 0]
+    elif status == "partial":
+        sales = [s for s in sales if s.status == "partial"]
     elif status == "overdue":
         sales = [s for s in sales if s.overdue]
     elif status == "paid":
@@ -114,6 +118,10 @@ def sale_list(request):
         "total_cost": sum((s.cost for s in sales if s.profit is not None), Decimal("0")),
         "total_profit_earned": sum((s.profit_earned for s in sales if s.profit is not None), Decimal("0")),
         "total_profit": sum((s.profit for s in sales if s.profit is not None), Decimal("0")),
+        "bills_paid": sum(1 for s in sales if s.status == "paid"),
+        "bills_partial": sum(1 for s in sales if s.status == "partial"),
+        "bills_due": sum(1 for s in sales if s.status == "due"),
+        "bills_overdue": sum(1 for s in sales if s.overdue),
     }
 
     page = Paginator(sales, 25).get_page(request.GET.get("page"))
@@ -132,6 +140,8 @@ def sale_list(request):
         "status": status,
         "date_from": date_from,
         "date_to": date_to,
+        "periods": period_chips(timezone.localdate(), date_from, date_to),
+        "filtered": bool(q or customer_id or broker_id or status or date_from or date_to),
         "querystring": params.urlencode(),
         "count": page.paginator.count,
         **totals,

@@ -1,0 +1,8 @@
+{% load i18n %}
+{# Quick period buttons. Needs `periods` from services.periods.period_chips. #}
+<div class="period-chips" role="group" aria-label="{% translate 'Period' %}">
+  {% for p in periods %}
+    <a class="chip {% if p.active %}active{% endif %}" href="?from={{ p.from|date:'Y-m-d' }}&to={{ p.to|date:'Y-m-d' }}"
+       data-period-from="{{ p.from|date:'Y-m-d' }}" data-period-to="{{ p.to|date:'Y-m-d' }}">{{ p.label }}</a>
+  {% endfor %}
+</div>
