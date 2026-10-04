@@ -40,14 +40,15 @@
 </div>
 
 <div class="card">
-  <form class="toolbar" method="GET" data-no-loading>
+  <form class="toolbar filter-bar" method="GET" data-no-loading data-filter-form>
     <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Name, mobile or city…' %}">
     <select class="select" name="show">
       <option value="active" {% if show == 'active' %}selected{% endif %}>{% translate "Active" %}</option>
       <option value="inactive" {% if show == 'inactive' %}selected{% endif %}>{% translate "Inactive" %} ({{ inactive_count }})</option>
       <option value="all" {% if show == 'all' %}selected{% endif %}>{% translate "All" %}</option>
     </select>
-    <button class="btn btn-outline" type="submit">{% translate "Filter" %}</button>
+    <button class="btn btn-outline" type="submit">🔍 {% translate "Search" %}</button>
+    {% if q or show != 'active' %}<a class="btn btn-ghost" href="{% url 'broker_list' %}">✕ {% translate "Clear filters" %}</a>{% endif %}
   </form>
 
   {% if brokers %}

@@ -33,10 +33,10 @@
 </div>
 
 <div class="card">
-  <form class="toolbar" method="GET" data-no-loading>
+  <form class="toolbar filter-bar" method="GET" data-no-loading data-filter-form>
     <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Search customer, mobile or GST...' %}">
     <button class="btn btn-outline" type="submit">🔍 {% translate "Search" %}</button>
-    {% if q %}<a class="btn btn-ghost" href="{% url 'customer_list' %}">{% translate "Clear" %}</a>{% endif %}
+    {% if q %}<a class="btn btn-ghost" href="{% url 'customer_list' %}">✕ {% translate "Clear filters" %}</a>{% endif %}
   </form>
 
   {% if customers %}

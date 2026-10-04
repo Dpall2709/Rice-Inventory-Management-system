@@ -110,6 +110,7 @@ def register_rows(company, sales):
             "profit_earned": earned,               # in hand, by money received
             "profit_pending": pending,             # comes in with the rest of the money
             "payment_status": payment_status(paid, due),
+            "paid_percent": min(int(paid * 100 / figures["net_receivable"]), 100) if figures["net_receivable"] > 0 else 100,
             "status": status,
             "status_label": STATUS_LABELS[status],
         })

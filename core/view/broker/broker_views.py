@@ -136,7 +136,19 @@ def broker_report_detail(request, broker_id):
             profit_earned += sale.profit_earned
             profit_known += 1
 
+    # Every payment with this broker, newest first: money he paid you for the
+    # trucks he collects on, and commission you paid him.
+    payments = list(
+        Payment.objects.filter(company=company, broker=broker, related_type__in=("sale", "broker"))
+        .select_related("sale").order_by("-payment_date", "-id")
+    )
+    received_total = sum((p.amount for p in payments if p.related_type == "sale"), Decimal("0"))
+    commission_paid_total = sum((p.amount for p in payments if p.related_type == "broker"), Decimal("0"))
+
     return render(request, "core/broker_report_detail.html", {
+        "payments": payments,
+        "received_total": received_total,
+        "commission_paid_total": commission_paid_total,
         "broker": broker,
         "statement": statement,
         "collections": statement["collections"],

@@ -35,10 +35,10 @@
       {% endif %}
     </form>
     {% if statement.broker_owes_us > 0 %}
-      <a class="btn btn-primary" href="{% url 'add_broker_receipt' broker.id %}">💰 {% translate "Receive" %} ₹ {{ statement.broker_owes_us }}</a>
+      <a class="btn btn-primary" href="{% url 'add_broker_receipt' broker.id %}">💰 {% translate "Receive" %} ₹&nbsp;<span class="inr-abs" data-value="{{ statement.broker_owes_us }}">{{ statement.broker_owes_us }}</span></a>
     {% endif %}
     {% if statement.owed > 0 %}
-      <a class="btn btn-outline" href="{% url 'add_broker_payment' broker.id %}">💳 {% translate "Pay commission" %} ₹ {{ statement.owed }}</a>
+      <a class="btn btn-outline" href="{% url 'add_broker_payment' broker.id %}">💳 {% translate "Pay commission" %} ₹&nbsp;<span class="inr-abs" data-value="{{ statement.owed }}">{{ statement.owed }}</span></a>
     {% endif %}
   </div>
 </div>
@@ -49,7 +49,7 @@
     <div>
       <div class="stat-label">{% translate "Trucks he brought" %}</div>
       <div class="stat-value">{{ sales|length }}</div>
-      <div class="stat-hint">{% blocktranslate with bags=statement.total_bags %}{{ bags }} bags{% endblocktranslate %} · ₹ <span class="inr-abs" data-value="{{ statement.total_sales_value }}">{{ statement.total_sales_value }}</span></div>
+      <div class="stat-hint">{% blocktranslate with bags=statement.total_bags %}{{ bags }} bags{% endblocktranslate %} · ₹&nbsp;<span class="inr-abs" data-value="{{ statement.total_sales_value }}">{{ statement.total_sales_value }}</span></div>
     </div>
   </div>
   <div class="stat {% if statement.broker_owes_us > 0 %}is-danger{% else %}is-success{% endif %}">
@@ -57,7 +57,7 @@
     <div>
       <div class="stat-label">{% translate "He owes you" %}</div>
       <div class="stat-value inr" data-value="{{ statement.broker_owes_us }}">₹ {{ statement.broker_owes_us }}</div>
-      <div class="stat-hint">{% translate "received" %} ₹ <span class="inr-abs" data-value="{{ collections.total_received }}">{{ collections.total_received }}</span></div>
+      <div class="stat-hint">{% translate "received" %} ₹&nbsp;<span class="inr-abs" data-value="{{ collections.total_received }}">{{ collections.total_received }}</span></div>
     </div>
   </div>
   <div class="stat">
@@ -73,9 +73,72 @@
     <div>
       <div class="stat-label">{% translate "Profit earned on his trucks" %}</div>
       <div class="stat-value inr" data-value="{{ profit_earned }}">₹ {{ profit_earned }}</div>
-      <div class="stat-hint">{% translate "full profit when all is paid" %} ₹ <span class="inr-abs" data-value="{{ profit_total }}">{{ profit_total }}</span> · {% blocktranslate count counter=profit_known %}{{ counter }} truck with known cost{% plural %}{{ counter }} trucks with known cost{% endblocktranslate %}</div>
+      <div class="stat-hint">{% translate "full profit when all is paid" %} ₹&nbsp;<span class="inr-abs" data-value="{{ profit_total }}">{{ profit_total }}</span> · {% blocktranslate count counter=profit_known %}{{ counter }} truck with known cost{% plural %}{{ counter }} trucks with known cost{% endblocktranslate %}</div>
     </div>
   </div>
+</div>
+
+<div class="card" id="payments">
+  <div class="list-header">
+    <div>
+      <div class="list-title">💳 {% translate "Payment history" %}</div>
+      <p class="muted">{% translate "Every payment with this broker, newest first." %}</p>
+    </div>
+    <div class="action-group">
+      <a class="btn btn-outline btn-sm" href="{% url 'add_broker_receipt' broker.id %}">💰 {% translate "Receive from broker" %}</a>
+      <a class="btn btn-outline btn-sm" href="{% url 'add_broker_payment' broker.id %}">💳 {% translate "Pay commission" %}</a>
+    </div>
+  </div>
+  {% if payments %}
+  <div class="pay-summary">
+    <div><span>{% translate "He paid you" %}</span><strong class="text-success">₹&nbsp;<span class="inr-abs" data-value="{{ received_total }}">{{ received_total }}</span></strong></div>
+    <div><span>{% translate "You paid him (commission)" %}</span><strong>₹&nbsp;<span class="inr-abs" data-value="{{ commission_paid_total }}">{{ commission_paid_total }}</span></strong></div>
+    <div><span>{% translate "He still owes you" %}</span><strong class="{% if statement.broker_owes_us > 0 %}text-danger{% endif %}">₹&nbsp;<span class="inr-abs" data-value="{{ statement.broker_owes_us }}">{{ statement.broker_owes_us }}</span></strong></div>
+  </div>
+  <div class="table-wrap">
+    <table class="table table-cards">
+      <thead>
+        <tr>
+          <th>{% translate "Date" %}</th><th>{% translate "Type" %}</th><th>{% translate "Against" %}</th>
+          <th>{% translate "Mode" %}</th><th class="right">{% translate "Amount" %}</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in payments %}
+        <tr>
+          <td data-label="{% translate 'Date' %}" class="nowrap">{{ p.payment_date|date:"d M Y" }}</td>
+          <td data-label="{% translate 'Type' %}">
+            {% if p.related_type == 'sale' %}<span class="badge badge-green">⬇️ {% translate "Received from him" %}</span>
+            {% else %}<span class="badge badge-orange">⬆️ {% translate "Commission paid" %}</span>{% endif %}
+          </td>
+          <td data-label="{% translate 'Against' %}">
+            {% if p.sale %}<a href="{% url 'sale_detail' p.sale.id %}">{{ p.sale.vehicle_number|default:p.sale.invoice_no }}</a> <span class="muted small">{{ p.sale.invoice_no }}</span>
+            {% elif p.related_type == 'sale' %}<span class="muted">{% translate "On account (oldest trucks first)" %}</span>
+            {% else %}<span class="muted">{% translate "Commission account" %}</span>{% endif %}
+            {% if p.notes %}<div class="row-sub">{{ p.notes }}</div>{% endif %}
+          </td>
+          <td data-label="{% translate 'Mode' %}">{{ p.payment_mode }}</td>
+          <td data-label="{% translate 'Amount' %}" class="right bold {% if p.related_type == 'sale' %}text-success{% endif %}"><span class="inr" data-value="{{ p.amount }}">₹ {{ p.amount }}</span></td>
+          <td class="right">
+            <form method="POST" action="{% url 'delete_payment' p.id %}">
+              {% csrf_token %}
+              <button class="btn btn-ghost btn-sm" type="submit" title="{% translate 'Delete payment' %}"
+                      data-confirm="{% translate 'This payment will be removed and the balances worked out again.' %}"
+                      data-confirm-title="{% translate 'Delete this payment?' %}">🗑</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty-icon">💳</div>
+      <div class="empty-title">{% translate "No payments yet" %}</div>
+      <p>{% translate "Money he pays you and commission you pay him will show here." %}</p>
+    </div>
+  {% endif %}
 </div>
 
 {% url 'broker_statement_export' broker.id 'pdf' as pdf_url %}{% url 'broker_statement_export' broker.id 'xlsx' as xlsx_url %}
@@ -104,7 +167,7 @@
           <td data-label="{% translate 'Truck' %}"><a class="row-title" href="{% url 'sale_detail' row.sale.id %}">{{ row.sale.vehicle_number|default:row.sale.invoice_no }}</a>
             <div class="row-sub">{{ row.sale.sale_date|date:"d M Y" }} · {{ row.sale.invoice_no }}</div></td>
           <td data-label="{% translate 'Party' %}">{{ row.sale.customer_name }}</td>
-          <td data-label="{% translate 'Unloaded' %}">{% if row.sale.unload_date %}{{ row.sale.unload_date|date:"d M" }} · {{ row.sale.received_weight_kg }} kg{% else %}<a href="{% url 'settle_sale' row.sale.id %}">{% translate "Record" %} →</a>{% endif %}</td>
+          <td data-label="{% translate 'Unloaded' %}">{% if row.sale.unload_date %}{{ row.sale.unload_date|date:"d M" }} · {{ row.sale.received_weight_kg|floatformat:"-2g" }} kg{% else %}<a href="{% url 'settle_sale' row.sale.id %}">{% translate "Record" %} →</a>{% endif %}</td>
           <td data-label="{% translate 'He owes' %}" class="right inr" data-value="{{ row.total }}">₹ {{ row.total }}</td>
           <td data-label="{% translate 'Paid' %}" class="right inr" data-value="{{ row.paid }}">₹ {{ row.paid }}</td>
           <td data-label="{% translate 'Due' %}" class="right">{% if row.due > 0 %}<span class="bold text-danger inr" data-value="{{ row.due }}">₹ {{ row.due }}</span>{% else %}<span class="badge badge-green">{% translate "Paid" %}</span>{% endif %}</td>
@@ -142,7 +205,7 @@
           <td data-label="{% translate 'Invoice total' %}" class="right inr" data-value="{{ sale.total_amount }}">₹ {{ sale.total_amount }}</td>
           <td data-label="{% translate 'Commission' %}">{% if sale.broker_commission_rate %}{{ sale.broker_commission_rate }} · {{ sale.get_broker_commission_type_display }}{% else %}—{% endif %}</td>
           <td data-label="{% translate 'Amount' %}" class="right bold inr" data-value="{{ sale.broker_commission }}">₹ {{ sale.broker_commission }}</td>
-          <td data-label="{% translate 'Profit earned' %}" class="right {% if sale.profit is not None and sale.profit < 0 %}text-danger{% else %}text-success{% endif %}">{% if sale.profit is not None %}<span class="inr" data-value="{{ sale.profit_earned }}">₹ {{ sale.profit_earned }}</span>{% if sale.profit_pending %}<div class="row-sub">{% translate "of" %} ₹{{ sale.profit }}</div>{% endif %}{% else %}—{% endif %}</td>
+          <td data-label="{% translate 'Profit earned' %}" class="right {% if sale.profit is not None and sale.profit < 0 %}text-danger{% else %}text-success{% endif %}">{% if sale.profit is not None %}<span class="inr" data-value="{{ sale.profit_earned }}">₹ {{ sale.profit_earned }}</span>{% if sale.profit_pending %}<div class="row-sub">{% translate "of" %} ₹&nbsp;<span class="inr-abs" data-value="{{ sale.profit }}">{{ sale.profit }}</span></div>{% endif %}{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

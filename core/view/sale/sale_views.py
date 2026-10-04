@@ -564,6 +564,8 @@ def delete_payment(request, payment_id):
             back = redirect("sale_detail", sale_id=payment.sale_id)
         elif payment.customer_id:
             back = redirect("customer_ledger", customer_id=payment.customer_id)
+        elif payment.broker_id:
+            back = redirect("broker_report_detail", broker_id=payment.broker_id)
         else:
             back = redirect("sale_list")
     elif payment.related_type == "broker" and payment.broker_id:

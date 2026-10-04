@@ -1392,3 +1392,74 @@ body.auth { display: block; min-height: 100vh; min-height: 100dvh; }
 .bill-money strong { font-size: 16px; white-space: nowrap; }
 .bill-money small { font-size: 11.5px; }
 .bill-money .badge { align-self: flex-start; }
+
+/* ---------- list filters (same on every page) ---------- */
+.filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.filter-field { display: block; min-width: 0; }
+.filter-field > span { display: block; margin-bottom: 3px; }
+.filter-field > span { font-size: 11.5px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.filter-field .input, .filter-field .select { min-width: 0; width: 100%; }
+.filter-bar.is-filtering { opacity: .6; pointer-events: none; }
+.toolbar.filter-bar .filter-field .input { min-width: 150px; }
+
+/* ---------- truck register ---------- */
+.register-filters .filter-bar { display: block; }
+.register-filters .filter-bar > * + * { margin-top: 12px; }
+.period-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text); font-size: 13px; text-decoration: none; white-space: nowrap; }
+.chip:hover { border-color: var(--primary); }
+.chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.filter-grid { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.filter-grid > .filter-field { flex: 1 1 160px; }
+.filter-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; }
+
+.stats.stats-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 900px) { .stats.stats-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.truck-card { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--border);
+  border-radius: var(--r-lg, 12px); margin-bottom: 14px; overflow: hidden; }
+.truck-card.status-settled { border-left-color: var(--success); }
+.truck-card.status-partly_paid { border-left-color: var(--warning); }
+.truck-card.status-awaiting_payment { border-left-color: var(--danger); }
+.truck-card.status-on_the_way { border-left-color: var(--primary); }
+.truck-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); flex-wrap: wrap; }
+.truck-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.truck-no { font-size: 17px; font-weight: 700; letter-spacing: .02em; }
+.truck-badges { flex: 1 1 auto; }
+.truck-profit { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+.truck-profit strong { font-size: 18px; color: var(--success); white-space: nowrap; }
+.truck-profit.is-loss strong { color: var(--danger); }
+.truck-body { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.truck-col { padding: 12px 16px; min-width: 0; }
+.truck-col + .truck-col { border-left: 1px solid var(--border); }
+.truck-col h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+.truck-col .line { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: 13.5px; }
+.truck-col .line > span:first-child { color: var(--text-muted); flex: 0 0 auto; }
+.truck-col .line > :last-child { text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.truck-col .line.total { border-top: 1px dashed var(--border); margin-top: 6px; padding-top: 7px; font-weight: 700; }
+.truck-col .line.total > span:first-child { color: var(--text); }
+.pay-bar { height: 8px; border-radius: 99px; background: var(--danger-soft, rgba(220,38,38,.15)); overflow: hidden; margin: 8px 0 4px; }
+.pay-bar > span { display: block; height: 100%; background: var(--success); border-radius: 99px; }
+@media (max-width: 860px) {
+  .truck-body { grid-template-columns: 1fr; }
+  .truck-col + .truck-col { border-left: 0; border-top: 1px solid var(--border); }
+  .truck-head { padding: 12px; }
+  .truck-col { padding: 12px; }
+}
+@media (max-width: 480px) {
+  .truck-profit { align-items: flex-start; text-align: left; width: 100%; }
+  .filter-grid > .filter-field { flex-basis: calc(50% - 5px); }
+}
+.how-profit summary { cursor: pointer; }
+
+/* payment history summary (broker page) */
+.pay-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.pay-summary > div { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2); }
+.pay-summary span { font-size: 12px; color: var(--text-muted); }
+.pay-summary strong { font-size: 16px; white-space: nowrap; }
+
+.toolbar.filter-bar { align-items: flex-end; }
+.toolbar.filter-bar .filter-search .input { min-width: 230px; }
+.table td .inr, .table td .inr-abs { white-space: nowrap; }
+.table td.inr { white-space: nowrap; }

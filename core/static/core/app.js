@@ -370,5 +370,56 @@
     setTimeout(restoreForms, 0);
   }
 
+  // ------------------------------------------------------------------
+  // List filters (form[data-filter-form]) all behave the same way:
+  //  - choosing an option or a date applies it at once (no extra click);
+  //  - typing in the search box applies on Enter or the Search button;
+  //  - empty boxes are left out of the address, so links stay short and
+  //    one filter never drags stale empty values along with it.
+  // ------------------------------------------------------------------
+  function submitFilter(form) {
+    form.querySelectorAll("input, select").forEach(function (field) {
+      if (field.name && !field.value && field.type !== "hidden" && !field.disabled) {
+        field.disabled = true;
+        field.setAttribute("data-filter-off", "");
+      }
+    });
+    form.classList.add("is-filtering");
+    form.submit();
+  }
+
+  document.querySelectorAll("form[data-filter-form]").forEach(function (form) {
+    form.addEventListener("change", function (e) {
+      var field = e.target;
+      if (field.tagName === "SELECT" || field.type === "date" || field.type === "month") {
+        // a half-typed date fires no change; a cleared one submits "show all"
+        submitFilter(form);
+      }
+    });
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      submitFilter(form);
+    });
+  });
+
+  // Coming back with the browser's Back button: switch the boxes on again.
+  window.addEventListener("pageshow", function () {
+    document.querySelectorAll("[data-filter-off]").forEach(function (field) {
+      field.disabled = false;
+      field.removeAttribute("data-filter-off");
+    });
+    document.querySelectorAll("form.is-filtering").forEach(function (form) { form.classList.remove("is-filtering"); });
+  });
+
+  // Filter period chips (<a data-period-from=.. data-period-to=..>) fill the dates.
+  on("[data-period-from]", "click", function (e, el) {
+    var form = el.closest("form[data-filter-form]");
+    if (!form) return;
+    e.preventDefault();
+    form.querySelector("[name=from]").value = el.getAttribute("data-period-from");
+    form.querySelector("[name=to]").value = el.getAttribute("data-period-to");
+    submitFilter(form);
+  });
+
   paintThemeButton();
 })();

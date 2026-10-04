@@ -159,3 +159,53 @@ class StatementDownloadTests(TruckFixture):
         account = load_workbook(io.BytesIO(response.content)).active
         text = " ".join(str(cell) for row in account.iter_rows(values_only=True) for cell in row if cell)
         self.assertIn(sale.invoice_no, text)
+
+
+class RegisterAndBrokerPaymentTests(TruckFixture):
+
+    def test_register_lists_the_newest_truck_first(self):
+        today = timezone.localdate()
+        old = self.make_truck(sale_date=(today - timedelta(days=10)).isoformat(), vehicle_number="OLD-1", **{"items-0-bag_count": "300"})
+        new = self.make_truck(sale_date=today.isoformat(), vehicle_number="NEW-1", **{"items-0-bag_count": "100"})
+        page = self.client.get(reverse("trade_register"))
+        content = page.content.decode()
+        self.assertLess(content.index("NEW-1"), content.index("OLD-1"))
+        self.assertEqual([r["sale"].id for r in page.context["rows"]], [new.id, old.id])
+
+    def test_register_filters_and_period_buttons(self):
+        self.make_truck()
+        page = self.client.get(reverse("trade_register"))
+        self.assertFalse(page.context["filtered"])
+        self.assertTrue(any(p["active"] for p in page.context["periods"]))   # "Last 3 months" by default
+        page = self.client.get(reverse("trade_register") + f"?customer={self.customer.id}")
+        self.assertTrue(page.context["filtered"])
+        self.assertContains(page, "Clear filters")
+        # dates typed the wrong way round are swapped, not an empty list
+        today = timezone.localdate()
+        page = self.client.get(reverse("trade_register") + f"?from={today}&to={today - timedelta(days=30)}")
+        self.assertEqual(len(page.context["rows"]), 1)
+
+    def test_broker_page_shows_payment_history(self):
+        sale = self.settle(self.make_truck())
+        self.client.post(reverse("add_broker_receipt", args=[self.broker.id]), {
+            "amount": "50000", "payment_mode": "Bank", "payment_date": timezone.localdate().isoformat(),
+            "notes": "first part",
+        })
+        self.pay(sale, "1000")
+        page = self.client.get(reverse("broker_report_detail", args=[self.broker.id]))
+        self.assertContains(page, "Payment history")
+        self.assertEqual(len(page.context["payments"]), 2)
+        self.assertEqual(page.context["received_total"], Decimal("51000"))
+        self.assertContains(page, "first part")
+
+    def test_deleting_a_broker_receipt_goes_back_to_the_broker(self):
+        self.settle(self.make_truck())
+        self.client.post(reverse("add_broker_receipt", args=[self.broker.id]), {
+            "amount": "50000", "payment_mode": "Bank", "payment_date": timezone.localdate().isoformat(),
+        })
+        payment = Payment.objects.get(broker=self.broker, sale__isnull=True)
+        response = self.client.post(reverse("delete_payment", args=[payment.id]))
+        self.assertRedirects(response, reverse("broker_report_detail", args=[self.broker.id]))
+        self.assertFalse(Payment.objects.filter(id=payment.id).exists())
+
+    pay = EarnedProfitEverywhereTests.pay

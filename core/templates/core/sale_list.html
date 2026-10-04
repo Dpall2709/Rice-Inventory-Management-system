@@ -36,7 +36,7 @@
     <div>
       <div class="stat-label">{% translate "Sales value" %}</div>
       <div class="stat-value inr" data-value="{{ total_value }}">₹ {{ total_value }}</div>
-      <div class="stat-hint">{% translate "incl. GST" %} ₹ <span class="inr-abs" data-value="{{ total_tax }}">{{ total_tax }}</span></div>
+      <div class="stat-hint">{% translate "incl. GST" %} ₹&nbsp;<span class="inr-abs" data-value="{{ total_tax }}">{{ total_tax }}</span></div>
     </div>
   </div>
   <div class="stat is-success">
@@ -58,44 +58,49 @@
     <div>
       <div class="stat-label">{% translate "Profit earned" %}</div>
       <div class="stat-value inr" data-value="{{ total_profit_earned }}">₹ {{ total_profit_earned }}</div>
-      <div class="stat-hint">{% translate "of" %} ₹ <span class="inr-abs" data-value="{{ total_profit }}">{{ total_profit }}</span> · {% translate "cost" %} ₹ <span class="inr-abs" data-value="{{ total_cost }}">{{ total_cost }}</span></div>
+      <div class="stat-hint">{% translate "of" %} ₹&nbsp;<span class="inr-abs" data-value="{{ total_profit }}">{{ total_profit }}</span> · {% translate "cost" %} ₹&nbsp;<span class="inr-abs" data-value="{{ total_cost }}">{{ total_cost }}</span></div>
     </div>
   </div>
 </div>
 
 <div class="card">
-  <form class="toolbar" method="GET" data-no-loading>
-    <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Invoice no, customer, broker, truck…' %}" style="min-width:230px;">
+  <form class="toolbar filter-bar" method="GET" data-no-loading data-filter-form>
+    <label class="filter-field filter-search"><span>{% translate "Search" %}</span><input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Invoice no, customer, broker, truck…' %}" style="min-width:230px;"></label>
+
+    <label class="filter-field"><span>{% translate "Customer" %}</span>
 
     <select class="select" name="customer">
       <option value="">{% translate "All customers" %}</option>
       {% for customer in customers %}
         <option value="{{ customer.id }}" {% if customer_id == customer.id|stringformat:"s" %}selected{% endif %}>{{ customer.customer_name }}</option>
       {% endfor %}
-    </select>
+    </select></label>
 
     {% if brokers %}
+    <label class="filter-field"><span>{% translate "Broker" %}</span>
     <select class="select" name="broker">
       <option value="">{% translate "All brokers" %}</option>
       {% for broker in brokers %}
         <option value="{{ broker.id }}" {% if broker_id == broker.id|stringformat:"s" %}selected{% endif %}>{{ broker.broker_name }}</option>
       {% endfor %}
-    </select>
+    </select></label>
     {% endif %}
+
+    <label class="filter-field"><span>{% translate "Status" %}</span>
 
     <select class="select" name="status">
       <option value="">{% translate "Paid & unpaid" %}</option>
       <option value="due" {% if status == 'due' %}selected{% endif %}>{% translate "Only unpaid" %}</option>
       <option value="overdue" {% if status == 'overdue' %}selected{% endif %}>{% translate "Only overdue" %}</option>
       <option value="paid" {% if status == 'paid' %}selected{% endif %}>{% translate "Only settled" %}</option>
-    </select>
+    </select></label>
 
-    <input class="input" type="date" name="from" value="{{ date_from }}" title="{% translate 'From date' %}">
-    <input class="input" type="date" name="to" value="{{ date_to }}" title="{% translate 'To date' %}">
+    <label class="filter-field"><span>{% translate "From" %}</span><input class="input" type="date" name="from" value="{{ date_from }}" title="{% translate 'From date' %}"></label>
+    <label class="filter-field"><span>{% translate "To" %}</span><input class="input" type="date" name="to" value="{{ date_to }}" title="{% translate 'To date' %}"></label>
 
-    <button class="btn btn-outline" type="submit">{% translate "Filter" %}</button>
+    <button class="btn btn-outline" type="submit">🔍 {% translate "Search" %}</button>
     {% if q or customer_id or broker_id or status or date_from or date_to %}
-      <a class="btn btn-ghost" href="{% url 'sale_list' %}">{% translate "Clear" %}</a>
+      <a class="btn btn-ghost" href="{% url 'sale_list' %}">✕ {% translate "Clear filters" %}</a>
     {% endif %}
   </form>
 
@@ -107,7 +112,7 @@
           <th>{% translate "Invoice" %}</th><th>{% translate "Customer" %}</th><th>{% translate "Date" %}</th>
           <th class="right">{% translate "Bags" %}</th><th class="right">{% translate "Total" %}</th>
           <th class="right">{% translate "Received" %}</th><th class="right">{% translate "Due" %}</th>
-          <th class="right">{% translate "Cost" %}</th><th class="right">{% translate "Profit earned" %}</th>
+          <th class="right">{% translate "Profit earned" %}</th>
           <th class="right">{% translate "Actions" %}</th>
         </tr>
       </thead>
@@ -135,7 +140,7 @@
           </td>
           <td data-label="{% translate 'Bags' %}" class="right">{{ sale.total_bags }}</td>
           <td data-label="{% translate 'Total' %}" class="right bold"><span class="inr" data-value="{{ sale.total_amount }}">₹ {{ sale.total_amount }}</span>
-            {% if sale.party_owes != sale.total_amount %}<div class="row-sub">{% translate "party owes" %} ₹{{ sale.party_owes }}</div>{% endif %}</td>
+            {% if sale.party_owes != sale.total_amount %}<div class="row-sub">{% translate "party owes" %} ₹&nbsp;<span class="inr-abs" data-value="{{ sale.party_owes }}">{{ sale.party_owes }}</span></div>{% endif %}</td>
           <td data-label="{% translate 'Received' %}" class="right inr" data-value="{{ sale.paid }}">₹ {{ sale.paid }}</td>
           <td data-label="{% translate 'Due' %}" class="right">
             {% if sale.due > 0 %}
@@ -149,10 +154,10 @@
               <span class="badge badge-green">{% translate "Paid" %}</span>
             {% endif %}
           </td>
-          <td data-label="{% translate 'Cost' %}" class="right">{% if sale.profit is not None %}<span class="inr" data-value="{{ sale.cost }}">₹ {{ sale.cost }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
           <td data-label="{% translate 'Profit earned' %}" class="right bold {% if sale.profit is not None and sale.profit < 0 %}text-danger{% else %}text-success{% endif %}">
             {% if sale.profit is not None %}<span class="inr" data-value="{{ sale.profit_earned }}">₹ {{ sale.profit_earned }}</span>
-              {% if sale.profit_pending %}<div class="row-sub">{% translate "of" %} ₹{{ sale.profit }}</div>{% endif %}
+              {% if sale.profit_pending %}<div class="row-sub">{% translate "of" %} ₹&nbsp;<span class="inr-abs" data-value="{{ sale.profit }}">{{ sale.profit }}</span></div>{% endif %}
+              <div class="row-sub muted">{% translate "cost" %} ₹&nbsp;<span class="inr-abs" data-value="{{ sale.cost }}">{{ sale.cost }}</span></div>
             {% else %}<span class="muted">—</span>{% endif %}
           </td>
           <td data-label="{% translate 'Actions' %}">

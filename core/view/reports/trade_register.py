@@ -27,8 +27,11 @@ def trade_register(request):
     company = company_of(request)
     today = timezone.localdate()
 
-    date_from = _parse(request.GET.get("from")) or (today - timedelta(days=90))
+    default_from = today - timedelta(days=90)
+    date_from = _parse(request.GET.get("from")) or default_from
     date_to = _parse(request.GET.get("to")) or today
+    if date_from > date_to:
+        date_from, date_to = date_to, date_from
     customer_id = request.GET.get("customer", "")
     broker_id = request.GET.get("broker", "")
     mill_id = request.GET.get("mill", "")
@@ -45,7 +48,27 @@ def trade_register(request):
     rows = register_rows(company, sales)
     if status in STATUS_LABELS:
         rows = [row for row in rows if row["status"] == status]
+    # Newest truck on top: today's bill first.
+    rows.sort(key=lambda row: (row["sale"].sale_date, row["sale"].id), reverse=True)
     totals = register_totals(rows)
+
+    # Quick period buttons
+    month_start = today.replace(day=1)
+    last_month_end = month_start - timedelta(days=1)
+    first_sale = Sale.objects.for_company(company).order_by("sale_date").values_list("sale_date", flat=True).first()
+    periods = [
+        (_("Today"), today, today),
+        (_("This month"), month_start, today),
+        (_("Last month"), last_month_end.replace(day=1), last_month_end),
+        (_("Last 3 months"), default_from, today),
+        (_("This year"), today.replace(month=1, day=1), today),
+        (_("All time"), min(first_sale or today, today), today),
+    ]
+    periods = [
+        {"label": label, "from": start, "to": end, "active": (start, end) == (date_from, date_to)}
+        for label, start, end in periods
+    ]
+    filtered = any([customer_id, broker_id, mill_id, status]) or (date_from, date_to) != (default_from, today)
 
     title = _("Truck register %(start)s to %(end)s") % {
         "start": date_from.strftime("%d %b %Y"), "end": date_to.strftime("%d %b %Y"),
@@ -60,8 +83,10 @@ def trade_register(request):
     return render(request, "core/trade_register.html", {
         "rows": rows,
         "totals": totals,
-        "by_broker": group_summary(rows, "broker"),
-        "by_customer": group_summary(rows, "customer"),
+        "group_tables": [
+            (_("Profit by broker"), "🤝", group_summary(rows, "broker"), "broker"),
+            (_("Profit by customer"), "👥", group_summary(rows, "customer"), "customer"),
+        ],
         "title": title,
         "date_from": date_from,
         "date_to": date_to,
@@ -74,4 +99,6 @@ def trade_register(request):
         "brokers": Broker.objects.for_company(company).order_by("broker_name"),
         "mills": Mill.objects.for_company(company).order_by("mill_name"),
         "export_query": params.urlencode(),
+        "periods": periods,
+        "filtered": filtered,
     })

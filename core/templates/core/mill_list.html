@@ -57,11 +57,11 @@
     <a class="tab {% if status == 'all' %}active{% endif %}" href="?status=all{% if q %}&q={{ q }}{% endif %}">{% translate "All" %}</a>
   </div>
 
-  <form class="toolbar" method="GET" data-no-loading>
+  <form class="toolbar filter-bar" method="GET" data-no-loading data-filter-form>
     <input type="hidden" name="status" value="{{ status }}">
     <input class="input" type="search" name="q" value="{{ q }}"
            placeholder="{% translate 'Search name, owner, mobile, GST, city…' %}" style="min-width:280px;">
-    <select class="select" name="sort" onchange="this.form.submit()">
+    <select class="select" name="sort">
       <option value="name" {% if sort == 'name' %}selected{% endif %}>{% translate "Name A–Z" %}</option>
       <option value="-name" {% if sort == '-name' %}selected{% endif %}>{% translate "Name Z–A" %}</option>
       <option value="-balance" {% if sort == '-balance' %}selected{% endif %}>{% translate "Highest due first" %}</option>
@@ -69,8 +69,8 @@
       <option value="-purchased" {% if sort == '-purchased' %}selected{% endif %}>{% translate "Most purchased" %}</option>
       <option value="new" {% if sort == 'new' %}selected{% endif %}>{% translate "Newest added" %}</option>
     </select>
-    <button class="btn btn-outline" type="submit">{% translate "Search" %}</button>
-    {% if q %}<a class="btn btn-ghost" href="?status={{ status }}">{% translate "Clear" %}</a>{% endif %}
+    <button class="btn btn-outline" type="submit">🔍 {% translate "Search" %}</button>
+    {% if q %}<a class="btn btn-ghost" href="?status={{ status }}">✕ {% translate "Clear filters" %}</a>{% endif %}
   </form>
 
   {% if mills %}

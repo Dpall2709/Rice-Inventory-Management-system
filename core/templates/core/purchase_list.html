@@ -49,28 +49,32 @@
 </div>
 
 <div class="card">
-  <form class="toolbar" method="GET" data-no-loading>
-    <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Bill no, our ref, or mill…' %}" style="min-width:230px;">
+  <form class="toolbar filter-bar" method="GET" data-no-loading data-filter-form>
+    <label class="filter-field filter-search"><span>{% translate "Search" %}</span><input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Bill no, our ref, or mill…' %}" style="min-width:230px;"></label>
+
+    <label class="filter-field"><span>{% translate "Mill" %}</span>
 
     <select class="select" name="mill">
       <option value="">{% translate "All mills" %}</option>
       {% for mill in mills %}
         <option value="{{ mill.id }}" {% if mill_id == mill.id|stringformat:"s" %}selected{% endif %}>{{ mill.mill_name }}</option>
       {% endfor %}
-    </select>
+    </select></label>
+
+    <label class="filter-field"><span>{% translate "Status" %}</span>
 
     <select class="select" name="status">
       <option value="">{% translate "Paid &amp; unpaid" %}</option>
       <option value="due" {% if status == 'due' %}selected{% endif %}>{% translate "Only unpaid" %}</option>
       <option value="paid" {% if status == 'paid' %}selected{% endif %}>{% translate "Only settled" %}</option>
-    </select>
+    </select></label>
 
-    <input class="input" type="date" name="from" value="{{ date_from }}" title="{% translate 'From date' %}">
-    <input class="input" type="date" name="to" value="{{ date_to }}" title="{% translate 'To date' %}">
+    <label class="filter-field"><span>{% translate "From" %}</span><input class="input" type="date" name="from" value="{{ date_from }}" title="{% translate 'From date' %}"></label>
+    <label class="filter-field"><span>{% translate "To" %}</span><input class="input" type="date" name="to" value="{{ date_to }}" title="{% translate 'To date' %}"></label>
 
-    <button class="btn btn-outline" type="submit">{% translate "Filter" %}</button>
+    <button class="btn btn-outline" type="submit">🔍 {% translate "Search" %}</button>
     {% if q or mill_id or status or date_from or date_to %}
-      <a class="btn btn-ghost" href="{% url 'purchase_list' %}">{% translate "Clear" %}</a>
+      <a class="btn btn-ghost" href="{% url 'purchase_list' %}">✕ {% translate "Clear filters" %}</a>
     {% endif %}
   </form>
 
