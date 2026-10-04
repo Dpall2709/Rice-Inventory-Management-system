@@ -1,0 +1,252 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+{% block page_title %}{% translate "Truck register" %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> › <span>{% translate "Truck register" %}</span></div>
+    <h1>📊 {% translate "Truck register" %}</h1>
+    <p class="muted">{% translate "Every truck from mill to party: what it cost, what the party pays after shortage, CD and brokerage, what came in, and the profit." %}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-outline" href="?{{ export_query }}">⬇️ {% translate "Download Excel" %}</a>
+    <a class="btn btn-primary" href="{% url 'add_sale' %}">➕ {% translate "New sale" %}</a>
+  </div>
+</div>
+
+<!-- ===================== FILTERS ===================== -->
+<div class="card register-filters">
+  <form class="filter-bar" method="GET" data-no-loading data-filter-form>
+    <div class="period-chips" role="group" aria-label="{% translate 'Period' %}">
+      {% for p in periods %}
+        <a class="chip {% if p.active %}active{% endif %}" href="?from={{ p.from|date:'Y-m-d' }}&to={{ p.to|date:'Y-m-d' }}"
+           data-period-from="{{ p.from|date:'Y-m-d' }}" data-period-to="{{ p.to|date:'Y-m-d' }}">{{ p.label }}</a>
+      {% endfor %}
+    </div>
+    <div class="filter-grid">
+      <label class="filter-field"><span>{% translate "From" %}</span>
+        <input class="input" type="date" name="from" value="{{ date_from|date:'Y-m-d' }}"></label>
+      <label class="filter-field"><span>{% translate "To" %}</span>
+        <input class="input" type="date" name="to" value="{{ date_to|date:'Y-m-d' }}"></label>
+      <label class="filter-field"><span>{% translate "Customer" %}</span>
+        <select class="select" name="customer">
+          <option value="">{% translate "All customers" %}</option>
+          {% for customer in customers %}<option value="{{ customer.id }}" {% if customer_id == customer.id|stringformat:"s" %}selected{% endif %}>{{ customer.customer_name }}</option>{% endfor %}
+        </select></label>
+      {% if brokers %}
+      <label class="filter-field"><span>{% translate "Broker" %}</span>
+        <select class="select" name="broker">
+          <option value="">{% translate "All brokers" %}</option>
+          {% for broker in brokers %}<option value="{{ broker.id }}" {% if broker_id == broker.id|stringformat:"s" %}selected{% endif %}>{{ broker.broker_name }}</option>{% endfor %}
+        </select></label>
+      {% endif %}
+      <label class="filter-field"><span>{% translate "Mill" %}</span>
+        <select class="select" name="mill">
+          <option value="">{% translate "All mills" %}</option>
+          {% for mill in mills %}<option value="{{ mill.id }}" {% if mill_id == mill.id|stringformat:"s" %}selected{% endif %}>{{ mill.mill_name }}</option>{% endfor %}
+        </select></label>
+      <label class="filter-field"><span>{% translate "Status" %}</span>
+        <select class="select" name="status">
+          <option value="">{% translate "Every status" %}</option>
+          {% for key, label in statuses %}<option value="{{ key }}" {% if status == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></label>
+    </div>
+    <div class="filter-foot">
+      <span class="muted small">
+        {% blocktranslate count counter=totals.trucks with start=date_from|date:"d M Y" end=date_to|date:"d M Y" %}Showing {{ counter }} truck · {{ start }} to {{ end }}{% plural %}Showing {{ counter }} trucks · {{ start }} to {{ end }}{% endblocktranslate %}
+      </span>
+      <noscript><button class="btn btn-outline btn-sm" type="submit">{% translate "Apply" %}</button></noscript>
+      {% if filtered %}<a class="btn btn-ghost btn-sm" href="{% url 'trade_register' %}">✕ {% translate "Clear filters" %}</a>{% endif %}
+    </div>
+  </form>
+</div>
+
+<!-- ===================== TOTALS ===================== -->
+<div class="stats stats-3">
+  <div class="stat">
+    <div class="stat-icon">🧾</div>
+    <div>
+      <div class="stat-label">{% translate "Total sale" %}</div>
+      <div class="stat-value inr" data-value="{{ totals.sale_amount }}">₹ {{ totals.sale_amount }}</div>
+      <div class="stat-hint">{% blocktranslate with paid=totals.bills_paid part=totals.bills_partial due=totals.bills_due %}{{ paid }} paid · {{ part }} part paid · {{ due }} unpaid{% endblocktranslate %}</div>
+    </div>
+  </div>
+  <div class="stat is-success">
+    <div class="stat-icon">✅</div>
+    <div>
+      <div class="stat-label">{% translate "Received" %}</div>
+      <div class="stat-value inr" data-value="{{ totals.received }}">₹ {{ totals.received }}</div>
+      <div class="stat-hint">{% translate "of" %} ₹&nbsp;<span class="inr-abs" data-value="{{ totals.party_owes }}">{{ totals.party_owes }}</span></div>
+    </div>
+  </div>
+  <div class="stat {% if totals.outstanding > 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">⏳</div>
+    <div>
+      <div class="stat-label">{% translate "Still to receive" %}</div>
+      <div class="stat-value inr" data-value="{{ totals.outstanding }}">₹ {{ totals.outstanding }}</div>
+      {% if totals.on_the_way %}<div class="stat-hint">{% blocktranslate count counter=totals.on_the_way %}{{ counter }} truck on the way{% plural %}{{ counter }} trucks on the way{% endblocktranslate %}</div>{% endif %}
+    </div>
+  </div>
+  <div class="stat">
+    <div class="stat-icon">💼</div>
+    <div>
+      <div class="stat-label">{% translate "Total cost" %}</div>
+      <div class="stat-value inr" data-value="{{ totals.investment }}">₹ {{ totals.investment }}</div>
+      <div class="stat-hint">{% translate "rice + loading + freight + commission" %}</div>
+    </div>
+  </div>
+  <div class="stat {% if totals.profit_earned < 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">💰</div>
+    <div>
+      <div class="stat-label">{% translate "Profit earned" %}</div>
+      <div class="stat-value inr" data-value="{{ totals.profit_earned }}">₹ {{ totals.profit_earned }}</div>
+      <div class="stat-hint">{% translate "on money received" %}{% if totals.profit_pending %} · {% translate "comes with dues" %} ₹&nbsp;<span class="inr-abs" data-value="{{ totals.profit_pending }}">{{ totals.profit_pending }}</span>{% endif %}</div>
+    </div>
+  </div>
+  <div class="stat {% if totals.profit_total < 0 %}is-danger{% endif %}">
+    <div class="stat-icon">📈</div>
+    <div>
+      <div class="stat-label">{% translate "Full profit when all is paid" %}</div>
+      <div class="stat-value inr" data-value="{{ totals.profit_total }}">₹ {{ totals.profit_total }}</div>
+      <div class="stat-hint">{% if totals.loss_total %}<span class="text-danger">{% translate "loss" %} ₹&nbsp;<span class="inr-abs" data-value="{{ totals.loss_total }}">{{ totals.loss_total }}</span></span>{% else %}{% translate "no truck at a loss" %}{% endif %}</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== TRUCKS (newest first) ===================== -->
+<div class="list-header" style="margin:4px 0 10px;">
+  <div class="list-title">🚚 {% translate "Trucks" %} <span class="muted small">· {% translate "newest first" %}</span></div>
+</div>
+
+{% for r in rows %}
+<article class="truck-card status-{{ r.status }}">
+  <header class="truck-head">
+    <div class="truck-id">
+      <a class="truck-no" href="{% url 'sale_detail' r.sale.id %}">{{ r.sale.vehicle_number|default:r.sale.invoice_no }}</a>
+      <span class="muted small">{{ r.sale.sale_date|date:"d M Y" }} · {{ r.sale.invoice_no }}</span>
+    </div>
+    <div class="truck-badges">
+      <span class="badge {% if r.status == 'settled' %}badge-green{% elif r.status == 'on_the_way' %}badge-blue{% elif r.status == 'partly_paid' %}badge-orange{% else %}badge-red{% endif %}">{{ r.status_label }}</span>
+    </div>
+    <div class="truck-profit {% if r.profit is not None and r.profit < 0 %}is-loss{% endif %}">
+      {% if r.profit is not None %}
+        <span class="muted small">{% if r.profit < 0 %}{% translate "Loss" %}{% else %}{% translate "Profit earned" %}{% endif %}</span>
+        <strong class="inr" data-value="{{ r.profit_earned }}">₹ {{ r.profit_earned }}</strong>
+        {% if r.profit_pending %}<span class="muted small">{% translate "of" %} ₹&nbsp;<span class="inr-abs" data-value="{{ r.profit }}">{{ r.profit }}</span></span>{% endif %}
+      {% else %}<span class="muted small">{% translate "Cost not known" %}</span>{% endif %}
+    </div>
+  </header>
+
+  <div class="truck-body">
+    <section class="truck-col">
+      <h4>① {% translate "Bought" %}</h4>
+      {% for mill, rate, bags in r.purchase_lines %}
+        <div class="line"><span>{{ mill }}</span><span>₹{{ rate }} × {{ bags }}</span></div>
+      {% empty %}<div class="line muted">—</div>{% endfor %}
+      <div class="line"><span>{% translate "Loaded" %}</span><span>{{ r.bags }} {% translate "bags" %} · {{ r.weight_kg|floatformat:"-2g" }} kg</span></div>
+      {% if r.loading %}<div class="line"><span>{% translate "Loading" %}</span><span>₹ {{ r.loading }}</span></div>{% endif %}
+      {% if r.freight_cost %}<div class="line"><span>{% translate "Freight" %}</span><span>₹ {{ r.freight_cost }}</span></div>{% endif %}
+      <div class="line total"><span>{% translate "Total cost" %}</span>
+        <span>{% if r.total_cost is not None %}<span class="inr" data-value="{{ r.total_cost }}">₹ {{ r.total_cost }}</span>{% else %}—{% endif %}</span></div>
+    </section>
+
+    <section class="truck-col">
+      <h4>② {% translate "Sold" %}</h4>
+      <div class="line"><span>{% translate "Party" %}</span>
+        <span>{% if r.sale.customer_id %}<a href="{% url 'customer_ledger' r.sale.customer_id %}">{{ r.sale.customer_name }}</a>{% else %}{{ r.sale.customer_name }}{% endif %}</span></div>
+      {% if r.sale.broker %}<div class="line"><span>{% translate "Broker" %}</span>
+        <span><a href="{% url 'broker_report_detail' r.sale.broker.id %}">{{ r.sale.broker.broker_name }}</a>{% if r.sale.collect_from == 'broker' %} <span class="badge badge-blue">{% translate "broker pays" %}</span>{% endif %}</span></div>{% endif %}
+      <div class="line"><span>{% translate "Rate" %}</span><span>₹{{ r.sale_rate }}/kg</span></div>
+      {% if r.received_kg is not None %}
+        <div class="line"><span>{% translate "Unloaded" %}</span><span>{% if r.unload_date %}{{ r.unload_date|date:"d M" }} · {% endif %}{{ r.received_kg|floatformat:"-2g" }} kg</span></div>
+        {% if r.loss_kg %}<div class="line"><span>{% translate "Shortage" %}</span><span class="{% if r.loss_kg > 0 %}text-danger{% endif %}">{{ r.loss_kg|floatformat:"-2g" }} kg</span></div>{% endif %}
+      {% else %}
+        <div class="line"><span>{% translate "Unloaded" %}</span><a href="{% url 'settle_sale' r.sale.id %}">{% translate "Record unloading" %} →</a></div>
+      {% endif %}
+      {% if r.cash_discount %}<div class="line"><span>{% translate "Cash discount" %}</span><span>− ₹ {{ r.cash_discount }}</span></div>{% endif %}
+      {% if r.brokerage_cut %}<div class="line"><span>{% translate "Brokerage" %}</span><span>− ₹ {{ r.brokerage_cut }}</span></div>{% endif %}
+      <div class="line total"><span>{% translate "Party owes" %}</span><span class="inr" data-value="{{ r.net_receivable }}">₹ {{ r.net_receivable }}</span></div>
+    </section>
+
+    <section class="truck-col">
+      <h4>③ {% translate "Payment" %}</h4>
+      <div class="line"><span>{% translate "Received" %}</span><span class="text-success inr" data-value="{{ r.received }}">₹ {{ r.received }}</span></div>
+      {% if r.last_payment %}<div class="line"><span>{% translate "Last payment" %}</span><span>{{ r.last_payment|date:"d M Y" }}</span></div>{% endif %}
+      <div class="line total"><span>{% translate "Due" %}</span>
+        {% if r.due > 0 %}<span class="text-danger inr" data-value="{{ r.due }}">₹ {{ r.due }}</span>{% else %}<span class="badge badge-green">{% translate "Paid" %}</span>{% endif %}</div>
+      <div class="pay-bar" title="{{ r.paid_percent }}%"><span style="width: {{ r.paid_percent }}%"></span></div>
+      <div class="muted small">{% blocktranslate with pct=r.paid_percent %}{{ pct }}% paid{% endblocktranslate %}</div>
+      {% if r.due > 0 %}
+        <a class="btn btn-outline btn-sm" style="margin-top:8px;" href="{% url 'add_sale_payment' r.sale.id %}">💰 {% translate "Receive payment" %}</a>
+      {% endif %}
+    </section>
+  </div>
+</article>
+{% empty %}
+<div class="card">
+  <div class="empty">
+    <div class="empty-icon">🚚</div>
+    <div class="empty-title">{% translate "No trucks in this period" %}</div>
+    <p>{% translate "Try a wider date range, or make a sale." %}</p>
+    {% if filtered %}<a class="btn btn-outline" href="{% url 'trade_register' %}">✕ {% translate "Clear filters" %}</a>{% endif %}
+  </div>
+</div>
+{% endfor %}
+
+{% if totals.no_cost %}
+  <p class="field-hint" style="margin:-4px 0 16px;">{% blocktranslate count counter=totals.no_cost %}{{ counter }} old sale has no stock-lot data, so its profit is not shown.{% plural %}{{ counter }} old sales have no stock-lot data, so their profit is not shown.{% endblocktranslate %}</p>
+{% endif %}
+
+<!-- ===================== PROFIT BY BROKER / CUSTOMER ===================== -->
+{% if rows %}
+{% for title, icon, groups, kind in group_tables %}
+<div class="card">
+  <div class="list-title" style="margin-bottom:10px;">{{ icon }} {{ title }}</div>
+  <div class="table-wrap">
+    <table class="table table-cards">
+      <thead><tr>
+        <th>{% if kind == 'broker' %}{% translate "Broker" %}{% else %}{% translate "Customer" %}{% endif %}</th>
+        <th class="right">{% translate "Trucks" %}</th>
+        <th class="right">{% translate "Total sale" %}</th>
+        <th class="right">{% translate "Received" %}</th>
+        <th class="right">{% translate "Due" %}</th>
+        <th class="right">{% translate "Profit earned" %}</th>
+      </tr></thead>
+      <tbody>
+        {% for g in groups %}
+        <tr>
+          <td data-label="{% if kind == 'broker' %}{% translate 'Broker' %}{% else %}{% translate 'Customer' %}{% endif %}" class="row-title">
+            {% if g.id %}<a href="{% if kind == 'broker' %}{% url 'broker_report_detail' g.id %}{% else %}{% url 'customer_ledger' g.id %}{% endif %}">{{ g.name }}</a>{% else %}{{ g.name }}{% endif %}
+          </td>
+          <td data-label="{% translate 'Trucks' %}" class="right">{{ g.trucks }}{% if g.losses %}<div class="row-sub text-danger">{% blocktranslate count counter=g.losses %}{{ counter }} at a loss{% plural %}{{ counter }} at a loss{% endblocktranslate %}</div>{% endif %}</td>
+          <td data-label="{% translate 'Total sale' %}" class="right"><span class="inr" data-value="{{ g.party_owes }}">₹ {{ g.party_owes }}</span></td>
+          <td data-label="{% translate 'Received' %}" class="right"><span class="inr" data-value="{{ g.received }}">₹ {{ g.received }}</span></td>
+          <td data-label="{% translate 'Due' %}" class="right">{% if g.due > 0 %}<span class="bold text-danger inr" data-value="{{ g.due }}">₹ {{ g.due }}</span>{% else %}<span class="badge badge-green">{% translate "Paid" %}</span>{% endif %}</td>
+          <td data-label="{% translate 'Profit earned' %}" class="right bold {% if g.profit_earned < 0 %}text-danger{% else %}text-success{% endif %}">
+            <span class="inr" data-value="{{ g.profit_earned }}">₹ {{ g.profit_earned }}</span>
+            {% if g.profit_pending %}<div class="row-sub">{% translate "of" %} ₹&nbsp;<span class="inr-abs" data-value="{{ g.profit }}">{{ g.profit }}</span></div>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<details class="card how-profit">
+  <summary class="list-title">ℹ️ {% translate "How the profit is worked out" %}</summary>
+  <ol class="muted small" style="padding-left:18px; display:grid; gap:4px; margin-top:10px;">
+    <li>{% translate "Party value = invoice value on the weight the party received (shortage in transit is your loss)." %}</li>
+    <li>{% translate "Sale income = party value before GST − cash discount − brokerage the party cuts − other deductions." %}</li>
+    <li>{% translate "Cost = rice at landed cost (mill rate + purchase expenses) + loading + freight you carry (advance + balance the party paid the driver) + commission you pay the broker." %}</li>
+    <li>{% translate "Profit = sale income − cost. Freight the party paid the driver is counted once: as your cost, and as a cut from what they pay you." %}</li>
+    <li>{% translate "A truck that is not paid yet is 'awaiting payment', not a loss." %}</li>
+    <li>{% translate "Profit earned = full profit × share of the money received. Half the money in, half the profit earned; fully paid, the full profit. A loss is counted in full straight away." %}</li>
+  </ol>
+</details>
+
+{% endblock %}

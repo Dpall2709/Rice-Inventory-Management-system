@@ -1,152 +1,523 @@
 {% extends 'core/base.html' %}
-{% block page_title %}Mill Report{% endblock %}
+{% load i18n %}
+{% block back_url %}{% url 'mill_list' %}{% endblock %}
+{% block page_title %}{{ mill.mill_name }}{% endblock %}
+{% block browser_title %}{% blocktranslate with name=mill.mill_name %}{{ name }} ledger{% endblocktranslate %}{% endblock %}
 
 {% block content %}
-<div class="panel">
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> ›
+      <a href="{% url 'mill_list' %}">{% translate "Mills / Suppliers" %}</a> ›
+      <span>{{ mill.mill_name }}</span>
+    </div>
+    <h1>
+      {{ mill.mill_name }}
+      {% if not mill.is_active %}<span class="badge badge-muted">{% translate "Inactive" %}</span>{% endif %}
+    </h1>
+    <p class="muted">
+      {% translate "Owner not set" as owner_not_set %}{{ mill.owner_name|default:owner_not_set }}
+      {% if mill.mobile %} · {{ mill.mobile }}{% endif %}
+      {% if mill.gst_number %} · {% translate "GST" %} {{ mill.gst_number }}{% endif %}
+    </p>
+  </div>
+
+  <div class="page-actions">
+    {% if mill.is_active %}
+      <a class="btn btn-primary" href="{% url 'add_purchase' %}?mill={{ mill.id }}">➕ {% translate "Add purchase bill" %}</a>
+    {% endif %}
+    <a class="btn btn-outline" href="{% url 'add_mill_payment' mill.id %}">💳 {% translate "Pay" %}</a>
+    <span class="action-group">
+      {% if mill.mobile %}<a class="btn btn-ghost" href="https://wa.me/{{ mill.whatsapp_number }}" target="_blank" rel="noopener" title="WhatsApp">💬</a>{% endif %}
+      <a class="btn btn-ghost" href="{% url 'mill_report_excel' mill.id %}" title="{% translate 'Download Excel' %}">📊 Excel</a>
+      <a class="btn btn-ghost" href="{% url 'mill_report_pdf' mill.id %}" title="{% translate 'Download PDF' %}">📄 PDF</a>
+      <a class="btn btn-ghost" href="{% url 'edit_mill' mill.id %}" title="{% translate 'Edit supplier' %}">✏️ {% translate "Edit" %}</a>
+    </span>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-icon">🧾</div>
+    <div>
+      <div class="stat-label">{% translate "Total purchased" %}</div>
+      <div class="stat-value inr" data-value="{{ total_purchase }}">₹ {{ total_purchase }}</div>
+      <div class="stat-hint">{% blocktranslate count counter=purchase_rows|length %}{{ counter }} invoice{% plural %}{{ counter }} invoices{% endblocktranslate %}</div>
+    </div>
+  </div>
+  <div class="stat is-success">
+    <div class="stat-icon">✅</div>
+    <div>
+      <div class="stat-label">{% translate "Total paid" %}</div>
+      <div class="stat-value inr" data-value="{{ total_paid }}">₹ {{ total_paid }}</div>
+    </div>
+  </div>
+  {% if advance %}
+  <div class="stat is-success">
+    <div class="stat-icon">🤝</div>
+    <div>
+      <div class="stat-label">{% translate "Settled · advance with mill" %}</div>
+      <div class="stat-value inr" data-value="{{ advance }}">₹ {{ advance }}</div>
+      <div class="stat-hint">{% translate "you have paid more than every bill" %}</div>
+    </div>
+  </div>
+  {% else %}
+  <div class="stat {% if balance > 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">{% if balance > 0 %}⏳{% else %}✅{% endif %}</div>
+    <div>
+      <div class="stat-label">{% if balance > 0 %}{% translate "Balance you owe" %}{% else %}{% translate "Fully settled" %}{% endif %}</div>
+      <div class="stat-value inr" data-value="{{ balance }}">₹ {{ balance }}</div>
+      <div class="stat-hint">{% translate "incl. opening" %} ₹ {{ mill.opening_balance }}</div>
+    </div>
+  </div>
+  {% endif %}
+  <div class="stat is-warning">
+    <div class="stat-icon">📦</div>
+    <div>
+      <div class="stat-label">{% translate "Bags bought" %}</div>
+      <div class="stat-value">{{ grand_total_bags }}</div>
+      <div class="stat-hint">{{ grand_total_kg }} kg</div>
+    </div>
+  </div>
+</div>
+
+<div class="tabs" id="millTabs">
+  <a class="tab active" href="#purchases" data-tab="purchases">🧾 {% translate "Bill history" %}</a>
+  <a class="tab" href="#history" data-tab="history">📒 {% translate "Account history" %}</a>
+  <a class="tab" href="#payments" data-tab="payments">💳 {% translate "Payments" %}</a>
+  <a class="tab" href="#details" data-tab="details">📋 {% translate "Supplier details" %}</a>
+</div>
+
+<!-- ============================ HISTORY ============================== -->
+<section class="card" data-panel="history" hidden>
+  <div class="list-header">
+    <div>
+      <div class="list-title">{% translate "Account history" %}</div>
+      <p class="muted">{% blocktranslate trimmed %}Every bill and every payment in date order, with the running balance — like your khata.
+        Nothing is removed when a supplier is settled.{% endblocktranslate %}</p>
+    </div>
+    <input class="input" type="search" data-filter="#historyTable" placeholder="{% translate 'Filter…' %}" style="max-width:220px;">
+  </div>
+
+  <div class="table-wrap">
+    <table class="table" id="historyTable">
+      <thead>
+        <tr>
+          <th>{% translate "Date" %}</th>
+          <th>{% translate "Particulars" %}</th>
+          <th class="right">{% translate "Bill (you owe)" %}</th>
+          <th class="right">{% translate "Paid" %}</th>
+          <th class="right">{% translate "Balance" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in statement.history %}
+        <tr class="history-{{ entry.kind }}">
+          <td class="nowrap">{% if entry.date %}{{ entry.date|date:"d M Y" }}{% else %}—{% endif %}</td>
+          <td>
+            {% if entry.kind == 'bill' %}
+              <span class="badge badge-blue">{% translate "Bill" %}</span>
+              <a class="row-title" href="{% url 'purchase_detail' entry.purchase.id %}">{{ entry.particulars }}</a>
+            {% elif entry.kind == 'payment' %}
+              <span class="badge badge-green">{% translate "Paid" %}</span>
+              {{ entry.particulars }}
+            {% else %}
+              <span class="muted">{{ entry.particulars }}</span>
+            {% endif %}
+            {% if entry.reference %}<div class="row-sub">{{ entry.reference }}</div>{% endif %}
+          </td>
+          <td class="right">
+            {% if entry.debit %}<span class="inr" data-value="{{ entry.debit }}">₹ {{ entry.debit }}</span>{% endif %}
+          </td>
+          <td class="right text-success">
+            {% if entry.credit %}<span class="inr" data-value="{{ entry.credit }}">₹ {{ entry.credit }}</span>{% endif %}
+          </td>
+          <td class="right bold">
+            {% if entry.balance < 0 %}
+              <span class="text-success">₹ <span class="inr-abs" data-value="{{ entry.balance }}">{{ entry.balance }}</span> {% translate "adv" %}</span>
+            {% elif entry.balance > 0 %}
+              <span class="text-danger inr" data-value="{{ entry.balance }}">₹ {{ entry.balance }}</span>
+            {% else %}
+              <span class="badge badge-green">{% translate "Nil" %}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2">{% translate "Closing position" %}</td>
+          <td class="right inr" data-value="{{ total_purchase }}">₹ {{ total_purchase }}</td>
+          <td class="right inr" data-value="{{ total_paid }}">₹ {{ total_paid }}</td>
+          <td class="right">
+            {% if advance %}<span class="text-success"><span class="inr" data-value="{{ advance }}">₹ {{ advance }}</span> {% translate "advance" %}</span>
+            {% elif balance > 0 %}<span class="text-danger"><span class="inr" data-value="{{ balance }}">₹ {{ balance }}</span> {% translate "due" %}</span>
+            {% else %}<span class="text-success">{% translate "Settled" %}</span>{% endif %}
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</section>
+
+<!-- ============================ PURCHASES ============================ -->
+<section class="card" data-panel="purchases">
+  {% if opening_due or advance or on_account or statement.overpaid_on_bills %}
+    <div class="banner">
+      <span>ℹ️</span>
+      <div>
+        {% if on_account %}
+          ₹ {% blocktranslate %}<span class="inr-abs" data-value="{{ on_account }}">{{ on_account }}</span> was paid to this mill without naming a bill.{% endblocktranslate %}
+        {% endif %}
+        {% for bill, amount in statement.overpaid_by_bill %}
+          {% blocktranslate with invoice_no=bill.invoice_no %}Bill <strong>{{ invoice_no }}</strong> was paid ₹ <span class="inr-abs" data-value="{{ amount }}">{{ amount }}</span> more than its total.{% endblocktranslate %}
+        {% endfor %}
+        {% if on_account or statement.overpaid_on_bills %}
+          {% translate "That money is applied to the oldest unpaid bills first." %}
+        {% endif %}
+        {% if opening_due %}
+          {% blocktranslate %}Opening balance still due: <strong>₹ {{ opening_due }}</strong>.{% endblocktranslate %}
+        {% endif %}
+        {% if advance %}
+          {% blocktranslate %}<strong>₹ <span class="inr-abs" data-value="{{ advance }}">{{ advance }}</span> advance</strong> with this mill.{% endblocktranslate %}
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
 
   <div class="list-header">
     <div>
-      <h2 class="list-title">{{ mill.mill_name }}</h2>
-      <p class="muted">Supplier Ledger</p>
+      <div class="list-title">🧾 {% translate "Bill history" %}</div>
+      <p class="muted small">{% translate "Every bill from this supplier: bill number, date, amount, what is paid and what is still due." %}</p>
     </div>
-
-    <div class="list-actions">
-      <a href="{% url 'mill_report_excel' mill.id %}" class="btn btn-outline">📥 Export Excel</a>
-      <a href="{% url 'mill_report_pdf' mill.id %}" class="btn btn-outline">🧾 Export PDF</a>
-      <a href="{% url 'add_mill_payment' mill.id %}" class="btn btn-primary">💳 Add Payment</a>
-      <a href="{% url 'mill_list' %}" class="btn btn-outline">⬅ Back</a>
-    </div>
+    {% if mill.is_active %}<a class="btn btn-primary btn-sm" href="{% url 'add_purchase' %}?mill={{ mill.id }}">➕ {% translate "Add purchase bill" %}</a>{% endif %}
+    <input class="input" type="search" data-filter="#purchaseTable" placeholder="{% translate 'Filter invoices…' %}" style="max-width:240px;">
   </div>
 
-  <!-- Summary -->
-  <div class="info-grid">
-    <div class="info-card">
-      <div class="info-label">Opening Balance</div>
-      <div class="info-value">₹ {{ mill.opening_balance }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Total Purchase</div>
-      <div class="info-value">₹ {{ total_purchase }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Total Paid</div>
-      <div class="info-value">₹ {{ total_paid }}</div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-label">Balance (Due)</div>
-      <div class="info-value" style="color:#ef4444;">₹ {{ balance }}</div>
-    </div>
-
-    <!-- ✅ NEW -->
-    <div class="info-card">
-      <div class="info-label">Total Bags Purchased</div>
-      <div class="info-value">{{ grand_total_bags }}</div>
-    </div>
-
-    <!-- ✅ NEW -->
-    <div class="info-card">
-      <div class="info-label">Total KG Purchased</div>
-      <div class="info-value">{{ grand_total_kg }}</div>
-    </div>
-  </div>
-
-  <hr class="divider">
-
-  <!-- Purchases -->
-    <!-- Purchases -->
-  <h3 class="panel-title">Purchases</h3>
-
+  {% if purchase_rows %}
   <div class="table-wrap">
-    <table class="table">
+    <table class="table bills-table" id="purchaseTable">
       <thead>
         <tr>
-          <th>Date</th>
-          <th>Invoice</th>
-          <th class="right">Bags</th>
-          <th class="right">KG</th>
-          <th class="right">Avg Rate/KG</th>
-          <th class="right">Amount</th>
-          <th class="right">Paid</th>
-          <th class="right">Due</th>
-          <th>Action</th>
+          <th style="width:40px;"></th>
+          <th>{% translate "Bill" %}</th>
+          <th>{% translate "Date" %}</th>
+          <th class="right">{% translate "Quantity" %}</th>
+          <th class="right">{% translate "Rate / kg" %}</th>
+          <th class="right">{% translate "Bill amount" %}</th>
+          <th class="right" style="min-width:170px;">{% translate "Paid" %}</th>
+          <th class="right">{% translate "Due" %}</th>
+          <th class="right"></th>
         </tr>
       </thead>
-
       <tbody>
-        {% for p in purchase_rows %}
-        <tr>
-          <td>{{ p.purchase_date }}</td>
-          <td><b>{{ p.invoice_no }}</b></td>
+        {% for row in purchase_rows %}
+        <tr class="bill-row status-{{ row.status }}" data-bill-row>
+          <td class="bill-expander">
+            <button class="btn btn-ghost btn-sm expander" type="button"
+                    data-expand="bill-{{ row.id }}" title="{% translate 'Show what is on this bill' %}">▸</button>
+          </td>
 
-          <td class="right">{{ p.total_bags }}</td>
-          <td class="right">{{ p.total_kg }}</td>
-          <td class="right">₹ {{ p.avg_rate }}</td>
+          <td data-label="{% translate 'Bill' %}">
+            <a class="bill-no" href="{% url 'purchase_detail' row.id %}">{{ row.invoice_no }}</a>
+            <div class="bill-meta">
+              {% if row.tax_type == 'none' %}<span class="badge badge-muted">{% translate "No GST" %}</span>
+              {% elif row.tax_type == 'igst' %}<span class="badge badge-blue">IGST</span>
+              {% else %}<span class="badge badge-blue">CGST+SGST</span>{% endif %}
+              <span class="ref">{{ row.purchase_ref|default:"" }}</span>
+            </div>
+          </td>
 
-          <td class="right"><b>₹ {{ p.total_amount }}</b></td>
-          <td class="right">₹ {{ p.paid }}</td>
+          <td data-label="{% translate 'Date' %}" class="nowrap">
+            <div>{{ row.purchase_date|date:"d M Y" }}</div>
+            <div class="row-sub">{{ row.purchase_date|date:"l" }}</div>
+          </td>
 
-          <td class="right">
-            {% if p.due|floatformat:2 == "0.00" %}
-              <b style="color:#16a34a;">₹ {{ p.due }}</b>
+          <td data-label="{% translate 'Quantity' %}" class="right nowrap">
+            <div class="bold">{% blocktranslate with bags=row.total_bags %}{{ bags }} bags{% endblocktranslate %}</div>
+            <div class="row-sub">{{ row.total_kg|floatformat:0 }} kg</div>
+          </td>
+
+          <td data-label="{% translate 'Rate / kg' %}" class="right nowrap">
+            {% if row.single_rate %}
+              <div class="bold">₹ {{ row.single_rate|floatformat:2 }}</div>
             {% else %}
-              <b style="color:#ef4444;">₹ {{ p.due }}</b>
+              {% for rate in row.rates %}<div class="bold">₹ {{ rate|floatformat:2 }}</div>{% empty %}—{% endfor %}
+            {% endif %}
+            {% if row.gst_amount %}<div class="row-sub">+ {% translate "GST" %}</div>{% endif %}
+          </td>
+
+          <td data-label="{% translate 'Bill amount' %}" class="right nowrap bold">
+            <span class="inr" data-value="{{ row.total_amount }}">₹ {{ row.total_amount }}</span>
+          </td>
+
+          <td data-label="{% translate 'Paid' %}" class="right">
+            <div class="inr nowrap" data-value="{{ row.paid }}">₹ {{ row.paid }}</div>
+            <div class="paid-bar" title="{% blocktranslate with paid=row.paid total=row.total_amount %}{{ paid }} of {{ total }}{% endblocktranslate %}">
+              <span style="width: {% widthratio row.paid row.total_amount 100 %}%;"></span>
+            </div>
+            {% if row.applied_from_account %}
+              <div class="row-sub nowrap">
+                ₹ <span class="inr-abs" data-value="{{ row.applied_from_account }}">{{ row.applied_from_account }}</span> {% translate "applied" %}
+              </div>
             {% endif %}
           </td>
 
-          <td>
-            <a href="{% url 'purchase_detail' p.id %}" class="btn btn-outline" style="padding:6px 10px;">
-              👁 View
-            </a>
-            <a href="{% url 'add_purchase_payment' p.id %}" class="btn btn-primary" style="padding:6px 10px;">
-              💳 Pay
-            </a>
+          <td data-label="{% translate 'Due' %}" class="right nowrap">
+            {% if row.status == 'paid' %}
+              <span class="badge badge-green">✓ {% translate "Paid" %}</span>
+            {% else %}
+              <div class="bold text-danger inr" data-value="{{ row.due }}">₹ {{ row.due }}</div>
+              {% if row.status == 'partial' %}
+                <span class="badge badge-orange">{% translate "Part paid" %}</span>
+              {% else %}
+                <span class="badge badge-red">{% translate "Unpaid" %}</span>
+              {% endif %}
+            {% endif %}
+          </td>
+
+          <td data-cell-actions class="right">
+            <div class="actions">
+              {% if row.due > 0 %}
+                <a class="btn btn-outline btn-sm" href="{% url 'add_purchase_payment' row.id %}">💳 {% translate "Pay" %}</a>
+              {% endif %}
+              <a class="btn btn-ghost btn-sm" href="{% url 'purchase_detail' row.id %}" title="{% translate 'Open bill' %}">↗</a>
+            </div>
           </td>
         </tr>
-        {% empty %}
-        <tr>
-          <td colspan="9" style="text-align:center; padding:20px;">No purchases</td>
+
+        <!-- what is actually on that bill, opened by the ▸ button -->
+        <tr class="bill-lines" id="bill-{{ row.id }}" hidden>
+          <td colspan="9">
+            <div class="bill-lines-inner">
+              <div class="bill-lines-title">{% blocktranslate with invoice_no=row.invoice_no %}What is on bill {{ invoice_no }}{% endblocktranslate %}</div>
+              <table class="table inner-table">
+                <thead>
+                  <tr>
+                    <th>{% translate "Rice" %}</th><th>{% translate "HSN" %}</th><th class="right">{% translate "Bag wt" %}</th><th class="right">{% translate "Bags" %}</th>
+                    <th class="right">{% translate "Quantity" %}</th><th class="right">{% translate "Rate / kg" %}</th>
+                    <th class="right">{% translate "Taxable" %}</th><th class="right">{% translate "GST" %}</th><th class="right">{% translate "Line total" %}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in row.items %}
+                  <tr>
+                    <td class="row-title">{{ item.product.rice_name }}</td>
+                    <td><span class="muted">{{ item.product.hsn_code|default:"—" }}</span></td>
+                    <td class="right">{{ item.bag_weight }} kg</td>
+                    <td class="right">{{ item.bag_count }}</td>
+                    <td class="right">{{ item.total_kg|floatformat:0 }} kg</td>
+                    <td class="right bold">₹ {{ item.purchase_price }}</td>
+                    <td class="right inr" data-value="{{ item.taxable_amount }}">₹ {{ item.taxable_amount }}</td>
+                    <td class="right">
+                      {% if item.gst_percent %}{{ item.gst_percent|floatformat:0 }}% · <span class="inr" data-value="{{ item.gst_amount }}">₹ {{ item.gst_amount }}</span>{% else %}—{% endif %}
+                    </td>
+                    <td class="right bold inr" data-value="{{ item.line_total }}">₹ {{ item.line_total }}</td>
+                  </tr>
+                  {% empty %}
+                  <tr><td colspan="9" class="muted">{% translate "No lines recorded on this bill." %}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              <div class="bill-lines-actions">
+                <a class="btn btn-outline btn-sm" href="{% url 'purchase_detail' row.id %}">{% translate "Open full bill" %} →</a>
+                <a class="btn btn-ghost btn-sm" href="{% url 'edit_purchase' row.id %}">✏️ {% translate "Edit" %}</a>
+              </div>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
+      <tfoot>
+        <tr>
+          <td></td>
+          <td colspan="2">{% translate "Total" %} · {% blocktranslate count counter=purchase_rows|length %}{{ counter }} bill{% plural %}{{ counter }} bills{% endblocktranslate %}</td>
+          <td class="right nowrap">{% blocktranslate %}{{ grand_total_bags }} bags{% endblocktranslate %}</td>
+          <td></td>
+          <td class="right inr" data-value="{{ total_purchase }}">₹ {{ total_purchase }}</td>
+          <td class="right inr" data-value="{{ total_paid }}">₹ {{ total_paid }}</td>
+          <td class="right inr" data-value="{{ balance }}">₹ {{ balance }}</td>
+          <td></td>
+        </tr>
+      </tfoot>
     </table>
   </div>
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">🧾</div>
+    <div class="empty-title">{% translate "No purchases from this supplier yet" %}</div>
+    <p>{% translate "Record what you buy so the ledger and your stock stay correct." %}</p>
+    <a class="btn btn-primary" href="{% url 'add_purchase' %}">➕ {% translate "Add a purchase" %}</a>
+  </div>
+  {% endif %}
+</section>
 
+<!-- ============================ PAYMENTS ============================= -->
+<section class="card" data-panel="payments" hidden>
+  <div class="list-header">
+    <div class="list-title">{% translate "Payments made to this supplier" %}</div>
+    <a class="btn btn-primary btn-sm" href="{% url 'add_mill_payment' mill.id %}">💳 {% translate "Add payment" %}</a>
+  </div>
 
-  <hr class="divider">
-
-  <!-- Payments -->
-  <h3 class="panel-title">Payments</h3>
-
+  {% if payments %}
   <div class="table-wrap">
-    <table class="table">
+    <table class="table table-cards">
       <thead>
         <tr>
-          <th>Date</th>
-          <th>Mode</th>
-          <th>Notes</th>
-          <th class="right">Amount</th>
+          <th>{% translate "Date" %}</th><th>{% translate "Mode" %}</th><th>{% translate "Against invoice" %}</th><th>{% translate "Notes" %}</th><th class="right">{% translate "Amount" %}</th>
         </tr>
       </thead>
-
       <tbody>
-        {% for pay in payments %}
+        {% for payment in payments %}
         <tr>
-          <td>{{ pay.payment_date }}</td>
-          <td>{{ pay.payment_mode }}</td>
-          <td>{{ pay.notes|default:"-" }}</td>
-          <td class="right">₹ {{ pay.amount }}</td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="4" style="text-align:center; padding:20px;">No payments</td>
+          <td data-label="{% translate 'Date' %}" class="nowrap">{{ payment.payment_date|date:"d M Y" }}</td>
+          <td data-label="{% translate 'Mode' %}"><span class="chip">{% if payment.payment_mode %}{% translate payment.payment_mode %}{% else %}—{% endif %}</span></td>
+          <td data-label="{% translate 'Against invoice' %}">{% translate "General" as general %}{{ payment.purchase.invoice_no|default:general }}</td>
+          <td data-label="{% translate 'Notes' %}"><span class="muted">{{ payment.notes|default:"—" }}</span></td>
+          <td data-label="{% translate 'Amount' %}" class="right bold inr" data-value="{{ payment.amount }}">₹ {{ payment.amount }}</td>
         </tr>
         {% endfor %}
       </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="4">{% translate "Total paid" %}</td>
+          <td class="right inr" data-value="{{ total_paid }}">₹ {{ total_paid }}</td>
+        </tr>
+      </tfoot>
     </table>
   </div>
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">💳</div>
+    <div class="empty-title">{% translate "No payments recorded" %}</div>
+    <p>{% translate "Every rupee you pay this mill should be entered here, so the balance stays true." %}</p>
+    <a class="btn btn-primary" href="{% url 'add_mill_payment' mill.id %}">💳 {% translate "Add the first payment" %}</a>
+  </div>
+  {% endif %}
+</section>
 
-</div>
+<!-- ============================ DETAILS ============================== -->
+<section class="card" data-panel="details" hidden>
+  <div class="list-header">
+    <div class="list-title">{% translate "Supplier details" %}</div>
+    <a class="btn btn-outline btn-sm" href="{% url 'edit_mill' mill.id %}">✏️ {% translate "Edit" %}</a>
+  </div>
+
+  <dl class="kv">
+    <dt>{% translate "Mill / Supplier" %}</dt><dd>{{ mill.mill_name }}</dd>
+    <dt>{% translate "Owner" %}</dt><dd>{{ mill.owner_name|default:"—" }}</dd>
+    <dt>{% translate "Mobile" %}</dt><dd>{{ mill.mobile|default:"—" }}</dd>
+    <dt>{% translate "GST number" %}</dt><dd>{{ mill.gst_number|default:"—" }}</dd>
+    <dt>{% translate "Address" %}</dt><dd>{{ mill.address|default:"—" }}</dd>
+    <dt>{% translate "City / State" %}</dt><dd>{{ mill.city|default:"—" }}{% if mill.state %}, {{ mill.state }}{% endif %}</dd>
+    <dt>{% translate "Opening balance" %}</dt><dd class="inr" data-value="{{ mill.opening_balance }}">₹ {{ mill.opening_balance }}</dd>
+    <dt>{% translate "Status" %}</dt>
+    <dd>
+      {% if mill.is_active %}<span class="badge badge-green">{% translate "Active" %}</span>
+      {% else %}<span class="badge badge-muted">{% translate "Inactive" %}</span>{% endif %}
+    </dd>
+    <dt>{% translate "Notes" %}</dt><dd>{{ mill.notes|default:"—" }}</dd>
+    <dt>{% translate "Added on" %}</dt><dd>{{ mill.created_at|date:"d M Y, H:i" }}</dd>
+  </dl>
+</section>
+
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* Phones: every bill becomes a card - number, date, amount, paid, due. */
+  @media (max-width: 720px) {
+    .bills-table thead, .bills-table tfoot, .bills-table .bill-expander { display: none; }
+    .bills-table, .bills-table tbody { display: block; width: 100%; }
+    .bills-table tr.bill-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px;
+      padding: 12px; margin-bottom: 10px; border: 1px solid var(--border);
+      border-radius: var(--r); background: var(--surface);
+    }
+    .bills-table tr.bill-row td { display: block; padding: 0; border: 0; text-align: left; white-space: normal; }
+    .bills-table tr.bill-row td[data-label]::before {
+      content: attr(data-label); display: block; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted);
+    }
+    .bills-table tr.bill-row td[data-cell-actions] { grid-column: 1 / -1; }
+    .bills-table tr.bill-row td.bill-expander { display: none; }
+    .bills-table tr.bill-row.status-due, .bills-table tr.bill-row.status-partial { border-left: 4px solid var(--danger); }
+    .bills-table tr.bill-row td[data-cell-actions] .actions { justify-content: flex-start; }
+    .table-wrap:has(> .bills-table) { border: 0; background: none; overflow: visible; }
+  }
+</style>
+<style>
+  .expander { font-size: 15px; line-height: 1; padding: 4px 8px; }
+  .expander.open { transform: rotate(90deg); }
+  .bill-lines > td { background: var(--surface-2); padding: 0 !important; }
+  .bill-lines-inner { padding: 14px 18px 18px; }
+  .bill-lines-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px;
+  }
+  .inner-table { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); }
+  .inner-table thead th { background: var(--surface-3); }
+  .bill-lines-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+  /* A coloured edge tells the state of each bill at a glance. */
+  .bills-table .bill-row td:first-child { box-shadow: inset 3px 0 0 var(--border-strong); }
+  .bills-table .bill-row.status-due td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+  .bills-table .bill-row.status-partial td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+  .bills-table .bill-row.status-paid td:first-child { box-shadow: inset 3px 0 0 var(--success); }
+  .bills-table .bill-row.status-paid { opacity: 0.88; }
+
+  .bill-no { font-size: 15px; font-weight: 700; color: var(--text); }
+  .bill-no:hover { color: var(--primary); }
+  .bill-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .bill-meta .ref { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+
+  .paid-bar {
+    height: 5px; margin: 6px 0 4px auto; width: 120px; max-width: 100%;
+    background: var(--surface-3); border-radius: 999px; overflow: hidden;
+  }
+  .paid-bar span { display: block; height: 100%; background: var(--success); border-radius: 999px; }
+  .status-partial .paid-bar span { background: var(--warning); }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Simple tab switching: show one panel, mark one tab active.
+  document.querySelectorAll("#millTabs .tab").forEach(function (tab) {
+    tab.addEventListener("click", function (e) {
+      e.preventDefault();
+      var name = tab.getAttribute("data-tab");
+
+      document.querySelectorAll("#millTabs .tab").forEach(function (t) {
+        t.classList.toggle("active", t === tab);
+      });
+      document.querySelectorAll("[data-panel]").forEach(function (panel) {
+        panel.hidden = panel.getAttribute("data-panel") !== name;
+      });
+
+      history.replaceState(null, "", "#" + name);
+    });
+  });
+
+  // The ▸ button opens the lines of one bill underneath its row.
+  document.addEventListener("click", function (e) {
+    var button = e.target.closest("[data-expand]");
+    if (!button) return;
+
+    var panel = document.getElementById(button.getAttribute("data-expand"));
+    if (!panel) return;
+
+    panel.hidden = !panel.hidden;
+    button.classList.toggle("open", !panel.hidden);
+    button.textContent = panel.hidden ? "▸" : "▾";
+  });
+
+  // Open the tab named in the URL (e.g. .../#payments).
+  if (location.hash) {
+    var target = document.querySelector('#millTabs .tab[data-tab="' + location.hash.slice(1) + '"]');
+    if (target) target.click();
+  }
+</script>
 {% endblock %}

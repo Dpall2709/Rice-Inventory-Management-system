@@ -1,0 +1,105 @@
+{% load i18n %}
+{# Shown on the purchase form when it was filled from a scanned bill. #}
+<div class="card scan-review">
+  <div class="list-header">
+    <div>
+      <div class="list-title">📷 {% translate "Filled from the scanned bill" %}</div>
+      <p class="muted">
+        {% if scan.source == 'qr+ai' %}{% translate "Header from the GST e-invoice QR code, rice lines read from the bill photo." %}
+        {% elif scan.source == 'qr' %}{% translate "Header from the bill's QR code. The QR has no rice lines - enter bags and rate below." %}
+        {% else %}{% translate "Read from the bill photo." %}{% endif %}
+        <strong>{% translate "Check every value before you save." %}</strong>
+      </p>
+    </div>
+    <div class="list-actions">
+      {% if scan.bill_file %}<span class="badge badge-blue">📎 {% translate "Bill file will be attached" %}</span>{% endif %}
+      <a class="btn btn-ghost btn-sm" href="{% url 'discard_scan' %}">✖ {% translate "Discard scan" %}</a>
+    </div>
+  </div>
+
+  {% if not scan.mill_id %}
+    <div class="banner is-warning" style="margin-top:12px;">
+      <span>🏭</span>
+      <div>
+        {% if scan.supplier.name or scan.supplier.gstin %}
+          {% blocktranslate with name=scan.supplier.name|default:"—" gstin=scan.supplier.gstin|default:"—" trimmed %}
+            Supplier <strong>{{ name }}</strong> (GSTIN {{ gstin }}) is not in your supplier list.
+          {% endblocktranslate %}
+        {% else %}
+          {% translate "The supplier could not be read from the bill. Choose the mill below." %}
+        {% endif %}
+      </div>
+      {% if scan.supplier.name %}
+      <form method="POST" action="{% url 'scan_add_supplier' %}" class="scan-add-supplier">
+        {% csrf_token %}
+        <input class="input" name="mill_name" value="{{ scan.supplier.name }}" aria-label="{% translate 'Supplier name' %}">
+        <input class="input" name="mobile" value="{{ scan.supplier.mobile }}" placeholder="{% translate '10-digit mobile' %}" aria-label="{% translate 'Mobile number' %}">
+        <button class="btn btn-primary btn-sm" type="submit">➕ {% translate "Add this supplier" %}</button>
+      </form>
+      {% endif %}
+    </div>
+  {% else %}
+    <p style="margin-top:8px;">✅ {% blocktranslate with name=scan.mill_name %}Supplier matched: <strong>{{ name }}</strong>{% endblocktranslate %}</p>
+  {% endif %}
+
+  <dl class="kv" style="margin-top:12px;">
+    <dt>{% translate "Bill number" %}</dt><dd>{{ scan.bill_number|default:"—" }}</dd>
+    <dt>{% translate "Bill date" %}</dt><dd>{{ scan.bill_date|default:"—" }}</dd>
+    {% if scan.grand_total %}<dt>{% translate "Total on the bill" %}</dt><dd>₹ <span data-scan-total="{{ scan.grand_total }}">{{ scan.grand_total }}</span> <span class="muted small" data-scan-compare></span></dd>{% endif %}
+    {% if scan.irn %}<dt>IRN</dt><dd class="small" style="overflow-wrap:anywhere;">{{ scan.irn }}</dd>{% endif %}
+  </dl>
+
+  {% if scan.lines %}
+  <div class="table-wrap" style="margin-top:12px;">
+    <table class="table">
+      <thead><tr><th>{% translate "On the bill" %}</th><th>{% translate "Matched rice" %}</th><th class="right">{% translate "Bags" %}</th><th class="right">{% translate "Bag weight" %}</th><th class="right">{% translate "Rate / kg" %}</th><th class="right">{% translate "Amount" %}</th></tr></thead>
+      <tbody>
+        {% for line in scan.lines %}
+        <tr>
+          <td>{{ line.description|default:"—" }}{% if line.hsn %}<div class="row-sub">HSN {{ line.hsn }}</div>{% endif %}</td>
+          <td>{% if line.product_name %}✅ {{ line.product_name }}{% else %}<span class="text-warning">⚠ {% translate "Choose the rice below" %}</span> · <a href="{% url 'add_product' %}" target="_blank" rel="noopener">{% translate "Add product" %}</a>{% endif %}</td>
+          <td class="right">{{ line.bag_count|default:"—" }}</td>
+          <td class="right">{% if line.bag_weight %}{{ line.bag_weight }} kg{% else %}—{% endif %}</td>
+          <td class="right">{% if line.rate %}₹ {{ line.rate }}{% else %}—{% endif %}</td>
+          <td class="right">{% if line.amount %}₹ {{ line.amount }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if scan.warnings %}
+    <div class="banner is-warning" style="margin-top:12px;">
+      <span>⚠️</span>
+      <div>{% for warning in scan.warnings %}{{ warning }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</div>
+    </div>
+  {% endif %}
+</div>
+
+<style>
+  .scan-review { border-left: 4px solid var(--primary); }
+  .scan-add-supplier { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+  .scan-add-supplier .input { width: auto; min-width: 160px; }
+</style>
+<script>
+  // Compare the bill's printed total with the form's live total, so a
+  // misread line shows up before saving.
+  (function () {
+    var target = document.querySelector("[data-scan-total]");
+    var live = document.querySelector('[data-sum="total"]');
+    var note = document.querySelector("[data-scan-compare]");
+    if (!target || !live || !note) return;
+    var billTotal = parseFloat(target.getAttribute("data-scan-total")) || 0;
+    var same = "{% filter escapejs %}{% translate 'matches the form' %}{% endfilter %}";
+    var differs = "{% filter escapejs %}{% translate 'form total differs by' %}{% endfilter %}";
+    function check() {
+      var formTotal = parseFloat((live.textContent || "0").replace(/,/g, "")) || 0;
+      var diff = Math.round((formTotal - billTotal) * 100) / 100;
+      note.textContent = Math.abs(diff) < 1 ? "✅ " + same : "⚠ " + differs + " ₹ " + diff.toFixed(2);
+      note.className = Math.abs(diff) < 1 ? "small text-success" : "small text-danger";
+    }
+    new MutationObserver(check).observe(live, { childList: true, characterData: true, subtree: true });
+    setTimeout(check, 300);
+  })();
+</script>

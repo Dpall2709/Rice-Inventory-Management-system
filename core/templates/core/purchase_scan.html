@@ -1,0 +1,253 @@
+{% extends 'core/base.html' %}
+{% load static i18n %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'purchase_list' %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
+{% block page_title %}{% translate "Scan supplier bill" %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'purchase_list' %}">{% translate "Purchases" %}</a> › <span>{% translate "Scan bill" %}</span>
+    </div>
+    <h1>📷 {% translate "Scan the mill's bill" %}</h1>
+    <p class="muted">
+      {% translate "Take a photo of the bill or upload its PDF. The purchase form fills itself - you check it and press Save." %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-outline" href="{% url 'add_purchase' %}">✍️ {% translate "Enter by hand" %}</a>
+  </div>
+</div>
+
+{% if error %}
+  <div class="banner is-danger"><span>⛔</span><div>{{ error }}</div></div>
+{% endif %}
+
+{% if not ai_enabled %}
+  <div class="banner is-warning">
+    <span>ℹ️</span>
+    <div>
+      {% blocktranslate trimmed %}
+        Reading bill photos is switched off, so only the GST e-invoice <strong>QR code</strong> can fill the form
+        (supplier, bill no., date, total). To read the rice lines from the photo too, add
+        <code>ANTHROPIC_API_KEY</code> to the <code>.env</code> file.
+      {% endblocktranslate %}
+    </div>
+  </div>
+{% endif %}
+
+{% if has_draft %}
+  <div class="banner">
+    <span>📝</span>
+    <div>{% translate "You have a scanned bill waiting to be saved." %}</div>
+    <a href="{% url 'add_purchase' %}?scan=1" style="margin-left:auto;">{% translate "Open it" %} →</a>
+  </div>
+{% endif %}
+
+<form method="POST" enctype="multipart/form-data" id="scanForm" class="card card-narrow">
+  {% csrf_token %}
+
+  <!-- 1. The bill itself -->
+  <div class="form-section-title">1. {% translate "Photo or PDF of the bill" %}</div>
+  <label class="drop" for="billFile" data-drop>
+    <input type="file" id="billFile" name="bill" accept="image/*,application/pdf" hidden>
+    <span class="drop-icon">🧾</span>
+    <strong data-file-label>{% translate "Tap to take a photo, or choose a file" %}</strong>
+    <span class="muted small">{% translate "JPG, PNG or PDF · up to 15 MB · keep the whole bill in the frame, flat and well lit" %}</span>
+    <img alt="" data-preview hidden>
+  </label>
+
+  <!-- 2. QR code -->
+  <div class="form-section-title" style="margin-top:20px;">2. {% translate "QR code on the bill (GST e-invoice)" %}</div>
+  <p class="muted small" style="margin-bottom:10px;">
+    {% translate "Found automatically in the photo when possible. You can also scan it with the camera, or with a handheld scanner into the box below." %}
+  </p>
+
+  <div class="qr-row">
+    <button type="button" class="btn btn-outline" data-camera>📷 {% translate "Scan QR with camera" %}</button>
+    <span class="qr-status small" data-qr-status></span>
+  </div>
+
+  <div class="camera" data-camera-box hidden>
+    <video playsinline muted data-video></video>
+    <button type="button" class="btn btn-ghost btn-sm" data-camera-stop>✖ {% translate "Close camera" %}</button>
+  </div>
+
+  <div class="field" style="margin-top:10px;">
+    <label for="qrText">{% translate "QR code text" %}</label>
+    <textarea class="textarea" id="qrText" name="qr_text" rows="2"
+              placeholder="{% translate 'Filled automatically when a QR code is found' %}"></textarea>
+  </div>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit" data-submit>
+      ✨ {% if ai_enabled %}{% translate "Read bill and fill the form" %}{% else %}{% translate "Fill the form from the QR" %}{% endif %}
+    </button>
+    <a class="btn btn-ghost" href="{% url 'purchase_list' %}">{% translate "Cancel" %}</a>
+  </div>
+  <p class="muted small" data-reading hidden>⏳ {% translate "Reading the bill… this can take up to a minute." %}</p>
+</form>
+
+<div class="card card-narrow">
+  <div class="list-title" style="margin-bottom:8px;">{% translate "What gets filled" %}</div>
+  <ul class="muted small scan-help">
+    <li>{% translate "QR code (GST e-invoice): supplier GSTIN, bill number, date, bill total. It never contains the rice lines." %}</li>
+    {% if ai_enabled %}<li>{% translate "Bill photo / PDF: supplier, bill number, date, every rice line (bags, bag weight, rate per kg, GST), discount, freight and labour. Rates per quintal or per bag are converted to per kg." %}</li>{% endif %}
+    <li>{% translate "The supplier is matched by GSTIN or name; if it is new you can add it in one tap. The bill file is attached to the purchase." %}</li>
+    <li>{% translate "Nothing is saved until you check the form and press Save." %}</li>
+  </ul>
+</div>
+
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .drop {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+    padding: 24px 16px; border: 2px dashed var(--border-strong); border-radius: var(--r-lg);
+    background: var(--surface-2); cursor: pointer;
+  }
+  .drop:hover, .drop.is-over { border-color: var(--primary); background: var(--primary-soft); }
+  .drop-icon { font-size: 34px; }
+  .drop img { max-width: 100%; max-height: 280px; border-radius: var(--r); margin-top: 8px; }
+  .qr-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .camera { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+  .camera video { width: 100%; max-width: 420px; border-radius: var(--r); background: #000; }
+  .scan-help { padding-left: 18px; display: grid; gap: 6px; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'core/vendor/jsQR.min.js' %}"></script>
+<script>
+(function () {
+  "use strict";
+  var form = document.getElementById("scanForm");
+  var fileInput = document.getElementById("billFile");
+  var qrText = document.getElementById("qrText");
+  var status = form.querySelector("[data-qr-status]");
+  var preview = form.querySelector("[data-preview]");
+  var fileLabel = form.querySelector("[data-file-label]");
+  var drop = form.querySelector("[data-drop]");
+  var text = {
+    found: "{% filter escapejs %}{% translate 'QR code found' %}{% endfilter %}",
+    einvoice: "{% filter escapejs %}{% translate 'GST e-invoice QR found' %}{% endfilter %}",
+    none: "{% filter escapejs %}{% translate 'No QR code found in the photo' %}{% endfilter %}",
+    pdf: "{% filter escapejs %}{% translate 'PDF chosen - its QR is read on the server if needed' %}{% endfilter %}",
+    noCamera: "{% filter escapejs %}{% translate 'Camera not available here. Use a photo instead (the camera needs HTTPS or localhost).' %}{% endfilter %}",
+    looking: "{% filter escapejs %}{% translate 'Point the camera at the QR code…' %}{% endfilter %}"
+  };
+
+  function setQr(value) {
+    qrText.value = value;
+    var isJwt = value.split(".").length === 3 && value.length > 100;
+    status.textContent = "✅ " + (isJwt ? text.einvoice : text.found);
+    status.className = "qr-status small text-success";
+  }
+
+  // Find a QR code inside an image, trying a few sizes - phone photos are big
+  // and the QR is often small in the corner of the bill.
+  function findQrInImage(img) {
+    var sizes = [1600, 1200, 900, 2400];
+    for (var i = 0; i < sizes.length; i++) {
+      var scale = Math.min(1, sizes[i] / Math.max(img.naturalWidth, img.naturalHeight));
+      var canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.naturalWidth * scale);
+      canvas.height = Math.round(img.naturalHeight * scale);
+      var ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var code = window.jsQR && window.jsQR(data.data, canvas.width, canvas.height, { inversionAttempts: "attemptBoth" });
+      if (code && code.data) return code.data;
+    }
+    return null;
+  }
+
+  function onFile(file) {
+    if (!file) return;
+    fileLabel.textContent = file.name;
+    if (file.type === "application/pdf") {
+      preview.hidden = true;
+      if (!qrText.value) { status.textContent = text.pdf; status.className = "qr-status small muted"; }
+      return;
+    }
+    var url = URL.createObjectURL(file);
+    preview.onload = function () {
+      if (qrText.value) return;
+      var found = findQrInImage(preview);
+      if (found) setQr(found);
+      else { status.textContent = text.none; status.className = "qr-status small muted"; }
+    };
+    preview.src = url;
+    preview.hidden = false;
+  }
+
+  fileInput.addEventListener("change", function () { onFile(fileInput.files[0]); });
+
+  ["dragover", "dragenter"].forEach(function (name) {
+    drop.addEventListener(name, function (e) { e.preventDefault(); drop.classList.add("is-over"); });
+  });
+  ["dragleave", "drop"].forEach(function (name) {
+    drop.addEventListener(name, function () { drop.classList.remove("is-over"); });
+  });
+  drop.addEventListener("drop", function (e) {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) {
+      fileInput.files = e.dataTransfer.files;
+      onFile(fileInput.files[0]);
+    }
+  });
+
+  // ---- live camera QR scanning ----
+  var box = form.querySelector("[data-camera-box]");
+  var video = form.querySelector("[data-video]");
+  var stream = null;
+
+  function stopCamera() {
+    if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+    stream = null;
+    box.hidden = true;
+  }
+
+  function tick() {
+    if (!stream) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      var canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      var ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(video, 0, 0);
+      var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var code = window.jsQR(data.data, canvas.width, canvas.height);
+      if (code && code.data) { setQr(code.data); stopCamera(); return; }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  form.querySelector("[data-camera]").addEventListener("click", function () {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      status.textContent = text.noCamera; status.className = "qr-status small text-danger";
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(function (s) {
+      stream = s;
+      video.srcObject = s;
+      box.hidden = false;
+      status.textContent = text.looking; status.className = "qr-status small muted";
+      video.play();
+      requestAnimationFrame(tick);
+    }).catch(function () {
+      status.textContent = text.noCamera; status.className = "qr-status small text-danger";
+    });
+  });
+  form.querySelector("[data-camera-stop]").addEventListener("click", stopCamera);
+
+  form.addEventListener("submit", function () {
+    stopCamera();
+    form.querySelector("[data-reading]").hidden = false;
+  });
+})();
+</script>
+{% endblock %}

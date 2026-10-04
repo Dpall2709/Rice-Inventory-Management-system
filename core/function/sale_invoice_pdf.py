@@ -1,413 +1,701 @@
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404
-from django.conf import settings
-from num2words import num2words
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfbase.pdfmetrics import stringWidth
+"""
+The GST sale invoice as a PDF.
 
+Built with ReportLab's flowing layout (platypus) instead of drawing text at
+fixed x/y positions. The old version placed every block at a hard-coded
+height, so on an A4 page the bottom section was squeezed into ~30 mm: the
+terms were cut off, the bank details ran into the signature, and the QR box
+was drawn below the page edge. Here every box takes the height its text
+needs, long names and addresses wrap inside their cell, and an invoice with
+many lines continues on a second page with the table header repeated.
+
+Layout (A4, 12 mm margins all round):
+
+    Original for recipient | TAX INVOICE / BILL OF SUPPLY | invoice no.
+    seller: name, address, contact, GSTIN / PAN
+    invoice details        | transport details
+    bill to                | ship to
+    item lines (one row per rice line)
+    amount in words, bank, QR | taxable, CGST/SGST or IGST, total, received, due
+    TRANSPORT / FREIGHT box: what we paid the driver, what you pay (not in the total)
+    terms                  | for <company> / authorised signatory
+"""
+
+from decimal import Decimal
 from io import BytesIO
-from decimal import Decimal, ROUND_HALF_UP
 
 import qrcode
+from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import (
+    Image,
+    KeepTogether,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
+from xml.sax.saxutils import escape
 
-from ..models import Sale, SaleItem
-def _amount_words(n: Decimal):
-    number = int(n)
-    words = num2words(number, lang='en_IN')
-    return words.title() + " Only"
+from ..models import Sale
+from ..services.customer_ledger import sale_payment_status
+from ..services.sale_service import amount_in_words
+from ..tenancy import company_of, tenant_object_or_404
+
+MARGIN = 12 * mm
+PAGE_W, PAGE_H = A4
+WIDTH = PAGE_W - 2 * MARGIN          # 186 mm of usable width
+
+BORDER = colors.HexColor("#111827")
+GRID = colors.HexColor("#9ca3af")
+SHADE = colors.HexColor("#f3f4f6")
+
+DEFAULT_TERMS = [
+    "Goods once sold will not be taken back.",
+    "Interest @ 18% p.a. will be charged if payment is delayed.",
+    "Subject to local jurisdiction only.",
+]
 
 
-def sale_invoice_pdf(request, sale_id):
-    company = request.user.userprofile.company
-    sale = get_object_or_404(Sale, id=sale_id, company=company)
-    items = SaleItem.objects.filter(sale=sale).select_related("product", "mill")
+def _styles():
+    base = ParagraphStyle("base", fontName="Helvetica", fontSize=8.5, leading=11)
+    return {
+        "base": base,
+        "small": ParagraphStyle("small", parent=base, fontSize=7.5, leading=9.5),
+        "label": ParagraphStyle("label", parent=base, fontName="Helvetica-Bold", fontSize=7.5,
+                                leading=9.5, textColor=colors.HexColor("#4b5563")),
+        "bold": ParagraphStyle("bold", parent=base, fontName="Helvetica-Bold"),
+        "center": ParagraphStyle("center", parent=base, alignment=TA_CENTER),
+        "title": ParagraphStyle("title", parent=base, fontName="Helvetica-Bold", fontSize=10.5,
+                                alignment=TA_CENTER, leading=13),
+        "company": ParagraphStyle("company", parent=base, fontName="Helvetica-Bold", fontSize=15,
+                                  leading=19, alignment=TA_CENTER),
+        "right": ParagraphStyle("right", parent=base, alignment=TA_RIGHT),
+        "right_bold": ParagraphStyle("right_bold", parent=base, fontName="Helvetica-Bold", alignment=TA_RIGHT),
+        "th": ParagraphStyle("th", parent=base, fontName="Helvetica-Bold", fontSize=7.5, leading=9.5),
+        "th_right": ParagraphStyle("th_right", parent=base, fontName="Helvetica-Bold", fontSize=7.5,
+                                   leading=9.5, alignment=TA_RIGHT),
+    }
 
-    # ===== Company =====
-    company_name = getattr(settings, "COMPANY_NAME", "Company Name")
-    company_address = getattr(settings, "COMPANY_ADDRESS", "")
-    company_phone = getattr(settings, "COMPANY_PHONE", "")
-    company_email = getattr(settings, "COMPANY_EMAIL", "")
-    company_gstin = getattr(settings, "COMPANY_GSTIN", "")
-    company_pan = getattr(settings, "COMPANY_PAN", "")
 
-    # ===== Bank =====
-    bank_ac_name = getattr(settings, "BANK_ACCOUNT_NAME", company_name)
-    bank_ac_no = getattr(settings, "BANK_ACCOUNT_NO", "")
-    bank_name = getattr(settings, "BANK_NAME", "")
-    bank_ifsc = getattr(settings, "BANK_IFSC", "")
-    bank_branch = getattr(settings, "BANK_BRANCH", "")
-    upi_id = getattr(settings, "UPI_ID", "")
+def _p(text, style):
+    """A wrapping paragraph. Text is escaped; <br/> is added for new lines."""
+    safe = escape(str(text or "")).replace("\n", "<br/>")
+    return Paragraph(safe, style)
 
-    # ===== Amounts (invoice total = RICE ONLY) =====
-    taxable = Decimal(str(sale.taxable_amount or 0))
-    gst_amt = Decimal(str(sale.gst_amount or 0))
-    gst_percent = Decimal(str(sale.gst_percent or 0))
-    rice_total = Decimal(str(sale.total_amount or 0))  # ✅ rice only
 
-    rice_advance = Decimal(str(sale.advance_received or 0))
-    rice_due = Decimal(str(sale.balance_amount or 0))
+def _rich(html, style):
+    """A paragraph whose markup (<b>, <br/>) was built here, not typed by users."""
+    return Paragraph(html, style)
 
-    # ===== Transport (INFO ONLY; not included in invoice total) =====
-    total_kg = Decimal(str(sale.total_quantity_kg or 0))
-    total_ton = (total_kg / Decimal("1000")) if total_kg else Decimal("0")
 
-    transport_rate = Decimal(str(sale.transport_rate_per_ton or 0))
-    transport_amt = Decimal(str(sale.transport_charge or 0))
-    paid_dealer = Decimal(str(sale.transport_paid_by_dealer or 0))
-    paid_customer = Decimal(str(sale.transport_paid_by_customer or 0))
-    transport_due = transport_amt - (paid_dealer + paid_customer)
-    if transport_due < 0:
-        transport_due = Decimal("0")
+def _rs(value):
+    """Indian digit grouping: 12,34,567.89 (Helvetica has no ₹ sign, so 'Rs.')."""
+    value = Decimal(value or 0).quantize(Decimal("0.01"))
+    sign = "-" if value < 0 else ""
+    whole, frac = f"{abs(value):.2f}".split(".")
+    if len(whole) > 3:
+        head, tail = whole[:-3], whole[-3:]
+        groups = []
+        while len(head) > 2:
+            groups.insert(0, head[-2:])
+            head = head[:-2]
+        if head:
+            groups.insert(0, head)
+        whole = ",".join(groups + [tail])
+    return f"{sign}{whole}.{frac}"
 
-    # ===== Product line (one product per sale) =====
-    first = items.first()
-    product_name = first.product.rice_name if first else "Rice Sale"
-    hsn = first.product.hsn_code if (first and first.product.hsn_code) else "-"
-    total_bags = sum(int(x.bag_count or 0) for x in items) if first else 0
 
-    sell_rate = (taxable / total_kg) if total_kg else Decimal("0")
+def _qr_image(company, sale, due):
+    """
+    A UPI payment QR when the company has a UPI id (scan to pay the balance),
+    otherwise a QR with the invoice summary.
+    """
+    upi = (company.upi_id or "").strip()
+    if upi:
+        from urllib.parse import quote
 
-    # ===== QR (OPTIONAL) =====
-    qr_reader = None
-    try:
-        qr_text = (
-            f"TAX INVOICE\n"
-            f"Invoice: {sale.invoice_no}\n"
-            f"Date: {sale.sale_date}\n"
-            f"Customer: {sale.customer_name}\n"
-            f"Rice Total: {rice_total}\n"
-            f"Rice Due: {rice_due}\n"
+        data = (
+            f"upi://pay?pa={quote(upi)}&pn={quote(company.company_name)}"
+            f"&am={Decimal(due):.2f}&cu=INR&tn={quote('Invoice ' + sale.invoice_no)}"
         )
-        qr = qrcode.QRCode(box_size=5, border=2)
-        qr.add_data(qr_text)
+        caption = "Scan to pay (UPI)"
+    else:
+        data = (
+            f"Invoice: {sale.invoice_no}\nDate: {sale.sale_date:%d-%m-%Y}\n"
+            f"Customer: {sale.customer_name}\nTotal: Rs. {sale.total_amount}\nDue: Rs. {due}"
+        )
+        caption = "Invoice details"
+
+    try:
+        qr = qrcode.QRCode(box_size=6, border=1)
+        qr.add_data(data)
         qr.make(fit=True)
-        qr_img = qr.make_image(fill_color="black", back_color="white")
-        qr_buf = BytesIO()
-        qr_img.save(qr_buf, format="PNG")
-        qr_buf.seek(0)
-        qr_reader = ImageReader(qr_buf)
+        buffer = BytesIO()
+        qr.make_image(fill_color="black", back_color="white").save(buffer, format="PNG")
+        buffer.seek(0)
+        return Image(buffer, width=24 * mm, height=24 * mm), caption
     except Exception:
-        qr_reader = None
+        return None, ""
 
-    # ===== PDF =====
-    out = BytesIO()
-    c = canvas.Canvas(out, pagesize=A4)
-    W, H = A4
 
-    L = 12 * mm
-    R = W - 12 * mm
-    TOP = H - 12 * mm
-    BOT = 12 * mm
-    BW = R - L
+def _box(rows, col_widths, extra=()):
+    """A bordered table with a vertical rule between its columns."""
+    table = Table(rows, colWidths=col_widths)
+    style = [
+        ("BOX", (0, 0), (-1, -1), 0.8, BORDER),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 5),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]
+    if len(col_widths) > 1:
+        style.append(("LINEAFTER", (0, 0), (-2, -1), 0.8, BORDER))
+    style.extend(extra)
+    table.setStyle(TableStyle(style))
+    return table
 
-    PAD = 3 * mm
-    LINE = 1
 
-    def rect(x, y, w, h, lw=LINE):
-        c.setLineWidth(lw)
-        c.rect(x, y, w, h)
+FREIGHT_FILL = colors.HexColor("#FEF3C7")      # soft amber - stands out, prints well
+FREIGHT_BORDER = colors.HexColor("#B45309")
 
-    def vline(x, y1, y2, lw=LINE):
-        c.setLineWidth(lw)
-        c.line(x, y1, x, y2)
 
-    def hline(x1, x2, y, lw=LINE):
-        c.setLineWidth(lw)
-        c.line(x1, y, x2, y)
+def _transport_box(sale, st):
+    """
+    Freight, in its own highlighted box, separate from the goods: what the
+    truck costs, what WE have paid, and what YOU (the party) have to pay -
+    worded for who carries the freight on this sale. Never part of the
+    invoice total.
+    """
+    from ..services.sale_service import settlement
 
-    def txt(x, y, s, size=9, bold=False):
-        c.setFont("Helvetica-Bold" if bold else "Helvetica", size)
-        c.drawString(x, y, str(s))
+    figures = settlement(sale)
+    total = figures["freight_total"]
+    we_paid = figures["freight_paid_by_us"]
+    if not total and not we_paid and not sale.vehicle_number:
+        return None
 
-    def rtxt(x, y, s, size=9, bold=False):
-        c.setFont("Helvetica-Bold" if bold else "Helvetica", size)
-        c.drawRightString(x, y, str(s))
+    you_pay = max(total - we_paid, Decimal("0"))
+    rate = Decimal(sale.transport_rate_per_ton or 0)
 
-    def ctxt(x, y, s, size=10, bold=False):
-        c.setFont("Helvetica-Bold" if bold else "Helvetica", size)
-        c.drawCentredString(x, y, str(s))
+    head = ParagraphStyle("fh", parent=st["bold"], textColor=FREIGHT_BORDER, fontSize=9.5)
+    big = ParagraphStyle("fb", parent=st["right_bold"], fontSize=10)
 
-    def fit_text(s, max_w, size=9, bold=False):
-        """Truncate text to fit max width (prevents overlap in columns)."""
-        font = "Helvetica-Bold" if bold else "Helvetica"
-        s = str(s)
-        if stringWidth(s, font, size) <= max_w:
-            return s
-        ell = "..."
-        while s and stringWidth(s + ell, font, size) > max_w:
-            s = s[:-1]
-        return (s + ell) if s else ell
+    details = []
+    if sale.vehicle_number:
+        details.append(f"Vehicle: {sale.vehicle_number}")
+    if sale.driver_name or sale.driver_mobile:
+        details.append("Driver: " + " ".join(x for x in [sale.driver_name, sale.driver_mobile] if x))
+    if sale.transporter_name:
+        details.append(f"Transporter: {sale.transporter_name}")
+    weight = f"{figures['dispatched_kg'] / Decimal('1000'):.3f} ton"
+    details.append(f"Weight: {weight}" + (f" @ Rs. {_rs(rate)} per ton" if rate else ""))
 
-    def wrap_lines(s, max_w, size=8, bold=False):
-        """Word-wrap to fit inside a column width."""
-        font = "Helvetica-Bold" if bold else "Helvetica"
-        words = str(s).split()
-        lines, line = [], ""
-        for w in words:
-            test = (line + " " + w).strip()
-            if stringWidth(test, font, size) <= max_w:
-                line = test
-            else:
-                if line:
-                    lines.append(line)
-                line = w
+    lines = [("Total freight for this truck", total)]
+    if sale.freight_borne_by == "us":
+        lines += [
+            ("WE HAVE PAID - advance to the driver", we_paid),
+            ("YOU HAVE TO PAY - balance to the driver on unloading", you_pay),
+        ]
+        note = (
+            f"We have paid Rs. {_rs(we_paid)} to the driver as advance. Please pay the driver the balance "
+            f"Rs. {_rs(you_pay)} when the goods are unloaded, and deduct that amount from your payment to us."
+        )
+    elif sale.freight_borne_by == "customer":
+        lines += [
+            ("WE HAVE PAID - advance to the driver on your behalf", we_paid),
+            ("YOU HAVE TO PAY - balance to the driver on unloading", you_pay),
+        ]
+        note = (
+            f"The freight is to your account. We have paid Rs. {_rs(we_paid)} advance to the driver for you - "
+            f"please add it to your payment to us. Pay the driver the balance Rs. {_rs(you_pay)} on unloading."
+        )
+    else:
+        note = "The freight is to be settled directly between you and the transporter."
+
+    money_rows = [[_p(label, st["bold"] if "PAY" in label else st["base"]), _p(f"Rs. {_rs(value)}", big)]
+                  for label, value in lines]
+    money_table = Table(money_rows, colWidths=[WIDTH * 0.42, WIDTH * 0.18])
+    money_table.setStyle(TableStyle([
+        ("LINEBELOW", (0, 0), (-1, -2), 0.25, FREIGHT_BORDER),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ]))
+
+    left = [_p("TRANSPORT / FREIGHT  (not included in the invoice total)", head), Spacer(1, 3)]
+    left += [_p(line, st["small"]) for line in details]
+    right = [money_table, Spacer(1, 4), _p(note, st["small"])]
+
+    box = Table([[left, right]], colWidths=[WIDTH * 0.36, WIDTH * 0.64])
+    box.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 1.2, FREIGHT_BORDER),
+        ("BACKGROUND", (0, 0), (-1, -1), FREIGHT_FILL),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 7), ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    return KeepTogether([box])
+
+
+def _logo(company):
+    """The company's uploaded logo, scaled to fit 24 mm, or None."""
+    if not getattr(company, "logo", None):
+        return None
+    try:
+        from reportlab.lib.utils import ImageReader
+
+        with company.logo.open("rb") as handle:
+            data = BytesIO(handle.read())
+        width, height = ImageReader(data).getSize()
+        data.seek(0)
+        scale = min(24 * mm / width, 20 * mm / height)
+        return Image(data, width=width * scale, height=height * scale)
+    except Exception:
+        return None
+
+
+def _with_state_code(state, gstin):
+    """'Bihar (10)' - GST invoices name the state code with the place of supply."""
+    code = (gstin or "")[:2]
+    if state and code.isdigit():
+        return f"{state} ({code})"
+    return state or "-"
+
+
+def build_invoice_pdf(company, sale):
+    """Return the invoice PDF as bytes."""
+    st = _styles()
+    # Lines of the same product from different mills print as one line.
+    from ..services.sale_service import invoice_lines
+
+    items = invoice_lines(sale)
+    status = sale_payment_status(company, sale)
+    half = WIDTH / 2
+
+    story = []
+
+    # ---- title strip -------------------------------------------------------
+    title = "TAX INVOICE" if sale.is_tax_invoice else "BILL OF SUPPLY"
+    story.append(_box(
+        [[_p("Original for recipient", st["small"]), _p(title, st["title"]),
+          _p(sale.invoice_no, ParagraphStyle("r", parent=st["small"], alignment=TA_RIGHT))]],
+        [WIDTH * 0.3, WIDTH * 0.4, WIDTH * 0.3],
+        extra=[("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEAFTER", (0, 0), (-2, -1), 0, colors.white)],
+    ))
+
+    # ---- seller ------------------------------------------------------------
+    address = ", ".join(
+        part.strip() for part in [company.address, company.city, company.state, company.pincode]
+        if part and part.strip()
+    )
+    contact = " | ".join(x for x in [
+        f"Mobile: {company.mobile}" if company.mobile else "",
+        f"Email: {company.email}" if company.email else "",
+    ] if x)
+    tax_ids = " | ".join(x for x in [
+        f"GSTIN: {company.gst_number}" if company.gst_number else "",
+        f"PAN: {company.pan_number}" if company.pan_number else "",
+    ] if x)
+
+    seller = [_p(company.company_name, st["company"])]
+    for line in (address, contact, tax_ids):
         if line:
-            lines.append(line)
-        return lines
+            seller.append(_p(line, st["center"]))
+    logo = _logo(company)
+    if logo is not None:
+        # Logo on the left, name and details centred in the rest.
+        header = Table([[logo, seller]], colWidths=[28 * mm, WIDTH - 28 * mm - 12])
+        header.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        seller_cell = [header]
+    else:
+        seller_cell = seller
+    story.append(_box([[seller_cell]], [WIDTH], extra=[("TOPPADDING", (0, 0), (-1, -1), 7),
+                                                        ("BOTTOMPADDING", (0, 0), (-1, -1), 7)]))
 
-    y = TOP
+    # ---- invoice + transport ----------------------------------------------
+    def kv_table(pairs, width):
+        rows = [[_p(k, st["label"]), _p(v, st["base"])] for k, v in pairs]
+        table = Table(rows, colWidths=[width * 0.38, width * 0.62])
+        table.setStyle(TableStyle([
+            ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+            ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]))
+        return table
 
-    # ===== Top strip (padding) =====
-    strip_h = 12 * mm
-    rect(L, y - strip_h, BW, strip_h)
-    txt(L + PAD, y - 8.5, "Page No. 1 of 1", size=9)
-    ctxt(L + BW / 2, y - 8.5, "Bill of Supply", size=10, bold=True)
-    rtxt(R - PAD, y - 8.5, "Original Copy", size=9)
-    y -= strip_h
-
-    # ===== Company box =====
-    comp_h = 34 * mm
-    rect(L, y - comp_h, BW, comp_h)
-    ctxt(L + BW/2, y - 12, company_name, size=12, bold=True)
-    ctxt(L + BW/2, y - 24, company_address, size=9)
-    ctxt(L + BW/2, y - 34, f"Mobile: +91 {company_phone} | Email: {company_email}", size=9)
-
-    gstpan = " | ".join([x for x in [
-        f"GSTIN - {company_gstin}" if company_gstin else "",
-        f"PAN - {company_pan}" if company_pan else ""
-    ] if x])
-    if gstpan:
-        ctxt(L + BW/2, y - 44, gstpan, size=9)
-
-    y -= comp_h
-
-    # ===== Invoice details + Transport =====
-    info_h = 42 * mm
-    rect(L, y - info_h, BW, info_h)
-    mid = L + BW/2
-    vline(mid, y - info_h, y)
-
-    txt(L + PAD, y - 10, "Invoice Details", bold=True)
-    left_lines = [
-        ("Invoice Number", sale.invoice_no),
-        ("Invoice Date", str(sale.sale_date)),
-        ("Due Date", "-"),
-        ("Place of Supply", "-"),
-        ("Broker Name", sale.broker.broker_name if sale.broker else "NA"),
+    inner = half - 10
+    invoice_pairs = [
+        ("Invoice No.", sale.invoice_no),
+        ("Invoice Date", f"{sale.sale_date:%d-%m-%Y}"),
     ]
-    yy = y - 20
-    for k, v in left_lines:
-        txt(L + PAD, yy, k, bold=True, size=9)
-        txt(L + 55*mm, yy, f": {v}", size=9)
-        yy -= 5.5 * mm
+    if sale.due_date:
+        invoice_pairs.append(("Due Date", f"{sale.due_date:%d-%m-%Y}"))
+    invoice_pairs.append(("Place of Supply", _with_state_code(sale.place_of_supply, sale.customer_gst)))
+    invoice_pairs.append(("Reverse Charge", "No"))
 
-    txt(mid + PAD, y - 10, "Transport Details (Info Only)", bold=True)
-    right_lines = [
-        ("Transporter", sale.transporter_name),
-        ("Vehicle No.", f"{sale.vehicle_number}  | {sale.driver_name}"),
-        ("Rate/Ton", f"Rs. {transport_rate:.2f}"),
-        ("Total Ton", f"{total_ton:.3f}"),
-        ("Transport Amount", f"Rs. {transport_amt:.2f}"),
-        ("Advance (Dealer)", f"Rs. {paid_dealer:.2f}"),
-    ]
-    if paid_customer > 0:
-        right_lines.append(("Paid (Customer)", f"Rs. {paid_customer:.2f}"))
-    right_lines.append(("Transport Due", f"Rs. {transport_due:.2f}"))
-
-    yy = y - 20
-    for k, v in right_lines:
-        txt(mid + PAD, yy, k, bold=True, size=8)
-        txt(mid + 55*mm, yy, f": {v}", size=8)
-        yy -= 5.2 * mm
-
-    y -= info_h
-
-    # ===== Billing + Shipping =====
-    bs_h = 34 * mm
-    rect(L, y - bs_h, BW, bs_h)
-    vline(mid, y - bs_h, y)
-
-    txt(L + PAD, y - 10, "Billing Details", bold=True)
-    b_lines = [("Name", sale.customer_name), ("GSTIN", sale.customer_gst or "-"), ("Address", "-")]
-    yy = y - 22
-    for k, v in b_lines:
-        txt(L + PAD, yy, k, bold=True)
-        txt(L + 45*mm, yy, f": {v}")
-        yy -= 6 * mm
-
-    txt(mid + PAD, y - 10, "Shipping Details", bold=True)
-    s_lines = [("Name", sale.customer_name), ("GSTIN", sale.customer_gst or "-"), ("Address", "-")]
-    yy = y - 22
-    for k, v in s_lines:
-        txt(mid + PAD, yy, k, bold=True)
-        txt(mid + 45*mm, yy, f": {v}")
-        yy -= 6 * mm
-
-    y -= bs_h
-
-    # ===== Items table (FIX: columns inside BW so headers never overlap) =====
-    table_h = 82 * mm
-    rect(L, y - table_h, BW, table_h)
-
-    # ✅ A4 usable width BW = (R-L). Build columns using widths that sum to BW (=186mm)
-    # columns: Sr | Description | HSN | Bags | KG | Rate | Taxable | GST% | GST | Amount
-    w_sr      = 10 * mm
-    w_desc    = 64 * mm
-    w_hsn     = 14 * mm
-    w_bags    = 12 * mm
-    w_kg      = 16 * mm
-    w_rate    = 14 * mm
-    w_taxable = 18 * mm
-    w_gstp    = 10 * mm
-    w_gst     = 12 * mm
-    w_amount  = 16 * mm
-
-    # Sanity: (w_sr+w_desc+...+w_amount) == BW
-    col = [L]
-    for w in [w_sr, w_desc, w_hsn, w_bags, w_kg, w_rate, w_taxable, w_gstp, w_gst, w_amount]:
-        col.append(col[-1] + w)
-    # col[-1] should be == R (or extremely close due to float)
-
-    # Draw vertical lines (inside the box)
-    for x in col[1:-1]:
-        vline(x, y - table_h, y)
-
-    # Header separator
-    header_h = 12 * mm
-    hline(L, R, y - header_h)
-
-    # ---- Header row (small font for tight columns) ----
-    txt(L + 2,      y - 9*mm, "Sr", bold=True, size=8)
-    txt(col[1] + 2, y - 9*mm, "Item Description", bold=True, size=8)
-    txt(col[2] + 2, y - 9*mm, "HSN", bold=True, size=8)
-
-    rtxt(col[4] - 2, y - 9*mm, "Bags",   bold=True, size=8)
-    rtxt(col[5] - 2, y - 9*mm, "KG",     bold=True, size=8)
-    rtxt(col[6] - 2, y - 9*mm, "Rate",   bold=True, size=8)
-    rtxt(col[7] - 2, y - 9*mm, "Taxable",bold=True, size=8)
-    rtxt(col[8] - 2, y - 9*mm, "GST%",   bold=True, size=8)
-    rtxt(col[9] - 2, y - 9*mm, "GST",    bold=True, size=8)
-    rtxt(R - 2,      y - 9*mm, "Amount", bold=True, size=8)
-
-    # ---- Data row ----
-    row_y = y - 22 * mm
-    txt(L + 2, row_y, "1", size=9)
-
-    # Description must never enter HSN column
-    desc_max_w = (col[2] - col[1]) - 6
-    safe_desc = fit_text(product_name, desc_max_w, size=9)
-    txt(col[1] + 2, row_y, safe_desc, size=9)
-
-    txt(col[2] + 2, row_y, hsn, size=9)
-
-    rtxt(col[4] - 2, row_y, str(total_bags),     size=9)
-    rtxt(col[5] - 2, row_y, f"{total_kg:.2f}",   size=9)
-    rtxt(col[6] - 2, row_y, f"{sell_rate:.2f}",  size=9)
-    rtxt(col[7] - 2, row_y, f"{taxable:.2f}",    size=9)
-    rtxt(col[8] - 2, row_y, f"{gst_percent:.2f}",size=9)
-    rtxt(col[9] - 2, row_y, f"{gst_amt:.2f}",    size=9)
-    rtxt(R - 2,      row_y, f"{rice_total:.2f}", size=9)
-
-    y -= table_h
-
-    # ===== Rice totals =====
-    tot_h = 38 * mm   # 🔥 reduce from 44mm to 38mm
-    rect(L, y - tot_h, BW, tot_h)
-
-    txt(L + PAD, y - 10, "Rice Payment Summary (Invoice Total = Rice Only)", bold=True)
-
-    txt(L + PAD, y - 20, "Taxable Amount", bold=True)
-    txt(L + 52*mm, y - 20, f": Rs. {taxable:.2f}")
-
-    txt(L + PAD, y - 28, "GST Amount", bold=True)
-    txt(L + 52*mm, y - 28, f": Rs. {gst_amt:.2f}")
-
-    txt(L + PAD, y - 36, "Advance Received (Rice)", bold=True)
-    txt(L + 52*mm, y - 36, f": Rs. {rice_advance:.2f}")
-
-    rtxt(R - PAD, y - 20, f"Rice Total: Rs. {rice_total:.2f}", bold=True)
-    rtxt(R - PAD, y - 30, f"Rice Due: Rs. {rice_due:.2f}", bold=True)
-
-    txt(L + PAD, y - 46, f"Amount in Words: {_amount_words(rice_total)}", size=9, bold=True)
-
-    y -= tot_h
-
-    # ===== Bottom section: Terms | Bank | QR/Stamp =====
-    bottom_h = y - BOT
-    rect(L, BOT, BW, bottom_h)
-
-    c1 = L + BW/3
-    c2 = L + 2*BW/3
-    vline(c1, BOT, y)
-    vline(c2, BOT, y)
-
-    # Terms
-    txt(L + PAD, y - 12, "Terms and Conditions", bold=True, size=10)
-
-    terms = [
-        "E & O.E.",
-        "1. Goods once sold will not be taken back.",
-        "2. Interest @ 18% p.a. will be charged if payment is delayed.",
-        "3. In case of non-payment, legal action may be initiated.",
-        "4. Subject to local jurisdiction only."
+    transport_pairs = [
+        ("Vehicle No.", sale.vehicle_number or "-"),
+        ("Driver", " / ".join(x for x in [sale.driver_name, sale.driver_mobile] if x) or "-"),
+        ("Transporter", sale.transporter_name or "-"),
+        ("Weight", f"{sale.total_ton:.3f} ton ({sale.total_quantity_kg} kg)"),
     ]
 
-    terms_left = L + PAD
-    terms_right = c1 - PAD
-    terms_w = terms_right - terms_left
+    story.append(_box(
+        [[[_p("Invoice Details", st["bold"]), Spacer(1, 3), kv_table(invoice_pairs, inner)],
+          [_p("Transport Details", st["bold"]), Spacer(1, 3), kv_table(transport_pairs, inner)]]],
+        [half, half],
+    ))
 
-    ty = y - 24   # 🔥 little more space from title
+    # ---- buyer -------------------------------------------------------------
+    def party(heading, address_text):
+        block = [_p(heading, st["label"]), _p(sale.customer_name, st["bold"])]
+        if address_text:
+            block.append(_p(address_text, st["base"]))
+        if sale.customer_gst:
+            block.append(_rich(f"GSTIN: <b>{escape(sale.customer_gst)}</b>", st["base"]))
+        if sale.place_of_supply:
+            block.append(_p(f"State: {sale.place_of_supply}", st["base"]))
+        mobile = getattr(sale.customer, "mobile", "") if sale.customer_id else ""
+        if mobile:
+            block.append(_p(f"Mobile: {mobile}", st["base"]))
+        return block
 
-    for t in terms:
-        lines = wrap_lines(t, terms_w, size=8)
-        for line in lines:
-            if ty < BOT + 20:   # 🔥 increase bottom margin safety
-                break
-            txt(terms_left, ty, line, size=8)
-            ty -= 9  # 🔥 slightly tighter spacing so all lines fit
+    story.append(_box(
+        [[party("BILL TO", sale.billing_address),
+          party("SHIP TO", sale.shipping_address or sale.billing_address)]],
+        [half, half],
+    ))
+
+    # ---- item lines --------------------------------------------------------
+    widths_mm = [8, 50, 15, 12, 18, 15, 22, 11, 16, 19]       # = 186 mm
+    widths = [w * mm for w in widths_mm]
+    head = ["#", "Item Description", "HSN", "Bags", "Qty (kg)", "Rate/kg", "Taxable", "GST%", "GST", "Amount"]
+    rows = [[_p(h, st["th"] if i < 3 else st["th_right"]) for i, h in enumerate(head)]]
+
+    for index, item in enumerate(items, start=1):
+        description = [_p(item.product.rice_name, st["bold"]),
+                       _p(f"{item.bag_count} {'bag' if item.bag_count == 1 else 'bags'} x {item.bag_weight} kg", st["small"])]
+        rows.append([
+            _p(index, st["base"]),
+            description,
+            _p(item.product.hsn_code or "-", st["base"]),
+            _p(item.bag_count, st["right"]),
+            _p(f"{item.total_weight:.2f}", st["right"]),
+            _p(f"{item.rate_per_kg:.2f}", st["right"]),
+            _p(_rs(item.amount), st["right"]),
+            _p(f"{item.gst_percent:g}" if item.gst_percent else "-", st["right"]),
+            _p(_rs(item.gst_amount) if item.gst_amount else "-", st["right"]),
+            _p(_rs(item.line_total), st["right_bold"]),
+        ])
+
+    if not items:
+        rows.append(["", _p("No lines", st["base"])] + [""] * 8)
+
+    rows.append([
+        "", _p("Total", st["bold"]), "",
+        _p(sale.total_bags, st["right_bold"]),
+        _p(f"{sale.total_quantity_kg:.2f}", st["right_bold"]),
+        "",
+        _p(_rs(sale.taxable_amount), st["right_bold"]),
+        "",
+        _p(_rs(sale.gst_amount), st["right_bold"]),
+        _p(_rs(sale.taxable_amount + sale.gst_amount), st["right_bold"]),
+    ])
+
+    item_table = Table(rows, colWidths=widths, repeatRows=1)
+    item_table.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, BORDER),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.8, BORDER),
+        ("LINEABOVE", (0, -1), (-1, -1), 0.8, BORDER),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, GRID),
+        ("BACKGROUND", (0, 0), (-1, 0), SHADE),
+        ("BACKGROUND", (0, -1), (-1, -1), SHADE),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(item_table)
+
+    transport = _transport_box(sale, st)
+    if transport is not None:
+        story.append(Spacer(1, 4))
+        story.append(transport)
+        story.append(Spacer(1, 4))
+
+    # ---- words, bank, QR | totals -----------------------------------------
+    left_w = WIDTH * 0.56
+    right_w = WIDTH - left_w
+
+    bank_lines = [f"A/C Name: {company.bank_account_name or company.company_name}"]
+    if company.bank_account_no:
+        bank_lines.append(f"A/C No: {company.bank_account_no}")
+    if company.bank_name:
+        bank_lines.append(f"Bank: {company.bank_name}" + (f", {company.bank_branch}" if company.bank_branch else ""))
+    if company.bank_ifsc:
+        bank_lines.append(f"IFSC: {company.bank_ifsc}")
+    if company.upi_id:
+        bank_lines.append(f"UPI: {company.upi_id}")
+
+    qr, caption = _qr_image(company, sale, status["due"])
+    bank_block = [_p("Bank / Payment Details", st["label"])] + [_p(line, st["base"]) for line in bank_lines]
+    if qr is not None:
+        qr_cell = [qr, _p(caption, ParagraphStyle("c", parent=st["small"], alignment=TA_CENTER))]
+        bank_and_qr = Table([[bank_block, qr_cell]], colWidths=[left_w - 10 - 28 * mm, 28 * mm])
+        bank_and_qr.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+    else:
+        bank_and_qr = bank_block
+
+    left = [
+        _p("Amount in Words", st["label"]),
+        _p(amount_in_words(sale.total_amount), st["bold"]),
+        Spacer(1, 6),
+        bank_and_qr,
+    ]
+
+    total_rows = [("Taxable Amount", _rs(sale.taxable_amount))]
+    if sale.cgst_amount:
+        total_rows.append(("CGST", _rs(sale.cgst_amount)))
+        total_rows.append(("SGST", _rs(sale.sgst_amount)))
+    if sale.igst_amount:
+        total_rows.append(("IGST", _rs(sale.igst_amount)))
+    if sale.round_off:
+        total_rows.append(("Round Off", f"{sale.round_off:+.2f}"))
+    grand_index = len(total_rows)
+    total_rows.append(("Invoice Total (Rs.)", _rs(sale.total_amount)))
+    # What the party pays US against this invoice: the invoice total, less the
+    # freight balance they pay the driver for us (or plus our advance when the
+    # freight is theirs). Cash discount and brokerage are settled later and
+    # belong on the settlement statement, not on the invoice.
+    from ..services.sale_service import settlement as _settlement
+
+    figures = _settlement(sale)
+    you_pay_driver = max(figures["freight_total"] - figures["freight_paid_by_us"], Decimal("0"))
+    payable = Decimal(sale.total_amount or 0)
+    if sale.freight_borne_by == "us" and you_pay_driver:
+        total_rows.append(("Less: freight you pay the driver", "- " + _rs(you_pay_driver)))
+        payable -= you_pay_driver
+    elif sale.freight_borne_by == "customer" and figures["freight_paid_by_us"]:
+        total_rows.append(("Add: freight advance paid by us", "+ " + _rs(figures["freight_paid_by_us"])))
+        payable += figures["freight_paid_by_us"]
+    if payable != Decimal(sale.total_amount or 0):
+        total_rows.append(("Payable to us (Rs.)", _rs(payable)))
+    total_rows.append(("Received", _rs(status["paid"])))
+    total_rows.append(("Balance Due (Rs.)", _rs(max(payable - status["paid"], Decimal("0")))))
+
+    totals = Table(
+        [[_p(k, st["bold"] if i in (grand_index, len(total_rows) - 1) else st["base"]),
+          _p(v, st["right_bold"] if i in (grand_index, len(total_rows) - 1) else st["right"])]
+         for i, (k, v) in enumerate(total_rows)],
+        colWidths=[right_w * 0.55, right_w * 0.45],
+    )
+    totals.setStyle(TableStyle([
+        ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LINEABOVE", (0, grand_index), (-1, grand_index), 0.8, BORDER),
+        ("LINEBELOW", (0, grand_index), (-1, grand_index), 0.8, BORDER),
+        ("BACKGROUND", (0, grand_index), (-1, grand_index), SHADE),
+    ]))
+
+    summary = _box([[left, totals]], [left_w, right_w],
+                   extra=[("RIGHTPADDING", (1, 0), (1, 0), 0), ("LEFTPADDING", (1, 0), (1, 0), 0),
+                          ("TOPPADDING", (1, 0), (1, 0), 0)])
+
+    bottom = [summary]
+
+    # The broker is internal and is never printed on the customer's invoice.
+
+    # ---- terms | signature -------------------------------------------------
+    if (company.invoice_terms or "").strip():
+        terms = [line.strip() for line in company.invoice_terms.splitlines() if line.strip()]
+    else:
+        terms = [f"{i}. {t}" for i, t in enumerate(DEFAULT_TERMS, start=1)]
+
+    terms_block = [_p("Terms and Conditions", st["label"]), _p("E. & O.E.", st["small"])]
+    terms_block += [_p(t, st["small"]) for t in terms]
+    if sale.notes:
+        terms_block += [Spacer(1, 4), _p("Note: " + sale.notes, st["small"])]
+
+    sign_block = [
+        _p(f"For {company.company_name}", st["right_bold"]),
+        Spacer(1, 16 * mm),
+        _p("Authorised Signatory", st["right"]),
+    ]
+    bottom.append(_box([[terms_block, sign_block]], [WIDTH * 0.62, WIDTH * 0.38]))
+
+    # Totals, bank, terms and signature always stay together on one page.
+    story.append(KeepTogether(bottom))
+
+    # ---- page furniture ----------------------------------------------------
+    def footer(canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(colors.HexColor("#6b7280"))
+        canvas.drawString(MARGIN, MARGIN / 2, f"{company.company_name} · {sale.invoice_no}")
+        canvas.drawRightString(PAGE_W - MARGIN, MARGIN / 2, f"Page {doc.page}")
+        canvas.drawCentredString(PAGE_W / 2, MARGIN / 2, "This is a computer generated invoice.")
+        canvas.restoreState()
+
+    out = BytesIO()
+    doc = SimpleDocTemplate(
+        out,
+        pagesize=A4,
+        leftMargin=MARGIN,
+        rightMargin=MARGIN,
+        topMargin=MARGIN,
+        bottomMargin=MARGIN,
+        title=f"Invoice {sale.invoice_no}",
+        author=company.company_name,
+        subject=f"Invoice to {sale.customer_name}",
+    )
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    return out.getvalue()
 
 
+@login_required
+def sale_invoice_pdf(request, sale_id):
+    company = company_of(request)
+    sale = tenant_object_or_404(Sale.objects.select_related("customer"), request, sale_id)
 
-    # Bank details
-    midL = c1
-    txt(midL + PAD, y - 12, "Bank / Payment Details", bold=True, size=10)
-    by = y - 26
-    txt(midL + PAD, by, f"A/C Name: {bank_ac_name}", size=8); by -= 10
-    txt(midL + PAD, by, f"A/C No: {bank_ac_no}", size=8); by -= 10
-    txt(midL + PAD, by, f"Bank: {bank_name}", size=8); by -= 10
-    txt(midL + PAD, by, f"IFSC: {bank_ifsc}", size=8); by -= 10
-    txt(midL + PAD, by, f"Branch: {bank_branch}", size=8); by -= 10
-    if upi_id:
-        txt(midL + PAD, by, f"UPI: {upi_id}", size=8)
+    pdf = build_invoice_pdf(company, sale)
 
-    # Right: QR or Stamp
-    rightL = c2
-    txt(rightL + PAD, y - 12, "Stamp / QR", bold=True, size=10)
+    response = HttpResponse(pdf, content_type="application/pdf")
+    # inline: opens in the browser's PDF viewer; ?download=1 saves the file.
+    disposition = "attachment" if request.GET.get("download") else "inline"
+    response["Content-Disposition"] = f'{disposition}; filename="Invoice_{sale.invoice_no}.pdf"'
+    return response
 
-    stamp_box = 62 * mm
-    box_x = rightL + (BW/3 - stamp_box)/2
-    box_y = y - 80 * mm
 
-    rect(box_x, box_y, stamp_box, stamp_box)
+def build_statement_pdf(company, sale):
+    """
+    The settlement statement for the party after unloading: weight sent and
+    received, value on the received weight, cash discount, brokerage and
+    freight cuts, what is due, and what has been received so far.
+    """
+    from ..services.sale_service import settlement
 
-    if qr_reader is not None and box_y > (BOT + 5*mm):
-        c.drawImage(qr_reader, box_x + 2, box_y + 2, width=stamp_box-4, height=stamp_box-4, mask="auto")
-        ctxt(box_x + stamp_box/2, box_y + stamp_box + 3, "QR", size=9, bold=True)
+    st = _styles()
+    figures = settlement(sale)
+    status = sale_payment_status(company, sale)
+    story = []
 
-    rtxt(R - PAD, BOT + 25, f"For {company_name}", size=9)
-    rtxt(R - PAD, BOT + 12, "Authorized Signatory", size=9)
+    story.append(_box(
+        [[_p("SETTLEMENT STATEMENT", st["title"])]], [WIDTH],
+        extra=[("VALIGN", (0, 0), (-1, -1), "MIDDLE")],
+    ))
 
-    c.showPage()
-    c.save()
+    address = ", ".join(p.strip() for p in [company.address, company.city, company.state, company.pincode] if p and p.strip())
+    seller = [_p(company.company_name, st["company"])]
+    if address:
+        seller.append(_p(address, st["center"]))
+    if company.gst_number:
+        seller.append(_p(f"GSTIN: {company.gst_number}", st["center"]))
+    story.append(_box([[seller]], [WIDTH]))
 
-    pdf = out.getvalue()
-    out.close()
+    half = WIDTH / 2
+    left = [
+        _p("PARTY", st["label"]), _p(sale.customer_name, st["bold"]),
+        _p(sale.billing_address or "", st["base"]),
+    ]
+    if sale.customer_gst:
+        left.append(_p(f"GSTIN: {sale.customer_gst}", st["base"]))
+    right = [
+        _p("TRUCK", st["label"]),
+        _p(f"Invoice {sale.invoice_no} dated {sale.sale_date:%d-%m-%Y}", st["base"]),
+        _p(f"Vehicle: {sale.vehicle_number or '-'}", st["base"]),
+        _p(f"Unloaded: {sale.unload_date:%d-%m-%Y}" if sale.unload_date else "Unloaded: not yet", st["base"]),
+    ]
+    if sale.broker_id:
+        right.append(_p(f"Broker: {sale.broker.broker_name}", st["base"]))
+    story.append(_box([[left, right]], [half, half]))
 
-    filename = f"Invoice_{sale.invoice_no}.pdf"
-    resp = HttpResponse(content_type="application/pdf")
-    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
-    resp.write(pdf)
-    return resp
+    lines = [
+        ("Weight sent", f"{figures['dispatched_kg']} kg"),
+        ("Weight received", f"{figures['received_kg']} kg" + ("" if figures["unloaded"] else " (expected)")),
+        ("Short in transit", f"{figures['weight_loss_kg']} kg"),
+        ("Invoice total (Rs.)", _rs(sale.total_amount)),
+        ("Value on received weight (Rs.)", _rs(figures["party_value"])),
+    ]
+    if figures["cash_discount"]:
+        lines.append((f"Less: cash discount {sale.cash_discount_percent}%", "- " + _rs(figures["cash_discount"])))
+    if figures["brokerage_cut"]:
+        lines.append(("Less: brokerage (paid by party to broker)", "- " + _rs(figures["brokerage_cut"])))
+    if figures["other_deductions"]:
+        note = f" ({sale.other_deductions_note})" if sale.other_deductions_note else ""
+        lines.append((f"Less: other deductions{note}", "- " + _rs(figures["other_deductions"])))
+    lines.append(("Goods payable (Rs.)", _rs(figures["goods_payable"])))
+    if figures["freight_adjustment"] < 0:
+        lines.append(("Less: freight paid by party to the driver", "- " + _rs(figures["freight_paid_by_party"])))
+    elif figures["freight_adjustment"] > 0:
+        lines.append(("Add: freight advance paid by us", "+ " + _rs(figures["freight_adjustment"])))
+    total_index = len(lines)
+    lines.append(("NET AMOUNT PAYABLE (Rs.)", _rs(figures["net_receivable"])))
+    lines.append(("Received so far", _rs(status["paid"])))
+    lines.append(("BALANCE DUE (Rs.)", _rs(status["due"])))
+
+    table = Table(
+        [[_p(k, st["bold"] if i in (total_index, len(lines) - 1) else st["base"]),
+          _p(v, st["right_bold"] if i in (total_index, len(lines) - 1) else st["right"])]
+         for i, (k, v) in enumerate(lines)],
+        colWidths=[WIDTH * 0.68, WIDTH * 0.32],
+    )
+    table.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, BORDER),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, GRID),
+        ("BACKGROUND", (0, total_index), (-1, total_index), SHADE),
+        ("BACKGROUND", (0, -1), (-1, -1), SHADE),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]))
+    story.append(table)
+    story.append(Spacer(1, 6))
+    story.append(_p("Amount in words: " + amount_in_words(figures["net_receivable"]), st["bold"]))
+
+    bank = [f"A/C Name: {company.bank_account_name or company.company_name}"]
+    if company.bank_account_no:
+        bank.append(f"A/C No: {company.bank_account_no}")
+    if company.bank_name:
+        bank.append(f"Bank: {company.bank_name}" + (f", {company.bank_branch}" if company.bank_branch else ""))
+    if company.bank_ifsc:
+        bank.append(f"IFSC: {company.bank_ifsc}")
+    if company.upi_id:
+        bank.append(f"UPI: {company.upi_id}")
+    story.append(Spacer(1, 8))
+    story.append(_box(
+        [[[_p("Pay to", st["label"])] + [_p(line, st["base"]) for line in bank],
+          [_p(f"For {company.company_name}", st["right_bold"]), Spacer(1, 14 * mm),
+           _p("Authorised Signatory", st["right"])]]],
+        [WIDTH * 0.6, WIDTH * 0.4],
+    ))
+
+    out = BytesIO()
+    doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN,
+                            topMargin=MARGIN, bottomMargin=MARGIN,
+                            title=f"Settlement {sale.invoice_no}", author=company.company_name)
+    doc.build(story)
+    return out.getvalue()
+
+
+@login_required
+def sale_statement_pdf(request, sale_id):
+    company = company_of(request)
+    sale = tenant_object_or_404(Sale.objects.select_related("customer", "broker"), request, sale_id)
+    response = HttpResponse(build_statement_pdf(company, sale), content_type="application/pdf")
+    disposition = "attachment" if request.GET.get("download") else "inline"
+    response["Content-Disposition"] = f'{disposition}; filename="Settlement_{sale.invoice_no}.pdf"'
+    return response

@@ -1,19 +1,20 @@
 {% extends 'core/base.html' %}
-{% block page_title %}Mill Reports{% endblock %}
+{% load i18n %}
+{% block page_title %}{% translate "Mill Reports" %}{% endblock %}
 
 {% block content %}
 <div class="panel">
 
   <div class="list-header">
     <div>
-      <h2 class="list-title">Mill Wise Report</h2>
-      <p class="muted">Search and open supplier ledger</p>
+      <h2 class="list-title">{% translate "Mill Wise Report" %}</h2>
+      <p class="muted">{% translate "Search and open supplier ledger" %}</p>
     </div>
 
     <div class="list-actions">
       <form method="GET" class="search-box">
-        <input type="text" name="q" value="{{ q }}" placeholder="Search mill name...">
-        <button type="submit" class="btn btn-outline">Search</button>
+        <input type="text" name="q" value="{{ q }}" placeholder="{% translate 'Search mill name...' %}">
+        <button type="submit" class="btn btn-outline">{% translate "Search" %}</button>
       </form>
     </div>
   </div>
@@ -23,10 +24,10 @@
       <thead>
         <tr>
           <th>#</th>
-          <th>Mill Name</th>
-          <th>Mobile</th>
-          <th>GST</th>
-          <th>Action</th>
+          <th>{% translate "Mill Name" %}</th>
+          <th>{% translate "Mobile" %}</th>
+          <th>{% translate "GST" %}</th>
+          <th>{% translate "Action" %}</th>
         </tr>
       </thead>
 
@@ -39,13 +40,13 @@
           <td>{{ m.gst_number|default:"-" }}</td>
           <td>
             <a href="{% url 'mill_report_detail' m.id %}" class="btn btn-outline" style="padding:6px 10px;">
-              📑 View Report
+              📑 {% translate "View Report" %}
             </a>
           </td>
         </tr>
         {% empty %}
         <tr>
-          <td colspan="5" style="text-align:center; padding:20px;">No mills found</td>
+          <td colspan="5" style="text-align:center; padding:20px;">{% translate "No mills found" %}</td>
         </tr>
         {% endfor %}
       </tbody>

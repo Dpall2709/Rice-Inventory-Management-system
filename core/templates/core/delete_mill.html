@@ -1,23 +1,68 @@
 {% extends 'core/base.html' %}
-{% block page_title %}Delete Mill{% endblock %}
+{% load i18n %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'mill_list' %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
+{% block page_title %}{% translate "Deactivate supplier" %}{% endblock %}
 
 {% block content %}
 
-<div class="panel">
-  <h2 class="list-title">Delete Mill</h2>
-  <p class="muted">Are you sure you want to delete this mill?</p>
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'mill_list' %}">{% translate "Mills / Suppliers" %}</a> › <span>{{ mill.mill_name }}</span>
+    </div>
+    <h1>{% blocktranslate with name=mill.mill_name %}Deactivate “{{ name }}”?{% endblocktranslate %}</h1>
+  </div>
+</div>
 
-  <div style="margin: 20px 0; font-size:16px;">
-    <b>{{ mill.mill_name }}</b><br>
-    Mobile: {{ mill.mobile }}<br>
-    GST: {{ mill.gst_number|default:"-" }}
+<div class="card">
+
+  <div class="banner {% if can_delete %}is-warning{% else %}{% endif %}">
+    <span>{% if can_delete %}⚠️{% else %}🔒{% endif %}</span>
+    <div>
+      {% if can_delete %}
+        {% translate "This supplier has no purchases or payments yet, so it can be deleted permanently." %}
+      {% else %}
+        {% blocktranslate trimmed %}
+        This supplier has history, so it <strong>cannot be deleted</strong> — deleting it would
+        destroy those records and the stock that came from them. Deactivate it instead.
+        {% endblocktranslate %}
+      {% endif %}
+    </div>
   </div>
 
-  <form method="POST">
+  <dl class="kv">
+    <dt>{% translate "Owner" %}</dt><dd>{{ mill.owner_name|default:"—" }}</dd>
+    <dt>{% translate "Mobile" %}</dt><dd>{{ mill.mobile|default:"—" }}</dd>
+    <dt>{% translate "Purchases" %}</dt><dd>{{ purchase_count }}</dd>
+    <dt>{% translate "Payments" %}</dt><dd>{{ payment_count }}</dd>
+    <dt>{% translate "Used in sales" %}</dt><dd>{% blocktranslate count counter=sale_item_count %}{{ counter }} line{% plural %}{{ counter }} lines{% endblocktranslate %}</dd>
+  </dl>
+
+  <div class="divider"></div>
+
+  <p class="muted">
+    {% blocktranslate trimmed %}
+    <strong>Deactivating</strong> hides this supplier from new purchase and sale forms.
+    Its ledger, purchases and payments stay exactly as they are, and you can restore it
+    at any time from the Inactive tab.
+    {% endblocktranslate %}
+  </p>
+
+  <form method="POST" class="form-actions" style="border:0; padding-top:0;">
     {% csrf_token %}
-    <button type="submit" class="btn btn-primary" style="background:#ef4444;">🗑 Yes, Delete</button>
-    <a href="{% url 'mill_list' %}" class="btn btn-outline">Cancel</a>
+    <button class="btn btn-primary" type="submit" name="action" value="deactivate">🚫 {% translate "Deactivate" %}</button>
+
+    {% if can_delete %}
+      <button class="btn btn-danger" type="submit" name="action" value="delete"
+              data-confirm="{% blocktranslate with name=mill.mill_name %}“{{ name }}” will be removed permanently. This cannot be undone.{% endblocktranslate %}"
+              data-confirm-title="{% translate 'Delete this supplier?' %}">🗑 {% translate "Delete permanently" %}</button>
+    {% endif %}
+
+    <a class="btn btn-ghost" href="{% url 'mill_list' %}">{% translate "Cancel" %}</a>
   </form>
+
 </div>
 
 {% endblock %}

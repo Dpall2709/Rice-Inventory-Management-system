@@ -1,0 +1,291 @@
+{% extends "core/base.html" %}
+{% load i18n %}
+{% block nav_kind %}form{% endblock %}
+{% block page_title %}{% translate "Business profile" %}{% endblock %}
+{% block browser_title %}{% translate "Business profile" %}{% endblock %}
+
+{% block extra_head %}
+<style>
+  .bp-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+  .bp-side { position: sticky; top: calc(var(--topbar-h, 62px) + 16px); display: grid; gap: 16px; }
+  .bp-form .card { margin-bottom: 16px; }
+  .bp-form .form-section-title { margin-top: 0; }
+  .bp-form .form-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .bp-note { font-size: 12.5px; color: var(--success); font-weight: 600; min-height: 0; }
+  .bp-note:empty { display: none; }
+  .req { color: var(--danger); }
+
+  .meter-card h3 { font-size: 14px; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: baseline; }
+  .meter-card h3 span { font-size: 22px; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; }
+  .meter-bar { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+  .meter-bar i { display: block; height: 100%; background: var(--warning); border-radius: inherit; transition: width .25s ease; }
+  .meter-bar.is-complete i { background: var(--success); }
+  .meter-missing { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+  .meter-missing li { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--warning-soft); color: var(--warning); border: 1px solid var(--warning-border); cursor: pointer; }
+  .meter-done { font-size: 13px; color: var(--success); font-weight: 600; margin-top: 8px; }
+
+  .inv-preview { border: 1px solid var(--border); border-radius: var(--r-lg, 16px); background: var(--surface); overflow: hidden; box-shadow: var(--shadow-sm); }
+  .inv-preview .inv-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); padding: 10px 14px 0; font-weight: 700; }
+  .inv-head { display: flex; gap: 12px; padding: 12px 14px; border-bottom: 2px solid var(--primary); align-items: flex-start; }
+  .inv-logo { width: 52px; height: 52px; flex: 0 0 52px; border-radius: 10px; background: var(--surface-3); display: grid; place-items: center; overflow: hidden; font-size: 22px; }
+  .inv-logo img { width: 100%; height: 100%; object-fit: contain; }
+  .inv-name { font-size: 16px; font-weight: 700; color: var(--text); line-height: 1.25; overflow-wrap: anywhere; }
+  .inv-line { font-size: 12px; color: var(--text-soft); line-height: 1.45; overflow-wrap: anywhere; }
+  .inv-tax { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--text-soft); margin-top: 4px; }
+  .inv-tax b { color: var(--text); }
+  .inv-body { padding: 10px 14px; display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--text-muted); }
+  .inv-body b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .inv-bank { margin: 0 14px 14px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); font-size: 11.5px; color: var(--text-soft); line-height: 1.5; }
+  .inv-empty { color: var(--text-muted); font-style: italic; }
+  .readonly-banner { margin-bottom: 16px; }
+
+  @media (max-width: 960px) {
+    .bp-layout { grid-template-columns: 1fr; }
+    .bp-side { position: static; order: -1; }
+  }
+  @media (max-width: 520px) {
+    .bp-form .form-grid { grid-template-columns: 1fr; }
+    .bp-actions { position: sticky; bottom: 0; background: var(--surface); padding: 12px 0; margin: 0; z-index: 2; border-top: 1px solid var(--border); }
+    .bp-actions .btn { flex: 1 1 100%; justify-content: center; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> ›
+      <span>{% translate "Business profile" %}</span>
+    </div>
+    <h1>{% translate "Business profile" %}</h1>
+    <p class="muted">{% translate "These details print at the top of every invoice and bill you share." %}</p>
+  </div>
+</div>
+
+{% if not can_edit %}
+  <div class="banner readonly-banner"><span>🔒</span><div>{% translate "Only the owner or a manager can change these details. You can view them." %}</div></div>
+{% endif %}
+
+{% if form.non_field_errors %}
+  <div class="banner is-danger"><span>⛔</span><div>{{ form.non_field_errors|join:" " }}</div></div>
+{% endif %}
+
+<div class="bp-layout">
+  <form method="post" enctype="multipart/form-data" class="bp-form" novalidate id="bp-form">
+    {% csrf_token %}
+
+    <section class="card">
+      <div class="form-section-title">🏪 {% translate "Business" %}</div>
+      <div class="form-grid">
+        {% include "accounts/_field.html" with field=form.company_name full=True needed=True hint=True %}
+        {% include "accounts/_field.html" with field=form.owner_name needed=True hint=True %}
+        {% include "accounts/_field.html" with field=form.mobile needed=True hint=True %}
+        {% include "accounts/_field.html" with field=form.email hint=True %}
+        {% include "accounts/_field.html" with field=form.logo hint=True %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="form-section-title">📍 {% translate "Address" %}</div>
+      <div class="form-grid">
+        {% include "accounts/_field.html" with field=form.address full=True needed=True hint=True %}
+        {% include "accounts/_field.html" with field=form.city needed=True hint=True %}
+        <div class="field{% if form.state.errors %} has-error{% endif %}">
+          <label for="{{ form.state.id_for_label }}">{{ form.state.label }} <span class="req" aria-hidden="true">*</span></label>
+          {{ form.state }}
+          {% for error in form.state.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+        </div>
+        {% include "accounts/_field.html" with field=form.pincode needed=True hint=True %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="form-section-title">🧾 {% translate "Tax" %}</div>
+      <p class="field-hint" style="margin:-4px 0 12px;">{% translate "GST registration is optional. Leave these empty if you don't have one." %}</p>
+      <div class="form-grid">
+        <div class="field{% if form.gst_number.errors %} has-error{% endif %}">
+          <label for="{{ form.gst_number.id_for_label }}">{{ form.gst_number.label }}</label>
+          {{ form.gst_number }}
+          <div class="bp-note" id="gst-note" aria-live="polite"></div>
+          {% for error in form.gst_number.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+          <div class="field-hint">{{ form.gst_number.help_text }}</div>
+        </div>
+        {% include "accounts/_field.html" with field=form.pan_number hint=True %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="form-section-title">🏦 {% translate "Bank & UPI" %}</div>
+      <div class="form-grid">
+        {% include "accounts/_field.html" with field=form.bank_account_name hint=True %}
+        {% include "accounts/_field.html" with field=form.bank_name needed=True hint=True %}
+        {% include "accounts/_field.html" with field=form.bank_account_no needed=True hint=True %}
+        {% include "accounts/_field.html" with field=form.bank_account_no_confirm hint=True %}
+        {% include "accounts/_field.html" with field=form.bank_ifsc needed=True hint=True %}
+        {% include "accounts/_field.html" with field=form.bank_branch hint=True %}
+        {% include "accounts/_field.html" with field=form.upi_id full=True hint=True %}
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="form-section-title">⚙️ {% translate "Invoice settings" %}</div>
+      <div class="form-grid">
+        {% include "accounts/_field.html" with field=form.invoice_prefix hint=True %}
+        {% include "accounts/_field.html" with field=form.default_margin_percent hint=True %}
+        {% include "accounts/_field.html" with field=form.default_loading_rate_per_kg hint=True %}
+        {% include "accounts/_field.html" with field=form.invoice_terms full=True hint=True %}
+      </div>
+    </section>
+
+    {% if can_edit %}
+      <div class="form-actions bp-actions">
+        <button type="submit" class="btn btn-primary btn-lg">💾 {% translate "Save business details" %}</button>
+        <a class="btn btn-ghost" href="{% url 'dashboard' %}">{% translate "Cancel" %}</a>
+      </div>
+    {% endif %}
+  </form>
+
+  <aside class="bp-side">
+    <div class="card meter-card" style="margin:0;">
+      <h3>{% translate "Profile complete" %} <span><b id="meter-pct">{{ status.percent }}</b>%</span></h3>
+      <div class="meter-bar{% if status.complete %} is-complete{% endif %}" id="meter-bar"><i style="width: {{ status.percent }}%"></i></div>
+      <ul class="meter-missing" id="meter-missing">
+        {% for field, label in all_required %}<li data-field="{{ field }}" {% if field not in missing_names %}hidden{% endif %}>{{ label }}</li>{% endfor %}
+      </ul>
+      <div class="meter-done" id="meter-done" {% if not status.complete %}hidden{% endif %}>✓ {% translate "Everything your invoice needs is filled in." %}</div>
+    </div>
+
+    <div class="inv-preview" aria-label="{% translate 'Invoice header preview' %}">
+      <div class="inv-label">{% translate "Invoice preview" %}</div>
+      <div class="inv-head">
+        <div class="inv-logo" id="pv-logo">{% if company.logo %}<img src="{{ company.logo.url }}" alt="">{% else %}🌾{% endif %}</div>
+        <div style="min-width:0;">
+          <div class="inv-name" data-pv="company_name">{{ company.company_name }}</div>
+          <div class="inv-line" data-pv="address">{{ company.address }}</div>
+          <div class="inv-line" data-pv-join="city,state,pincode"></div>
+          <div class="inv-line" data-pv-join="mobile,email"></div>
+          <div class="inv-tax">
+            <span data-pv-wrap="gst_number">{% translate "GSTIN" %}: <b data-pv="gst_number"></b></span>
+            <span data-pv-wrap="pan_number">{% translate "PAN" %}: <b data-pv="pan_number"></b></span>
+          </div>
+        </div>
+      </div>
+      <div class="inv-body">
+        <span>{% translate "Invoice no." %} <b id="pv-number">{{ company.invoice_prefix }}-{% now "Ymd" %}-0001</b></span>
+        <span>{% now "d/m/Y" %}</span>
+      </div>
+      <div class="inv-bank">
+        <div><b>{% translate "Bank" %}:</b> <span data-pv-join="bank_name,bank_branch"></span></div>
+        <div><b>{% translate "A/c" %}:</b> <span data-pv="bank_account_no"></span> · <b>IFSC:</b> <span data-pv="bank_ifsc"></span></div>
+        <div data-pv-wrap="upi_id"><b>UPI:</b> <span data-pv="upi_id"></span></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+{{ gst_states|json_script:"gst-states" }}
+{{ required_fields|json_script:"required-fields" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var form = document.getElementById("bp-form");
+  if (!form) return;
+  var states = JSON.parse(document.getElementById("gst-states").textContent);
+  var required = JSON.parse(document.getElementById("required-fields").textContent);
+  var EMPTY = "{{ _('not set')|escapejs }}";
+  var FROM_GST = "{{ _('State and PAN filled in from the GSTIN.')|escapejs }}";
+  var today = "{% now 'Ymd' %}";
+
+  function input(name) { return form.querySelector('[name="' + name + '"]'); }
+  function value(name) {
+    var el = input(name);
+    if (!el) return "";
+    return (el.value || "").trim();
+  }
+
+  // ---- GSTIN -> state + PAN ------------------------------------------------
+  var gst = input("gst_number"), note = document.getElementById("gst-note");
+  function fromGst() {
+    if (!gst) return;
+    var g = gst.value.replace(/\s/g, "").toUpperCase();
+    if (gst.value !== g) gst.value = g;
+    note.textContent = "";
+    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(g)) return;
+    var state = states[g.slice(0, 2)];
+    var st = input("state"), pan = input("pan_number");
+    if (state && st) st.value = state;
+    if (pan) pan.value = g.slice(2, 12);
+    note.textContent = "✓ " + FROM_GST;
+  }
+  if (gst) gst.addEventListener("input", function () { fromGst(); refresh(); });
+
+  // Uppercase as you type for codes.
+  ["pan_number", "bank_ifsc", "invoice_prefix"].forEach(function (n) {
+    var el = input(n);
+    if (el) el.addEventListener("input", function () {
+      var up = el.value.toUpperCase().replace(/\s/g, "");
+      if (el.value !== up) el.value = up;
+    });
+  });
+
+  // ---- live preview + completeness meter -----------------------------------
+  function setText(el, text) {
+    el.textContent = text || EMPTY;
+    el.classList.toggle("inv-empty", !text);
+  }
+  function refresh() {
+    document.querySelectorAll("[data-pv]").forEach(function (el) {
+      setText(el, value(el.getAttribute("data-pv")));
+    });
+    document.querySelectorAll("[data-pv-join]").forEach(function (el) {
+      var parts = el.getAttribute("data-pv-join").split(",").map(value).filter(Boolean);
+      setText(el, parts.join(", "));
+    });
+    document.querySelectorAll("[data-pv-wrap]").forEach(function (el) {
+      el.hidden = !value(el.getAttribute("data-pv-wrap"));
+    });
+    var prefix = value("invoice_prefix") || "SAL";
+    document.getElementById("pv-number").textContent = prefix + "-" + today + "-0001";
+
+    var missing = required.filter(function (n) { return !value(n); });
+    var pct = Math.round(100 * (required.length - missing.length) / required.length);
+    document.getElementById("meter-pct").textContent = pct;
+    var bar = document.getElementById("meter-bar");
+    bar.firstElementChild.style.width = pct + "%";
+    bar.classList.toggle("is-complete", missing.length === 0);
+    document.getElementById("meter-done").hidden = missing.length !== 0;
+    document.querySelectorAll("#meter-missing li").forEach(function (li) {
+      li.hidden = missing.indexOf(li.getAttribute("data-field")) === -1;
+    });
+  }
+  form.addEventListener("input", refresh);
+  form.addEventListener("change", refresh);
+
+  // Click a missing chip to jump to that field.
+  document.querySelectorAll("#meter-missing li").forEach(function (li) {
+    li.addEventListener("click", function () {
+      var el = input(li.getAttribute("data-field"));
+      if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); }
+    });
+  });
+
+  // Logo preview before upload.
+  var logo = input("logo");
+  if (logo) logo.addEventListener("change", function () {
+    var file = logo.files && logo.files[0];
+    if (!file) return;
+    var box = document.getElementById("pv-logo");
+    var img = document.createElement("img");
+    img.alt = "";
+    img.src = URL.createObjectURL(file);
+    box.innerHTML = "";
+    box.appendChild(img);
+  });
+
+  refresh();
+})();
+</script>
+{% endblock %}

@@ -1,54 +1,85 @@
-console.log("Script loaded successfully");
+/* ==========================================================================
+   Repeating item rows for the purchase and sale forms.
 
-let itemCount = 0;
+   The previous version of this file contained Django template tags
+   ({% for product in products %}) inside a STATIC file, which the browser
+   never renders - so every dropdown it created was empty. The options are now
+   read from a <template id="rowTemplate"> element rendered by Django, which is
+   the correct way to do this.
+   ========================================================================== */
 
-function addItemRow() {
-    const table = document.getElementById('items_table').getElementsByTagName('tbody')[0];
-    const row = table.insertRow();
-    row.id = 'item_row_' + itemCount;
+(function () {
+  "use strict";
 
-    row.innerHTML = `
-        <td>
-            <select name="product_${itemCount}" required>
-                {% for product in products %}
-                <option value="{{ product.id }}">{{ product.name }}</option>
-                {% endfor %}
-            </select>
-        </td>
-        <td><input type="number" name="bag_weight_${itemCount}" value="20" min="1" required oninput="updateLineTotal(${itemCount})"></td>
-        <td><input type="number" name="bag_count_${itemCount}" value="1" min="1" required oninput="updateLineTotal(${itemCount})"></td>
-        <td><input type="number" name="price_${itemCount}" value="0" min="0" required oninput="updateLineTotal(${itemCount})"></td>
-        <td><span id="line_total_${itemCount}">0</span></td>
-        <td><button type="button" onclick="removeItemRow(${itemCount})">Remove</button></td>
-    `;
+  var rowIndex = 0;
 
-    itemCount++;
-    document.getElementById('items_count').value = itemCount;
-    updateTotalAmount();
-}
+  function recalc() {
+    var grand = 0;
 
-function removeItemRow(index) {
-    const row = document.getElementById('item_row_' + index);
-    row.remove();
-    updateTotalAmount();
-}
+    document.querySelectorAll("[data-item-row]").forEach(function (row) {
+      var weight = parseFloat(row.querySelector('[name="bag_weight[]"]')?.value || 0);
+      var count = parseFloat(row.querySelector('[name="bag_count[]"]')?.value || 0);
+      var rate = parseFloat(row.querySelector('[name="purchase_price[]"]')?.value || 0);
 
-function updateLineTotal(index) {
-    const weight = parseFloat(document.getElementsByName(`bag_weight_${index}`)[0].value);
-    const count = parseFloat(document.getElementsByName(`bag_count_${index}`)[0].value);
-    const price = parseFloat(document.getElementsByName(`price_${index}`)[0].value);
+      var kg = weight * count;
+      var total = kg * rate;
 
-    const total = weight * count * price;
-    document.getElementById(`line_total_${index}`).innerText = total.toFixed(2);
+      var kgCell = row.querySelector("[data-row-kg]");
+      var totalCell = row.querySelector("[data-row-total]");
+      if (kgCell) kgCell.textContent = kg ? kg.toFixed(2) : "0";
+      if (totalCell) {
+        totalCell.textContent = window.formatINR ? window.formatINR(total) : total.toFixed(2);
+      }
 
-    updateTotalAmount();
-}
+      grand += total;
+    });
 
-function updateTotalAmount() {
-    let total = 0;
-    for (let i = 0; i < itemCount; i++) {
-        const lineTotalEl = document.getElementById(`line_total_${i}`);
-        if (lineTotalEl) total += parseFloat(lineTotalEl.innerText);
+    var grandCell = document.querySelector("[data-grand-total]");
+    if (grandCell) {
+      grandCell.textContent = window.formatINR ? window.formatINR(grand) : grand.toFixed(2);
     }
-    document.getElementById('total_amount').innerText = total.toFixed(2);
-}
+
+    var grandInput = document.querySelector('[name="total_amount"]');
+    if (grandInput) grandInput.value = grand.toFixed(2);
+  }
+
+  function addRow() {
+    var template = document.getElementById("rowTemplate");
+    var tbody = document.querySelector("[data-item-rows]");
+    if (!template || !tbody) return;
+
+    var fragment = template.content.cloneNode(true);
+    tbody.appendChild(fragment);
+    rowIndex++;
+    recalc();
+  }
+
+  document.addEventListener("click", function (e) {
+    if (e.target.closest("[data-add-row]")) {
+      e.preventDefault();
+      addRow();
+    }
+
+    var remove = e.target.closest("[data-remove-row]");
+    if (remove) {
+      e.preventDefault();
+      var rows = document.querySelectorAll("[data-item-row]");
+      if (rows.length <= 1) return;           // never leave the form with no rows
+      remove.closest("[data-item-row]").remove();
+      recalc();
+    }
+  });
+
+  document.addEventListener("input", function (e) {
+    if (e.target.closest("[data-item-row]")) recalc();
+  });
+
+  document.addEventListener("DOMContentLoaded", function () {
+    if (document.querySelector("[data-item-rows]")) {
+      if (!document.querySelector("[data-item-row]")) addRow();
+      recalc();
+    }
+  });
+
+  window.addItemRow = addRow;   // kept for any inline onclick still in a template
+})();

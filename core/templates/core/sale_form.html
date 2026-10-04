@@ -1,0 +1,363 @@
+{% extends 'core/base.html' %}
+{% load static i18n form_tags %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% if mode == 'edit' %}{% url 'sale_detail' sale.id %}{% else %}{% url 'sale_list' %}{% endif %}{% endblock %}
+{% block page_title %}{% if mode == 'edit' %}{% translate "Edit sale" %}{% else %}{% translate "New sale" %}{% endif %}{% endblock %}
+{% block browser_title %}{% if mode == 'edit' %}{% translate "Edit sale" %}{% else %}{% translate "New sale" %}{% endif %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> ›
+      <a href="{% url 'sale_list' %}">{% translate "Sales" %}</a> ›
+      <span>{% if mode == 'edit' %}{{ sale.invoice_no }}{% else %}{% translate "New invoice" %}{% endif %}</span>
+    </div>
+    <h1>{% if mode == 'edit' %}{% blocktranslate with no=sale.invoice_no %}Edit invoice {{ no }}{% endblocktranslate %}{% else %}{% translate "Make a sale invoice" %}{% endif %}</h1>
+    <p class="muted">
+      {% blocktranslate trimmed %}
+        Choose the customer, add the rice lines, and the bags come out of your stock
+        - oldest lot first unless you pick one. Rate is <strong>per kg</strong>, before GST.
+      {% endblocktranslate %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-outline" href="{% url 'sale_list' %}">📋 {% translate "All sales" %}</a>
+  </div>
+</div>
+
+{% if not has_customers %}
+  <div class="banner is-warning">
+    <span>👥</span>
+    <div>{% translate "You have no customers yet. Add the buyer first - it takes a minute and gives you their ledger." %}</div>
+    <a href="{% url 'add_customer' %}?next=sale" style="margin-left:auto;">{% translate "Add a customer" %} →</a>
+  </div>
+{% endif %}
+
+{% if not has_stock %}
+  <div class="banner is-warning">
+    <span>📦</span>
+    <div>{% translate "There is no rice in stock. Enter a purchase bill first - a sale can only take bags you have." %}</div>
+    <a href="{% url 'add_purchase' %}" style="margin-left:auto;">{% translate "Enter a purchase" %} →</a>
+  </div>
+{% endif %}
+
+{% if form.non_field_errors or formset.non_form_errors or stock_errors %}
+  <div class="banner is-danger">
+    <span>⛔</span>
+    <div>
+      {% if stock_errors %}<strong>{% translate "Not enough stock:" %}</strong><br>{% endif %}
+      {% for error in stock_errors %}{{ error }}<br>{% endfor %}
+      {% for error in form.non_field_errors %}{{ error }}<br>{% endfor %}
+      {% for error in formset.non_form_errors %}{{ error }}<br>{% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+<form method="POST" novalidate id="saleForm">
+  {% csrf_token %}
+  {{ formset.management_form }}
+
+  <!-- ===================== CUSTOMER ===================== -->
+  <div class="card">
+    <div class="form-section-title">{% translate "Customer" %}</div>
+
+    <div class="form-grid">
+      <div class="field {% if form.customer.errors %}has-error{% endif %}">
+        <label for="{{ form.customer.id_for_label }}">{{ form.customer.label }} <span class="req">*</span></label>
+        {{ form.customer }}
+        <div class="field-hint"><a href="{% url 'add_customer' %}?next=sale">➕ {% translate "New customer" %}</a></div>
+        {% for error in form.customer.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+      </div>
+
+      {% for field in form %}
+        {% if field.name|one_of:"sale_date,due_date,tax_type" %}
+          <div class="field {% if field.errors %}has-error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.name == 'sale_date' %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    <div class="buyer-card" data-buyer hidden>
+      <div>
+        <div class="muted small">{% translate "Bill to" %}</div>
+        <div class="bold" data-buyer-name></div>
+        <div class="small" data-buyer-address></div>
+      </div>
+      <div>
+        <div class="muted small">{% translate "GSTIN" %}</div>
+        <div class="bold" data-buyer-gst>—</div>
+        <div class="muted small" style="margin-top:6px;">{% translate "State" %}</div>
+        <div data-buyer-state>—</div>
+      </div>
+      <div>
+        <div class="muted small">{% translate "Ship to" %}</div>
+        <div class="small" data-buyer-shipping></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== LINES ===================== -->
+  <div class="card">
+    <div class="list-header">
+      <div>
+        <div class="list-title">{% translate "Rice sold" %}</div>
+        <p class="muted">{% translate "GST% fills in from the product. The stock column shows bags left of that rice and bag size." %}</p>
+      </div>
+      <div class="list-actions">
+        <button type="button" class="btn btn-outline" data-add-line>➕ {% translate "Add line" %}</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table" id="itemsTable">
+        <thead>
+          <tr>
+            <th style="min-width:170px;">{% translate "Rice" %}</th>
+            <th style="width:120px;">{% translate "Bag weight (kg)" %}</th>
+            <th style="width:110px;">{% translate "Bags" %}</th>
+            <th class="right">{% translate "In stock" %}</th>
+            <th style="width:130px;">{% translate "Rate / kg" %}</th>
+            <th style="width:100px;">{% translate "GST %" %}</th>
+            <th class="right">{% translate "Quantity (kg)" %}</th>
+            <th class="right">{% translate "Taxable" %}</th>
+            <th class="right">{% translate "Line total" %}</th>
+            <th style="min-width:200px;">{% translate "Take stock from" %}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="itemRows">
+          {% for item_form in formset %}
+            <tr data-line>
+              {{ item_form.id }}
+              <td data-label="{% translate 'Rice' %}">
+                {{ item_form.product }}
+                <div class="row-sub" data-cell="hint"></div>
+                {% for error in item_form.product.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </td>
+              <td data-label="{% translate 'Bag weight' %}">
+                {{ item_form.bag_weight }}
+                {% for error in item_form.bag_weight.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </td>
+              <td data-label="{% translate 'Bags' %}">
+                {{ item_form.bag_count }}
+                {% for error in item_form.bag_count.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </td>
+              <td data-label="{% translate 'In stock' %}" class="right num" data-cell="stock">—</td>
+              <td data-label="{% translate 'Rate / kg' %}">
+                {{ item_form.rate_per_kg }}
+                {% for error in item_form.rate_per_kg.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </td>
+              <td data-label="{% translate 'GST %' %}">{{ item_form.gst_percent }}</td>
+              <td data-label="{% translate 'Quantity' %}" class="right num" data-cell="kg">0</td>
+              <td data-label="{% translate 'Taxable' %}" class="right num" data-cell="taxable">0.00</td>
+              <td data-label="{% translate 'Line total' %}" class="right num bold" data-cell="line_total">0.00</td>
+              <td data-label="{% translate 'Take stock from' %}">
+                {{ item_form.purchase_item }}
+                {% for error in item_form.purchase_item.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </td>
+              <td>
+                <span style="display:none;">{{ item_form.DELETE }}</span>
+                <button type="button" class="btn btn-ghost btn-sm" data-remove-line title="{% translate 'Remove line' %}">✖</button>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2">{% translate "Totals" %}</td>
+            <td class="num" data-total="bags">0</td>
+            <td colspan="3"></td>
+            <td class="right num" data-total="kg">0</td>
+            <td class="right num" data-total="taxable">0.00</td>
+            <td class="right num bold" data-total="lines">0.00</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <template id="emptyLine">
+      <tr data-line>
+        <td data-label="{% translate 'Rice' %}">{{ formset.empty_form.product }}<div class="row-sub" data-cell="hint"></div></td>
+        <td data-label="{% translate 'Bag weight' %}">{{ formset.empty_form.bag_weight }}</td>
+        <td data-label="{% translate 'Bags' %}">{{ formset.empty_form.bag_count }}</td>
+        <td data-label="{% translate 'In stock' %}" class="right num" data-cell="stock">—</td>
+        <td data-label="{% translate 'Rate / kg' %}">{{ formset.empty_form.rate_per_kg }}</td>
+        <td data-label="{% translate 'GST %' %}">{{ formset.empty_form.gst_percent }}</td>
+        <td data-label="{% translate 'Quantity' %}" class="right num" data-cell="kg">0</td>
+        <td data-label="{% translate 'Taxable' %}" class="right num" data-cell="taxable">0.00</td>
+        <td data-label="{% translate 'Line total' %}" class="right num bold" data-cell="line_total">0.00</td>
+        <td data-label="{% translate 'Take stock from' %}">{{ formset.empty_form.purchase_item }}</td>
+        <td>
+          <span style="display:none;">{{ formset.empty_form.DELETE }}</span>
+          <button type="button" class="btn btn-ghost btn-sm" data-remove-line title="{% translate 'Remove line' %}">✖</button>
+        </td>
+      </tr>
+    </template>
+  </div>
+
+  <div class="two-col">
+
+    <div>
+      <!-- ===================== BROKER ===================== -->
+      <div class="card">
+        <div class="form-section-title">{% translate "Broker, CD & brokerage" %}</div>
+        <div class="form-grid">
+          {% for field in form %}
+            {% if field.name|one_of:"broker,collect_from,broker_commission_type,broker_commission_rate,broker_paid_by,cash_discount_percent" %}
+              <div class="field {% if field.errors %}has-error{% endif %}" {% if field.name != 'broker' and field.name != 'cash_discount_percent' %}data-broker-only{% endif %}>
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+                {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        <div class="field-hint" data-broker-only>
+          {% translate "Commission on this sale" %}: <strong>₹ <span data-sum="commission">0.00</span></strong>
+          · {% translate "you owe this to the broker; it is not on the customer's invoice." %}
+        </div>
+      </div>
+
+      <!-- ===================== TRANSPORT ===================== -->
+      <div class="card">
+        <div class="form-section-title">{% translate "Truck & transport" %}</div>
+        <p class="muted small" style="margin-bottom:12px;">
+          {% translate "Freight is never added to the invoice total. Choose who carries it: when you do, it counts in your profit and the balance the party pays the driver is cut from what they owe you." %}
+        </p>
+        <div class="form-grid">
+          {% for field in form %}
+            {% if field.name|one_of:"vehicle_number,driver_name,driver_mobile,transporter_name,freight_borne_by,transport_rate_per_ton,transport_paid_by_dealer,transport_paid_by_customer,loading_weight_kg,loading_charge" %}
+              <div class="field {% if field.errors %}has-error{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        <dl class="kv summary" style="margin-top:12px;">
+          <dt>{% translate "Total weight" %}</dt><dd class="num"><span data-sum="ton">0.000</span> {% translate "ton" %}</dd>
+          <dt>{% translate "Freight" %}</dt><dd class="num">₹ <span data-sum="freight">0.00</span></dd>
+          <dt>{% translate "Freight still due to truck" %}</dt><dd class="num text-danger">₹ <span data-sum="freight_due">0.00</span></dd>
+          <dt data-freight-us>{% translate "Party cuts from payment" %}</dt><dd class="num" data-freight-us>− ₹ <span data-sum="freight_cut">0.00</span></dd>
+        </dl>
+      </div>
+
+      <!-- ===================== RECEIVED ===================== -->
+      <div class="card">
+        <div class="form-section-title">{% translate "Money received now" %}</div>
+        <div class="form-grid">
+          {% for field in form %}
+            {% if field.name|one_of:"advance_received,advance_mode" %}
+              <div class="field {% if field.errors %}has-error{% endif %}">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+                {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        <div class="form-section-title">{% translate "Notes" %}</div>
+        {{ form.notes }}
+      </div>
+    </div>
+
+    <!-- ===================== SUMMARY ===================== -->
+    <div class="card summary-card">
+      <div class="list-title" style="margin-bottom:12px;">{% translate "Invoice summary" %}</div>
+
+      <dl class="kv summary">
+        <dt>{% translate "Total bags" %}</dt><dd class="num" data-sum="bags">0</dd>
+        <dt>{% translate "Total quantity" %}</dt><dd class="num"><span data-sum="kg">0</span> kg</dd>
+        <dt>{% translate "Taxable amount" %}</dt><dd class="num bold">₹ <span data-sum="taxable">0.00</span></dd>
+        <dt data-tax-label="cgst">CGST</dt><dd class="num" data-tax-label="cgst">₹ <span data-sum="cgst">0.00</span></dd>
+        <dt data-tax-label="sgst">SGST</dt><dd class="num" data-tax-label="sgst">₹ <span data-sum="sgst">0.00</span></dd>
+        <dt data-tax-label="igst">IGST</dt><dd class="num" data-tax-label="igst">₹ <span data-sum="igst">0.00</span></dd>
+        <dt>{% translate "Round off" %}</dt><dd class="num"><span data-sum="round">0.00</span></dd>
+      </dl>
+
+      <div class="grand-total">
+        <span>{% translate "Invoice total" %}</span>
+        <span class="num">₹ <span data-sum="total">0.00</span></span>
+      </div>
+
+      <div class="due-line">
+        <span class="muted">{% translate "Received now" %}</span>
+        <span class="num">₹ <span data-sum="advance">0.00</span></span>
+      </div>
+      <div class="due-line" data-show-cd>
+        <span class="muted">{% translate "Cash discount (CD)" %}</span>
+        <span class="num">− ₹ <span data-sum="cd">0.00</span></span>
+      </div>
+      <div class="due-line" data-show-brokerage-cut>
+        <span class="muted">{% translate "Brokerage the party cuts" %}</span>
+        <span class="num">− ₹ <span data-sum="brokerage_cut">0.00</span></span>
+      </div>
+      <div class="due-line" data-show-freight-adj>
+        <span class="muted" data-freight-adj-label>{% translate "Freight adjustment" %}</span>
+        <span class="num">₹ <span data-sum="freight_adj">0.00</span></span>
+      </div>
+      <div class="due-line">
+        <span class="muted">{% translate "Party will pay" %}</span>
+        <span class="num bold">₹ <span data-sum="net">0.00</span></span>
+      </div>
+      <div class="due-line">
+        <span class="muted">{% translate "Balance the customer owes" %}</span>
+        <span class="num bold text-danger">₹ <span data-sum="due">0.00</span></span>
+      </div>
+
+      <div class="cost-box">
+        <div class="cost-title">{% translate "Your margin (owner only)" %}</div>
+        <dl class="kv summary">
+          <dt>{% translate "Sale income (before GST, after CD)" %}</dt><dd class="num">₹ <span data-sum="income">0.00</span></dd>
+          <dt>{% translate "Cost of these bags" %}</dt><dd class="num">− ₹ <span data-sum="cost">0.00</span></dd>
+          <dt>{% translate "Loading" %}</dt><dd class="num">− ₹ <span data-sum="loading">0.00</span></dd>
+          <dt>{% translate "Freight you carry" %}</dt><dd class="num">− ₹ <span data-sum="freight_cost">0.00</span></dd>
+          <dt>{% translate "Broker commission you pay" %}</dt><dd class="num">− ₹ <span data-sum="commission2">0.00</span></dd>
+        </dl>
+        <div class="sell-line">
+          <span>{% translate "Estimated profit" %}</span>
+          <span class="num">₹ <span data-sum="profit">0.00</span></span>
+        </div>
+        <div class="field-hint" style="margin-top:6px;">{% translate "Uses your average landed cost per kg of each rice; the exact figure is worked out from the lots on save." %}</div>
+      </div>
+
+      <div class="form-actions" style="border:0; padding-top:16px;">
+        <button class="btn btn-primary btn-block" type="submit">
+          💾 {% if mode == 'edit' %}{% translate "Save changes" %}{% else %}{% translate "Save invoice" %}{% endif %}
+        </button>
+        {% if mode == 'add' %}
+          <button class="btn btn-outline btn-block" type="submit" name="save_and_new" value="1">➕ {% translate "Save & make another" %}</button>
+        {% endif %}
+        <a class="btn btn-ghost btn-block" href="{% if mode == 'edit' %}{% url 'sale_detail' sale.id %}{% else %}{% url 'sale_list' %}{% endif %}">{% translate "Cancel" %}</a>
+      </div>
+    </div>
+
+  </div>
+</form>
+
+{{ form_data|json_script:"sale-data" }}
+<script type="application/json" id="sale-i18n">{
+  "noStock": "{% filter escapejs %}{% translate 'none' %}{% endfilter %}",
+  "bags": "{% filter escapejs %}{% translate 'bags' %}{% endfilter %}",
+  "suggested": "{% filter escapejs %}{% translate 'Your cost' %}{% endfilter %}",
+  "sellAt": "{% filter escapejs %}{% translate 'sell at least' %}{% endfilter %}",
+  "notEnough": "{% filter escapejs %}{% translate 'more than in stock' %}{% endfilter %}",
+  "noLot": "{% filter escapejs %}{% translate 'No stock of this bag size' %}{% endfilter %}",
+  "inOther": "{% filter escapejs %}{% translate 'have' %}{% endfilter %}"
+}</script>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'core/sale_form.js' %}?v={{ asset_version }}"></script>
+{% endblock %}

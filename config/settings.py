@@ -29,11 +29,46 @@ load_dotenv(BASE_DIR / ".env")
 # SECURITY WARNING: don't run with debug turned on in production!
 # DEBUG = True
 
-SECRET_KEY = os.getenv("SECRET_KEY", "unsafe-default")
-DEBUG = os.getenv("DEBUG", "False") == "True"
+def env_bool(name, default=False):
+    return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
 
 
-ALLOWED_HOSTS = []
+def env_list(name, default=""):
+    return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
+
+
+DEBUG = env_bool("DEBUG", False)
+
+# In production the key MUST come from the environment. We only fall back to a
+# throwaway key while DEBUG is on, so a misconfigured server fails loudly
+# instead of running with a key that is published in this repository.
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-development-only-do-not-use-in-production"
+    else:
+        raise RuntimeError(
+            "SECRET_KEY is not set. Put it in your .env file. "
+            "Generate one with: python -c \"from django.core.management.utils import get_random_secret_key as g; print(g())\""
+        )
+
+# Example: ALLOWED_HOSTS=ricebilling.in,www.ricebilling.in
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "127.0.0.1,localhost" if DEBUG else "")
+
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
+
+# While developing, allow sharing the local server through an ngrok tunnel
+# (`ngrok http 8000`). Never active in production, where DEBUG is off.
+if DEBUG:
+    ALLOWED_HOSTS += [".ngrok-free.app", ".ngrok-free.dev", ".ngrok.app", ".ngrok.dev", ".ngrok.io"]
+    CSRF_TRUSTED_ORIGINS += [
+        "https://*.ngrok-free.app", "https://*.ngrok-free.dev",
+        "https://*.ngrok.app", "https://*.ngrok.dev", "https://*.ngrok.io",
+    ]
+    # ngrok terminates HTTPS and forwards plain HTTP; trust its header so
+    # Django knows the visitor used HTTPS.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 # Application definition
@@ -46,17 +81,24 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'core',
+    'billing',
+    'accounts',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # Picks English or Hindi for each request, from the language cookie set by
+    # the switcher in the top bar (falls back to the browser's language).
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'core.middleware.CompanyMiddleware',
+    # Must come after CompanyMiddleware: it needs request.company.
+    'billing.middleware.SubscriptionMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -69,8 +111,11 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
+                'django.template.context_processors.i18n',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'core.context_processors.asset_version',
+                'accounts.context_processors.business_profile',
             ],
         },
     },
@@ -84,41 +129,20 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'rice_trading_db',
-        'USER': 'postgres',  
-        'PASSWORD': 'Admin@123',
-        'HOST': 'localhost',
-        'PORT': '5432',
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.getenv("DB_NAME", "rice_trading_db"),
+        "USER": os.getenv("DB_USER", "postgres"),
+        "PASSWORD": os.getenv("DB_PASSWORD", ""),
+        "HOST": os.getenv("DB_HOST", "localhost"),
+        "PORT": os.getenv("DB_PORT", "5432"),
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
     }
 }
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'postgres',
-#         'USER': 'postgres',
-#         'PASSWORD': 'Billing_app@1997',
-#         'HOST': 'db.mdnpzrkyxgphyxrjdxts.supabase.co',
-#         'PORT': '5432',
-#     }
-# }
-
-
-
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.postgresql",
-#         "NAME": config("DB_NAME"),
-#         "USER": config("DB_USER"),
-#         "PASSWORD": config("DB_PASSWORD"),
-#         "HOST": config("DB_HOST"),
-#         "PORT": config("DB_PORT", default="5432"),
-#         "OPTIONS": {"sslmode": "require"},
-#     }
-# }
-
+# Managed hosts (Supabase, Neon, RDS) require TLS. Set DB_SSL=True there.
+if env_bool("DB_SSL", False):
+    DATABASES["default"]["OPTIONS"] = {"sslmode": os.getenv("DB_SSLMODE", "require")}
 
 
 # Password validation
@@ -143,7 +167,20 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'en'
+
+# The whole app can be switched between these two from the top bar.
+LANGUAGES = [
+    ("en", "English"),
+    ("hi", "हिन्दी"),
+]
+
+# Hindi translations live in locale/hi/LC_MESSAGES/django.po. After changing
+# any text, run:  python manage.py makemessages -l hi  then  compilemessages
+LOCALE_PATHS = [BASE_DIR / "locale"]
+
+# Remember the chosen language for a year.
+LANGUAGE_COOKIE_AGE = 60 * 60 * 24 * 365
 
 TIME_ZONE = 'UTC'
 
@@ -157,11 +194,17 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-STATICFILES_DIRS = [
-    BASE_DIR / "static",
-]
+# Project-wide static folder, used only if it exists (app static always works).
+STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# ---------------------------------------------------------------------------
+# Fallback company details for invoices.
+#
+# These are used ONLY when a tenant has not filled in its own details. Each
+# company's real name, GSTIN and bank account now live on the Company row, so
+# every tenant prints its own invoice. Do not add tenant data here.
+# ---------------------------------------------------------------------------
 COMPANY_NAME = "Sanjana Rice Mill"
 COMPANY_ADDRESS = "Naya Bazar Dallpati Lakhisarai Bihar 811311"
 COMPANY_PHONE = "8709981284"
@@ -182,3 +225,111 @@ LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'dashboard'
 
 LOGOUT_REDIRECT_URL = 'login'
+
+# ---------------------------------------------------------------------------
+# Subscription settings
+# ---------------------------------------------------------------------------
+
+# How long a brand new company may use the product for free.
+TRIAL_DAYS = int(os.getenv("TRIAL_DAYS", "14"))
+
+# Start showing the renew banner this many days before expiry.
+SUBSCRIPTION_WARN_DAYS = int(os.getenv("SUBSCRIPTION_WARN_DAYS", "7"))
+
+# Razorpay. Leave empty in development: the billing pages then record a manual
+# payment request instead of opening the payment window.
+# Reading supplier bills (photo / PDF) into the purchase form with Claude.
+# Leave the key empty to switch the photo reader off; QR scanning still works.
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+BILL_SCAN_MODEL = os.getenv("BILL_SCAN_MODEL", "claude-opus-5-5")
+
+# Bill photos are uploaded through Django; allow phone-camera sized files.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+
+
+# ---------------------------------------------------------------------------
+# Email (password reset, subscription reminders)
+# ---------------------------------------------------------------------------
+
+if os.getenv("EMAIL_HOST"):
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.getenv("EMAIL_HOST")
+    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
+else:
+    # Development: emails are printed in the terminal instead of being sent.
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@ricebilling.local")
+
+
+# ---------------------------------------------------------------------------
+# Media files (company logos)
+# ---------------------------------------------------------------------------
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+
+
+# ---------------------------------------------------------------------------
+# Production hardening. All of this switches on automatically when DEBUG=False.
+# ---------------------------------------------------------------------------
+
+if not DEBUG:
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = "same-origin"
+    X_FRAME_OPTIONS = "DENY"
+
+    # Behind nginx / Caddy / a load balancer that terminates TLS.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Log the user out after this many seconds of inactivity (default 12 hours).
+SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", str(12 * 60 * 60)))
+SESSION_SAVE_EVERY_REQUEST = True
+
+# ---------------------------------------------------------------------------
+# Accounts (sign-up email code, login throttling) - see accounts/services.py
+#
+# The login throttle and the availability-check limit use Django's cache.
+# No CACHES setting = LocMemCache, which is per process: fine for one process,
+# but with several gunicorn workers set CACHES to Redis/Memcached so all
+# workers share the counters.
+# ---------------------------------------------------------------------------
+ACCOUNTS_SIGNUP_TTL_MINUTES = 30        # pending sign-up lives this long
+ACCOUNTS_OTP_TTL_MINUTES = 10           # one emailed code is valid this long
+ACCOUNTS_OTP_MAX_ATTEMPTS = 5           # wrong guesses before the code dies
+ACCOUNTS_OTP_RESEND_SECONDS = 60        # wait between two codes
+ACCOUNTS_OTP_MAX_SENDS_PER_HOUR = 5     # codes per email address per hour
+ACCOUNTS_LOGIN_MAX_FAILURES = 5         # per identifier and per IP ...
+ACCOUNTS_LOGIN_WINDOW_SECONDS = 15 * 60  # ... within this window
+ACCOUNTS_LOGIN_BLOCK_SECONDS = 15 * 60   # then blocked this long
+# "Keep me signed in": sliding session of this length. Unticked = until the
+# browser closes.
+ACCOUNTS_REMEMBER_ME_SECONDS = int(os.getenv("ACCOUNTS_REMEMBER_ME_SECONDS", str(30 * 24 * 60 * 60)))
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "root": {"handlers": ["console"], "level": "INFO"},
+    "loggers": {
+        "billing": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+}

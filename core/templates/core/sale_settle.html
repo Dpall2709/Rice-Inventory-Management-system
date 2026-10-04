@@ -1,0 +1,51 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'sale_detail' sale.id %}{% endblock %}
+{% block page_title %}{% translate "Unloading & settlement" %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'sale_list' %}">{% translate "Sales" %}</a> ›
+      <a href="{% url 'sale_detail' sale.id %}">{{ sale.invoice_no }}</a> › <span>{% translate "Settlement" %}</span>
+    </div>
+    <h1>🚚 {% blocktranslate with no=sale.invoice_no %}Truck {{ no }} reached the party{% endblocktranslate %}</h1>
+    <p class="muted">
+      {{ sale.customer_name }} · {{ sale.vehicle_number|default:"—" }} · {% blocktranslate with kg=sale.total_quantity_kg bags=sale.total_bags %}{{ bags }} bags, {{ kg }} kg sent{% endblocktranslate %}
+    </p>
+  </div>
+</div>
+
+<div class="two-col">
+  <form method="POST" class="card" novalidate>
+    {% csrf_token %}
+    <p class="muted small" style="margin-bottom:14px;">
+      {% translate "Enter what the party's slip says. They pay on the weight they received, minus their cash discount, the brokerage if they pay the broker, and the freight balance they paid the driver." %}
+    </p>
+    {% if form.non_field_errors %}<div class="banner is-danger"><span>⛔</span><div>{{ form.non_field_errors|join:" " }}</div></div>{% endif %}
+    <div class="form-grid">
+      {% for field in form %}
+        <div class="field {% if field.errors %}has-error{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+          {{ field }}
+          {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">💾 {% translate "Save settlement" %}</button>
+      <a class="btn btn-ghost" href="{% url 'sale_detail' sale.id %}">{% translate "Cancel" %}</a>
+    </div>
+  </form>
+
+  <div class="card">
+    <div class="list-title" style="margin-bottom:12px;">{% translate "As it stands now" %}</div>
+    {% include "core/partials/truck_account.html" %}
+  </div>
+</div>
+
+{% endblock %}

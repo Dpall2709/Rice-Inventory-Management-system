@@ -1,0 +1,424 @@
+{% extends 'core/base.html' %}
+{% load static i18n form_tags %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% if supplier %}{% url 'mill_report_detail' supplier.id %}{% else %}{% url 'purchase_list' %}{% endif %}{% endblock %}
+{% block page_title %}{% if mode == 'edit' %}{% translate "Edit purchase" %}{% else %}{% translate "Add purchase" %}{% endif %}{% endblock %}
+{% block browser_title %}{% if mode == 'edit' %}{% translate "Edit purchase" %}{% else %}{% translate "Add purchase" %}{% endif %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> ›
+      {% if supplier %}
+        <a href="{% url 'mill_list' %}">{% translate "Mills / Suppliers" %}</a> ›
+        <a href="{% url 'mill_report_detail' supplier.id %}">{{ supplier.mill_name }}</a> ›
+      {% else %}
+        <a href="{% url 'purchase_list' %}">{% translate "Purchases" %}</a> ›
+      {% endif %}
+      <span>{% if mode == 'edit' %}{{ purchase.purchase_ref|default:purchase.invoice_no }}{% else %}{% translate "New bill" %}{% endif %}</span>
+    </div>
+    <h1>{% if mode == 'edit' %}{% translate "Edit purchase bill" %}{% elif supplier %}{% blocktranslate with name=supplier.mill_name %}New bill from {{ name }}{% endblocktranslate %}{% else %}{% translate "Enter a purchase bill" %}{% endif %}</h1>
+    <p class="muted">
+      {% translate "What you bought from a mill. Each line adds that rice into your stock." %}
+      {% blocktranslate trimmed %}Rate is <strong>per kg</strong>; total = bags × bag weight × rate.{% endblocktranslate %}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if mode == 'add' %}<a class="btn btn-outline" href="{% url 'scan_purchase_bill' %}">📷 {% translate "Scan bill" %}</a>{% endif %}
+  </div>
+</div>
+
+{% if scan %}
+  {% include "core/partials/scan_review.html" %}
+{% endif %}
+
+{% if form.non_field_errors or formset.non_form_errors %}
+  <div class="banner is-danger">
+    <span>⛔</span>
+    <div>
+      {% for error in form.non_field_errors %}{{ error }}<br>{% endfor %}
+      {% for error in formset.non_form_errors %}{{ error }}<br>{% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+<form method="POST" novalidate id="purchaseForm">
+  {% csrf_token %}
+  {{ formset.management_form }}
+  {% if scan %}<input type="hidden" name="scan" value="1">{% endif %}
+  {% if supplier %}<input type="hidden" name="locked_mill" value="{{ supplier.id }}">{% endif %}
+
+  <!-- ===================== BILL HEADER ===================== -->
+  <div class="card">
+    <div class="form-section-title">{% translate "The mill's bill" %}</div>
+
+    <div class="form-grid">
+      {% if supplier %}
+        <div class="field">
+          <label>{% translate "Mill / Supplier" %}</label>
+          <div class="locked-supplier">🏭 <strong>{{ supplier.mill_name }}</strong>
+            <a class="small" href="{% url 'add_purchase' %}">{% translate "Change" %}</a></div>
+          {{ form.mill }}
+        </div>
+      {% endif %}
+      {% for field in form %}
+        {% if field.name|one_of:"mill,invoice_no,purchase_date,tax_type" and not supplier or field.name|one_of:"invoice_no,purchase_date,tax_type" %}
+          <div class="field {% if field.errors %}has-error{% endif %}">
+            <label for="{{ field.id_for_label }}">
+              {{ field.label }}{% if field.name|one_of:"mill,purchase_date" %} <span class="req">*</span>{% endif %}
+            </label>
+            {{ field }}
+            {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+            {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+          </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ===================== ITEM LINES ===================== -->
+  <div class="card">
+    <div class="list-header">
+      <div>
+        <div class="list-title">{% translate "Rice bought" %}</div>
+        <p class="muted">{% translate "GST% fills in from the product; change it if the bill says otherwise." %}</p>
+      </div>
+      <div class="list-actions">
+        <button type="button" class="btn btn-outline" data-add-line>➕ {% translate "Add line" %}</button>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table" id="itemsTable">
+        <thead>
+          <tr>
+            <th style="min-width:170px;">{% translate "Rice" %}</th>
+            <th style="width:70px;">{% translate "HSN" %}</th>
+            <th style="width:130px;">{% translate "Bag weight (kg)" %}</th>
+            <th style="width:120px;">{% translate "Bags" %}</th>
+            <th style="width:140px;">{% translate "Rate / kg" %}</th>
+            <th class="right">{% translate "Quantity (kg)" %}</th>
+            <th class="right">{% translate "Taxable" %}</th>
+            <th style="width:110px;">{% translate "GST %" %}</th>
+            <th class="right">{% translate "GST" %}</th>
+            <th class="right">{% translate "Line total" %}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="itemRows">
+          {% for item_form in formset %}
+            <tr data-line>
+              {{ item_form.id }}
+              <td data-label="{% translate 'Rice' %}">
+                {{ item_form.product }}
+                {% for error in item_form.product.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </td>
+              <td data-label="{% translate 'HSN' %}"><span class="muted" data-cell="hsn">—</span></td>
+              <td data-label="{% translate 'Bag weight' %}">
+                {{ item_form.bag_weight }}
+                {% for error in item_form.bag_weight.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </td>
+              <td data-label="{% translate 'Bags' %}">
+                {{ item_form.bag_count }}
+                {% for error in item_form.bag_count.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </td>
+              <td data-label="{% translate 'Rate / kg' %}">
+                {{ item_form.purchase_price }}
+                {% for error in item_form.purchase_price.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+              </td>
+              <td data-label="{% translate 'Quantity' %}" class="right num" data-cell="kg">0</td>
+              <td data-label="{% translate 'Taxable' %}" class="right num" data-cell="taxable">0.00</td>
+              <td data-label="{% translate 'GST %' %}">{{ item_form.gst_percent }}</td>
+              <td data-label="{% translate 'GST' %}" class="right num" data-cell="gst_amount">0.00</td>
+              <td data-label="{% translate 'Line total' %}" class="right num bold" data-cell="line_total">0.00</td>
+              <td>
+                <span style="display:none;">{{ item_form.DELETE }}</span>
+                <button type="button" class="btn btn-ghost btn-sm" data-remove-line title="{% translate 'Remove line' %}">✖</button>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="5">{% translate "Totals" %}</td>
+            <td class="right num" data-total="kg">0</td>
+            <td class="right num" data-total="taxable">0.00</td>
+            <td></td>
+            <td class="right num" data-total="gst">0.00</td>
+            <td class="right num bold" data-total="lines">0.00</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- hidden template used when adding a new line -->
+    <template id="emptyLine">
+      <tr data-line>
+        <td data-label="{% translate 'Rice' %}">{{ formset.empty_form.product }}</td>
+        <td data-label="{% translate 'HSN' %}"><span class="muted" data-cell="hsn">—</span></td>
+        <td data-label="{% translate 'Bag weight' %}">{{ formset.empty_form.bag_weight }}</td>
+        <td data-label="{% translate 'Bags' %}">{{ formset.empty_form.bag_count }}</td>
+        <td data-label="{% translate 'Rate / kg' %}">{{ formset.empty_form.purchase_price }}</td>
+        <td data-label="{% translate 'Quantity' %}" class="right num" data-cell="kg">0</td>
+        <td data-label="{% translate 'Taxable' %}" class="right num" data-cell="taxable">0.00</td>
+        <td data-label="{% translate 'GST %' %}">{{ formset.empty_form.gst_percent }}</td>
+        <td data-label="{% translate 'GST' %}" class="right num" data-cell="gst_amount">0.00</td>
+        <td data-label="{% translate 'Line total' %}" class="right num bold" data-cell="line_total">0.00</td>
+        <td>
+          <span style="display:none;">{{ formset.empty_form.DELETE }}</span>
+          <button type="button" class="btn btn-ghost btn-sm" data-remove-line title="{% translate 'Remove line' %}">✖</button>
+        </td>
+      </tr>
+    </template>
+  </div>
+
+  <!-- ===================== CHARGES + SUMMARY ===================== -->
+  <div class="two-col">
+
+    <div class="card">
+      <div class="form-section-title">{% translate "Discount on the bill" %}</div>
+      <div class="form-grid">
+        {% for field in form %}
+          {% if field.name == 'discount_amount' %}
+            <div class="field {% if field.errors %}has-error{% endif %}">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <div class="form-section-title">{% translate "Transport &amp; labour" %}</div>
+
+      <div class="charge-row">
+        <div class="field">
+          <label for="{{ form.transport_amount.id_for_label }}">{{ form.transport_amount.label }}</label>
+          {{ form.transport_amount }}
+        </div>
+        <label class="charge-toggle">
+          {{ form.transport_by_mill }}
+          <span>
+            <strong>{% translate "Mill charged this" %}</strong>
+            <small>{% translate "Tick only if it is printed on the mill's bill. Otherwise it is your own cost." %}</small>
+          </span>
+        </label>
+      </div>
+
+      <div class="charge-row">
+        <div class="field">
+          <label for="{{ form.labour_amount.id_for_label }}">{{ form.labour_amount.label }}</label>
+          {{ form.labour_amount }}
+        </div>
+        <label class="charge-toggle">
+          {{ form.labour_by_mill }}
+          <span>
+            <strong>{% translate "Mill charged this" %}</strong>
+            <small>{% translate "Tick only if it is printed on the mill's bill. Otherwise it is your own cost." %}</small>
+          </span>
+        </label>
+      </div>
+
+      <div class="charge-row">
+        <div class="field">
+          <label for="{{ form.expense_other.id_for_label }}">{{ form.expense_other.label }}</label>
+          {{ form.expense_other }}
+        </div>
+        <div class="field">
+          <label for="{{ form.expense_other_note.id_for_label }}">{{ form.expense_other_note.label }}</label>
+          {{ form.expense_other_note }}
+        </div>
+      </div>
+
+      <div class="field-hint" style="margin-top:10px;">
+        {% blocktranslate trimmed %}
+        Unticked, the money is <strong>your cost</strong> and the mill's bill stays pure rice.
+        Either way it counts towards your cost per kg.
+        {% endblocktranslate %}
+      </div>
+
+      <div class="form-section-title">{% translate "Paid to the mill now" %}</div>
+      <div class="form-grid">
+        {% for field in form %}
+          {% if field.name|one_of:"amount_paid_now,payment_mode" %}
+            <div class="field {% if field.errors %}has-error{% endif %}">
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+              {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+            </div>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+      <div class="form-section-title">{% translate "Notes" %}</div>
+      {{ form.notes }}
+    </div>
+
+    <div class="card summary-card">
+      <div class="list-title" style="margin-bottom:12px;">{% translate "Bill summary" %}</div>
+
+      <dl class="kv summary">
+        <dt>{% translate "Total bags" %}</dt><dd class="num" data-sum="bags">0</dd>
+        <dt>{% translate "Total quantity" %}</dt><dd class="num"><span data-sum="kg">0</span> {% translate "kg" %}</dd>
+        <dt>{% translate "Goods value" %}</dt><dd class="num">₹ <span data-sum="goods">0.00</span></dd>
+        <dt>{% translate "Discount" %}</dt><dd class="num text-warning">− ₹ <span data-sum="discount">0.00</span></dd>
+        <dt>{% translate "Taxable amount" %}</dt><dd class="num bold">₹ <span data-sum="taxable">0.00</span></dd>
+
+        <div data-tax-rows style="display:contents;">
+          <dt data-tax-label="cgst">{% translate "CGST" %}</dt><dd class="num">₹ <span data-sum="cgst">0.00</span></dd>
+          <dt data-tax-label="sgst">{% translate "SGST" %}</dt><dd class="num">₹ <span data-sum="sgst">0.00</span></dd>
+          <dt data-tax-label="igst">{% translate "IGST" %}</dt><dd class="num">₹ <span data-sum="igst">0.00</span></dd>
+        </div>
+
+        <dt data-billline="freight">{% translate "Transport (mill)" %}</dt><dd class="num" data-billline="freight">+ ₹ <span data-sum="freight">0.00</span></dd>
+        <dt data-billline="labour">{% translate "Labour (mill)" %}</dt><dd class="num" data-billline="labour">+ ₹ <span data-sum="labour">0.00</span></dd>
+        <dt>{% translate "Round off" %}</dt><dd class="num"><span data-sum="round">0.00</span></dd>
+      </dl>
+
+      <div class="grand-total">
+        <span>{% translate "Total payable to mill" %}</span>
+        <span class="num">₹ <span data-sum="total">0.00</span></span>
+      </div>
+
+      <div class="due-line">
+        <span class="muted">{% translate "Paid now" %}</span>
+        <span class="num">₹ <span data-sum="paid">0.00</span></span>
+      </div>
+      <div class="due-line">
+        <span class="muted">{% translate "Balance due to mill" %}</span>
+        <span class="num bold text-danger">₹ <span data-sum="due">0.00</span></span>
+      </div>
+
+      <div class="cost-box">
+        <div class="cost-title">{% translate "What this rice really costs you" %}</div>
+
+        <dl class="kv summary">
+          <dt>{% translate "Bill rate" %}</dt><dd class="num">₹ <span data-sum="bill_rate">0.00</span> / {% translate "kg" %}</dd>
+          <dt>{% translate "Your expenses" %}</dt><dd class="num">+ ₹ <span data-sum="extra_per_kg">0.00</span> / {% translate "kg" %}</dd>
+        </dl>
+
+        <div class="cost-line">
+          <span>{% translate "Cost per kg" %}</span>
+          <span class="num">₹ <span data-sum="cost_per_kg">0.00</span></span>
+        </div>
+
+        <div class="margin-row">
+          <label for="{{ form.margin_percent.id_for_label }}">{{ form.margin_percent.label }}</label>
+          {{ form.margin_percent }}
+        </div>
+
+        <div class="sell-line">
+          <span>{% translate "Sell at least at" %}</span>
+          <span class="num">₹ <span data-sum="suggested_per_kg">0.00</span> / {% translate "kg" %}</span>
+        </div>
+        <div class="due-line">
+          <span class="muted">{% blocktranslate trimmed %}Per bag (<span data-sum="avg_bag">0</span> kg){% endblocktranslate %}</span>
+          <span class="num">₹ <span data-sum="suggested_per_bag">0.00</span></span>
+        </div>
+        <div class="due-line">
+          <span class="muted">{% translate "Profit on this bill" %}</span>
+          <span class="num text-success">₹ <span data-sum="expected_profit">0.00</span></span>
+        </div>
+      </div>
+
+      <div class="form-actions" style="border:0; padding-top:16px;">
+        <button class="btn btn-primary btn-block" type="submit">
+          {% if mode == 'edit' %}💾 {% translate "Save changes" %}{% else %}💾 {% translate "Save purchase" %}{% endif %}
+        </button>
+        {% if mode == 'add' %}
+          <button class="btn btn-outline btn-block" type="submit" name="save_and_new" value="1">➕ {% translate "Save &amp; enter another" %}</button>
+        {% endif %}
+        <a class="btn btn-ghost btn-block" href="{% url 'purchase_list' %}">{% translate "Cancel" %}</a>
+      </div>
+    </div>
+
+  </div>
+</form>
+
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .locked-supplier {
+    display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 8px 12px;
+    border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-2);
+  }
+  .locked-supplier a { margin-left: auto; }
+  .two-col { display: grid; grid-template-columns: 1fr 380px; gap: 20px; align-items: start; }
+  .summary-card { position: sticky; top: 84px; }
+  .kv.summary { grid-template-columns: 1fr auto; gap: 7px 16px; }
+  .kv.summary dd { text-align: right; }
+  .grand-total {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+    margin-top: 14px; padding: 12px 14px; border-radius: var(--r);
+    background: var(--primary-soft); color: var(--primary);
+    font-weight: 700; font-size: 16px;
+  }
+  .due-line { display: flex; flex-wrap: wrap; justify-content: space-between; margin-top: 8px; font-size: 13px; }
+  .cost-box {
+    margin-top: 16px; padding: 14px; border-radius: var(--r);
+    border: 1px dashed var(--border-strong); background: var(--surface-2);
+  }
+  .cost-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 10px;
+  }
+  .cost-line, .sell-line {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 9px 11px; border-radius: var(--r-sm); margin-top: 10px; font-weight: 700;
+  }
+  .cost-line { background: var(--warning-soft); color: var(--warning); }
+  .sell-line { background: var(--success-soft); color: var(--success); font-size: 15px; }
+  .margin-row { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  .margin-row label { font-size: 12px; color: var(--text-muted); flex: 1 1 auto; }
+  .margin-row input { width: 90px; }
+  .charge-row {
+    display: grid; grid-template-columns: 1fr 1.2fr; gap: 16px;
+    align-items: end; margin-bottom: 14px;
+  }
+  .charge-toggle {
+    display: flex; gap: 10px; align-items: flex-start; cursor: pointer;
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r);
+    background: var(--surface-2);
+  }
+  .charge-toggle input { width: 18px; height: 18px; margin-top: 2px; flex: 0 0 18px; }
+  .charge-toggle strong { display: block; font-size: 13px; }
+  .charge-toggle small { color: var(--text-muted); font-size: 11.5px; line-height: 1.4; }
+  .charge-toggle:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+  @media (max-width: 720px) { .charge-row { grid-template-columns: 1fr; } }
+  /* Every number must be fully readable - these are money fields. */
+  #itemsTable input { min-width: 88px; text-align: right; }
+  #itemsTable input[data-cell="gst"] { min-width: 76px; }
+  #itemsTable select { min-width: 150px; }
+  #itemsTable th, #itemsTable td { padding-left: 10px; padding-right: 10px; }
+  @media (max-width: 1100px) {
+    .two-col { grid-template-columns: 1fr; }
+    .summary-card { position: static; }
+  }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  window.PRODUCT_TAX = {{ product_tax_json|safe }};
+  // "Leave empty for BILL-004": each supplier's next automatic bill number.
+  (function () {
+    var next = {{ next_bill_numbers|default:"{}"|safe }};
+    var mill = document.getElementById("id_mill");
+    var billNo = document.getElementById("id_invoice_no");
+    if (!mill || !billNo) return;
+    var word = "{% filter escapejs %}{% translate 'Leave empty for' %}{% endfilter %}";
+    function hint() {
+      var n = next[mill.value];
+      billNo.placeholder = n ? word + " " + n : "{% filter escapejs %}{% translate 'Number printed on the mill bill' %}{% endfilter %}";
+    }
+    mill.addEventListener("change", hint);
+    hint();
+  })();
+</script>
+<script src="{% static 'core/purchase_form.js' %}?v={{ asset_version }}"></script>
+{% endblock %}

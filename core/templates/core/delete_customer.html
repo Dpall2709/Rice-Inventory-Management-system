@@ -1,0 +1,44 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'customer_list' %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
+{% block page_title %}{% translate "Deactivate customer" %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'customer_list' %}">{% translate "Customers" %}</a> › <span>{{ customer.customer_name }}</span>
+    </div>
+    <h1>{% blocktranslate with name=customer.customer_name %}Deactivate “{{ name }}”?{% endblocktranslate %}</h1>
+  </div>
+</div>
+
+<div class="card">
+  <div class="banner is-warning">
+    <span>⚠️</span>
+    <div>
+      {% blocktranslate trimmed %}
+      The customer is hidden from the list and from new sales. Nothing is deleted —
+      their sales and payments stay exactly as they are.
+      {% endblocktranslate %}
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>{% translate "Mobile" %}</dt><dd>{{ customer.mobile|default:"—" }}</dd>
+    <dt>{% translate "GST number" %}</dt><dd>{{ customer.gst_number|default:"—" }}</dd>
+    <dt>{% translate "City" %}</dt><dd>{{ customer.city|default:"—" }}</dd>
+    <dt>{% translate "Opening balance" %}</dt><dd>₹ {{ customer.opening_balance }}</dd>
+  </dl>
+
+  <form method="POST" class="form-actions">
+    {% csrf_token %}
+    <button class="btn btn-danger" type="submit">🚫 {% translate "Deactivate" %}</button>
+    <a class="btn btn-ghost" href="{% url 'customer_list' %}">{% translate "Cancel" %}</a>
+  </form>
+</div>
+
+{% endblock %}

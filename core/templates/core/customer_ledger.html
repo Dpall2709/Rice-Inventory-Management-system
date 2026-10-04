@@ -1,0 +1,200 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+{% block back_url %}{% url 'customer_list' %}{% endblock %}
+{% block page_title %}{{ customer.customer_name }}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> ›
+      <a href="{% url 'customer_list' %}">{% translate "Customers" %}</a> ›
+      <span>{{ customer.customer_name }}</span>
+    </div>
+    <h1>{{ customer.customer_name }} {% if not customer.is_active %}<span class="badge badge-muted">{% translate "Inactive" %}</span>{% endif %}</h1>
+    <p class="muted">
+      {% if customer.mobile %}📞 {{ customer.mobile }} · {% endif %}
+      {% if customer.gst_number %}GSTIN {{ customer.gst_number }} · {% endif %}
+      {{ customer.full_billing_address|default:_("No address saved") }}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if customer.whatsapp_number %}
+      <a class="btn btn-outline" target="_blank" rel="noopener"
+         href="https://wa.me/{{ customer.whatsapp_number }}?text={% filter urlencode %}{% blocktranslate with name=customer.customer_name due=statement.total_due company=request.company.company_name %}Namaste {{ name }}, your outstanding balance with {{ company }} is ₹ {{ due }}.{% endblocktranslate %}{% endfilter %}">💬 WhatsApp</a>
+    {% endif %}
+    <a class="btn btn-outline" href="{% url 'edit_customer' customer.id %}">✏️ {% translate "Edit" %}</a>
+    <a class="btn btn-outline" href="{% url 'add_customer_payment' customer.id %}">💰 {% translate "Receive payment" %}</a>
+    {% if customer.is_active %}
+      <a class="btn btn-primary" href="{% url 'add_sale' %}?customer={{ customer.id }}">➕ {% translate "New sale" %}</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-icon">🧾</div>
+    <div>
+      <div class="stat-label">{% translate "Total billed" %}</div>
+      <div class="stat-value inr" data-value="{{ statement.total_sold }}">₹ {{ statement.total_sold }}</div>
+      <div class="stat-hint">{% blocktranslate count counter=rows|length %}{{ counter }} invoice{% plural %}{{ counter }} invoices{% endblocktranslate %}</div>
+    </div>
+  </div>
+  <div class="stat is-success">
+    <div class="stat-icon">✅</div>
+    <div>
+      <div class="stat-label">{% translate "Received" %}</div>
+      <div class="stat-value inr" data-value="{{ statement.total_received }}">₹ {{ statement.total_received }}</div>
+    </div>
+  </div>
+  <div class="stat {% if statement.total_due > 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">⏳</div>
+    <div>
+      <div class="stat-label">{% translate "Balance due" %}</div>
+      <div class="stat-value inr" data-value="{{ statement.total_due }}">₹ {{ statement.total_due }}</div>
+      {% if overdue_count %}<div class="stat-hint text-danger">{% blocktranslate count counter=overdue_count %}{{ counter }} invoice overdue{% plural %}{{ counter }} invoices overdue{% endblocktranslate %}</div>{% endif %}
+    </div>
+  </div>
+  <div class="stat {% if profit_total < 0 %}is-danger{% else %}is-success{% endif %}">
+    <div class="stat-icon">📈</div>
+    <div>
+      <div class="stat-label">{% translate "Profit earned on this customer" %}</div>
+      <div class="stat-value inr" data-value="{{ profit_earned }}">₹ {{ profit_earned }}</div>
+      <div class="stat-hint">{% translate "full profit when all is paid" %} ₹&nbsp;<span class="inr-abs" data-value="{{ profit_total }}">{{ profit_total }}</span></div>
+    </div>
+  </div>
+  <div class="stat">
+    <div class="stat-icon">💵</div>
+    <div>
+      <div class="stat-label">{% translate "Advance with you" %}</div>
+      <div class="stat-value inr" data-value="{{ statement.advance }}">₹ {{ statement.advance }}</div>
+      {% if statement.opening %}<div class="stat-hint">{% translate "Opening balance" %} ₹ {{ statement.opening }}</div>{% endif %}
+    </div>
+  </div>
+</div>
+
+{% url 'customer_statement_export' customer.id 'pdf' as pdf_url %}{% url 'customer_statement_export' customer.id 'xlsx' as xlsx_url %}
+{% include "core/partials/statement_filter.html" with pdf_url=pdf_url xlsx_url=xlsx_url %}
+
+<div class="card">
+  <div class="list-header">
+    <div class="list-title">{% translate "Invoices" %}</div>
+    <span class="muted">{% translate "Money received on account is applied to the oldest invoice first" %}</span>
+  </div>
+
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="table table-cards">
+      <thead>
+        <tr>
+          <th>{% translate "Invoice" %}</th><th>{% translate "Date" %}</th><th class="right">{% translate "Bags" %}</th>
+          <th class="right">{% translate "Total" %}</th><th class="right">{% translate "Received" %}</th>
+          <th class="right">{% translate "Due" %}</th><th class="right">{% translate "Actions" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td data-label="{% translate 'Invoice' %}"><a class="row-title" href="{% url 'sale_detail' row.sale.id %}">{{ row.sale.invoice_no }}</a>
+            {% if row.sale.broker_id %}<div class="row-sub">🤝 {{ row.sale.broker }}</div>{% endif %}</td>
+          <td data-label="{% translate 'Date' %}" class="nowrap">{{ row.sale.sale_date|date:"d M Y" }}
+            {% if row.sale.due_date %}<div class="row-sub">{% translate "due" %} {{ row.sale.due_date|date:"d M" }}</div>{% endif %}</td>
+          <td data-label="{% translate 'Bags' %}" class="right">{{ row.sale.total_bags }}</td>
+          <td data-label="{% translate 'Total' %}" class="right inr" data-value="{{ row.total }}">₹ {{ row.total }}</td>
+          <td data-label="{% translate 'Received' %}" class="right inr" data-value="{{ row.paid }}">₹ {{ row.paid }}</td>
+          <td data-label="{% translate 'Due' %}" class="right">
+            {% if row.due > 0 %}
+              <span class="bold text-danger inr" data-value="{{ row.due }}">₹ {{ row.due }}</span>
+              <div>{% if row.overdue %}<span class="badge badge-red">{% translate "Overdue" %}</span>{% elif row.status == 'partial' %}<span class="badge badge-orange">{% translate "Partial" %}</span>{% else %}<span class="badge badge-red">{% translate "Due" %}</span>{% endif %}</div>
+            {% else %}<span class="badge badge-green">{% translate "Paid" %}</span>{% endif %}
+          </td>
+          <td data-label="{% translate 'Actions' %}">
+            <div class="actions">
+              <a class="btn btn-outline btn-sm" href="{% url 'sale_detail' row.sale.id %}">{% translate "View" %}</a>
+              {% if row.due > 0 %}<a class="btn btn-ghost btn-sm" href="{% url 'add_sale_payment' row.sale.id %}" title="{% translate 'Receive payment' %}">💰</a>{% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">🧾</div>
+    <div class="empty-title">{% translate "No invoices yet" %}</div>
+    {% if customer.is_active %}<a class="btn btn-primary" href="{% url 'add_sale' %}?customer={{ customer.id }}">➕ {% translate "Make the first sale" %}</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% if broker_sales %}
+<div class="card">
+  <div class="list-header">
+    <div>
+      <div class="list-title">🤝 {% translate "Bought through brokers" %}</div>
+      <p class="muted">{% translate "The broker collects the money for these trucks, so what is due is in the broker's account." %}</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table table-cards">
+      <thead><tr><th>{% translate "Truck" %}</th><th>{% translate "Broker" %}</th><th class="right">{% translate "Invoice total" %}</th><th class="right">{% translate "Profit earned" %}</th></tr></thead>
+      <tbody>
+        {% for sale in broker_sales %}
+        <tr>
+          <td data-label="{% translate 'Truck' %}"><a class="row-title" href="{% url 'sale_detail' sale.id %}">{{ sale.vehicle_number|default:sale.invoice_no }}</a><div class="row-sub">{{ sale.sale_date|date:"d M Y" }} · {{ sale.invoice_no }}</div></td>
+          <td data-label="{% translate 'Broker' %}"><a href="{% url 'broker_report_detail' sale.broker_id %}">{{ sale.broker.broker_name }}</a></td>
+          <td data-label="{% translate 'Invoice total' %}" class="right inr" data-value="{{ sale.total_amount }}">₹ {{ sale.total_amount }}</td>
+          <td data-label="{% translate 'Profit earned' %}" class="right">{% if sale.profit is not None %}<span class="inr" data-value="{{ sale.profit_earned }}">₹ {{ sale.profit_earned }}</span>{% if sale.profit_pending %}<div class="row-sub">{% translate "of" %} ₹&nbsp;<span class="inr-abs" data-value="{{ sale.profit }}">{{ sale.profit }}</span></div>{% endif %}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="list-header">
+    <div class="list-title">{% translate "Account statement" %}</div>
+    <span class="muted">{% translate "Every invoice and receipt in date order" %}</span>
+  </div>
+  <div class="table-wrap">
+    <table class="table table-cards">
+      <thead>
+        <tr>
+          <th>{% translate "Date" %}</th><th>{% translate "Particulars" %}</th>
+          <th class="right">{% translate "Billed" %}</th><th class="right">{% translate "Received" %}</th>
+          <th class="right">{% translate "Balance" %}</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in history %}
+        <tr {% if entry.kind == 'opening' %}class="ledger-row-opening"{% endif %}>
+          <td data-label="{% translate 'Date' %}" class="nowrap">{{ entry.date|date:"d M Y"|default:"—" }}</td>
+          <td data-label="{% translate 'Particulars' %}">
+            {% if entry.sale %}<a href="{% url 'sale_detail' entry.sale.id %}">{{ entry.particulars }}</a>{% else %}{{ entry.particulars }}{% endif %}
+            {% if entry.payment.notes %}<div class="row-sub">{{ entry.payment.notes }}</div>{% endif %}
+          </td>
+          <td data-label="{% translate 'Billed' %}" class="right">{% if entry.debit %}<span class="inr" data-value="{{ entry.debit }}">₹ {{ entry.debit }}</span>{% endif %}</td>
+          <td data-label="{% translate 'Received' %}" class="right text-success">{% if entry.credit %}<span class="inr" data-value="{{ entry.credit }}">₹ {{ entry.credit }}</span>{% endif %}</td>
+          <td data-label="{% translate 'Balance' %}" class="right bold inr" data-value="{{ entry.balance }}">₹ {{ entry.balance }}</td>
+          <td class="right">
+            {% if entry.payment and not entry.payment.sale_id %}
+              <form method="POST" action="{% url 'delete_payment' entry.payment.id %}">
+                {% csrf_token %}
+                <button class="btn btn-ghost btn-sm" type="submit" title="{% translate 'Delete payment' %}"
+                        data-confirm="{% translate 'This receipt will be removed from the ledger.' %}"
+                        data-confirm-title="{% translate 'Delete this payment?' %}">🗑</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "core/base.html" %}
+{% load i18n %}
+{% block page_title %}{% translate "All companies (staff)" %}{% endblock %}
+
+{% block content %}
+
+<div class="card">
+  <div class="list-header">
+    <div class="list-title">{% translate "Subscriptions" %} — {% blocktranslate count counter=rows|length %}{{ counter }} company{% plural %}{{ counter }} companies{% endblocktranslate %}</div>
+    <div class="muted">{% blocktranslate with today=today|date:"d M Y" %}Today: {{ today }}{% endblocktranslate %}</div>
+  </div>
+
+  <div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>{% translate "Company" %}</th><th>{% translate "Owner" %}</th><th>{% translate "Mobile" %}</th><th>{% translate "Plan" %}</th>
+        <th>{% translate "Status" %}</th><th>{% translate "Valid until" %}</th><th>{% translate "Days left" %}</th><th>{% translate "Extend" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td class="bold">{{ row.company.company_name }}</td>
+          <td>{{ row.company.owner_name }}</td>
+          <td>{{ row.company.mobile }}</td>
+          <td>{{ row.subscription.plan.name|default:"—" }}</td>
+          <td>
+            {% if row.subscription.is_expired %}
+              <span class="badge badge-red">{% translate "Expired" %}</span>
+            {% elif row.subscription.in_trial %}
+              <span class="badge badge-orange">{% translate "Trial" %}</span>
+            {% else %}
+              <span class="badge badge-green">{% translate "Active" %}</span>
+            {% endif %}
+          </td>
+          <td>{{ row.subscription.end_date|date:"d-m-Y" }}</td>
+          <td class="{% if row.days_left < 0 %}d{% endif %}">{{ row.days_left }}</td>
+          <td>
+            <form method="POST" action="{% url 'billing:extend_subscription' row.company.id %}">
+              {% csrf_token %}
+              <select name="plan_code" class="input">
+                <option value="">— {% translate "plan" %} —</option>
+                {% for plan in plans %}
+                  <option value="{{ plan.code }}">{{ plan.name }} ({{ plan.duration_days }}d)</option>
+                {% endfor %}
+              </select>
+              <input class="input" type="number" name="days" placeholder="{% translate 'or days' %}" style="width:90px;">
+              <button class="btn btn-primary" type="submit">{% translate "Extend" %}</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+{% endblock %}

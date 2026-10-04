@@ -1,0 +1,9 @@
+{% load i18n %}
+{% get_current_language as LANG %}
+{# English / Hindi switch. Posts to Django's set_language view, which stores the choice in a cookie and sends the user back to the same page. #}
+<form class="lang-switch" action="{% url 'set_language' %}" method="post" data-no-loading title="{% translate 'Language' %}">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <button type="submit" name="language" value="en" class="{% if LANG == 'en' %}is-active{% endif %}" aria-pressed="{% if LANG == 'en' %}true{% else %}false{% endif %}" lang="en">EN</button>
+  <button type="submit" name="language" value="hi" class="{% if LANG == 'hi' %}is-active{% endif %}" aria-pressed="{% if LANG == 'hi' %}true{% else %}false{% endif %}" lang="hi">हिं</button>
+</form>

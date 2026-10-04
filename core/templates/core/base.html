@@ -1,85 +1,234 @@
-{% load static %}
+{% load static i18n %}
+{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Rice Billing App</title>
-    <link rel="stylesheet" href="{% static 'core/style.css' %}">
-</head>
-<body class="app">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block browser_title %}{{ request.company.company_name|default:"Rice Billing" }}{% endblock %} · Rice Billing</title>
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" >
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'core/style.css' %}?v={{ asset_version }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>">
+
+  {# Apply the saved theme before the first paint so the page never flashes. #}
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="app" data-nav="{% block nav_kind %}page{% endblock %}">
+
+  <div class="drawer-backdrop" data-close-nav></div>
+
+  <!-- ============================ SIDEBAR ============================ -->
+  <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <div class="brand-logo">🌾 Rice Billing</div>
+      <span class="brand-mark">🌾</span>
+      <span class="brand-logo">
+        <span>{{ request.company.company_name|default:"Rice Billing" }}</span>
+      </span>
     </div>
 
     <nav class="menu">
       <a class="menu-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}"
-         href="{% url 'dashboard' %}">🏠 Dashboard</a>
+         href="{% url 'dashboard' %}">
+        <span class="menu-icon">🏠</span><span>{% translate "Dashboard" %}</span>
+      </a>
 
-      <!-- ✅ FIXED (single-line if) -->
-      <a class="menu-item {% if request.resolver_match.url_name == 'mill_list' or request.resolver_match.url_name == 'add_mill' or request.resolver_match.url_name == 'mill_report_detail' or request.resolver_match.url_name == 'add_mill_payment' %}active{% endif %}"
+      <div class="menu-label">{% translate "Buying" %}</div>
+
+      <a class="menu-item {% if request.resolver_match.url_name in 'mill_list,add_mill,edit_mill,delete_mill,mill_report_detail,add_mill_payment' %}active{% endif %}"
          href="{% url 'mill_list' %}">
-        🏭 Mills / Suppliers
+        <span class="menu-icon">🏭</span><span>{% translate "Mills / Suppliers" %}</span>
       </a>
 
-      <a class="menu-item {% if request.resolver_match.url_name == 'product_list' or request.resolver_match.url_name == 'add_product' %}active{% endif %}"
+      <a class="menu-item {% if request.resolver_match.url_name in 'product_list,add_product,edit_product,delete_product,product_report' %}active{% endif %}"
          href="{% url 'product_list' %}">
-        📦 Products
+        <span class="menu-icon">📦</span><span>{% translate "Products" %}</span>
       </a>
 
-      <a class="menu-item {% if request.resolver_match.url_name == 'add_purchase' %}active{% endif %}"
-         href="{% url 'add_purchase' %}">🧾 Purchases</a>
-
-      <a class="menu-item {% if request.resolver_match.url_name == 'sale_list' or request.resolver_match.url_name == 'add_sale' or request.resolver_match.url_name == 'sale_detail' %}active{% endif %}"
-         href="{% url 'sale_list' %}">🚚 Sales</a>
-      <a class="menu-item {% if request.resolver_match.url_name == 'broker_list' or request.resolver_match.url_name == 'add_broker' or request.resolver_match.url_name == 'broker_report_detail' %}active{% endif %}"
-        href="{% url 'broker_list' %}">🧑‍💼 Brokers</a>
-      <a class="menu-item {% if request.resolver_match.url_name == 'customer_list' or request.resolver_match.url_name == 'add_customer' or request.resolver_match.url_name == 'edit_customer' or request.resolver_match.url_name == 'delete_customer' %}active{% endif %}"
-        href="{% url 'customer_list' %}">
-          👥 Customers
+      <a class="menu-item {% if request.resolver_match.url_name in 'add_purchase,purchase_list,purchase_detail,edit_purchase,delete_purchase,add_purchase_payment' %}active{% endif %}"
+         href="{% url 'purchase_list' %}">
+        <span class="menu-icon">🧾</span><span>{% translate "Purchases" %}</span>
       </a>
 
-      <a class="menu-item" href="#">💳 Payments</a>
-      <a class="menu-item" href="#">📊 Reports</a>
+      <div class="menu-label">{% translate "Selling" %}</div>
+
+      <a class="menu-item {% if request.resolver_match.url_name in 'sale_list,add_sale,sale_detail,sale_print,add_sale_payment,edit_sale,delete_sale' %}active{% endif %}"
+         href="{% url 'sale_list' %}">
+        <span class="menu-icon">🚚</span><span>{% translate "Sales" %}</span>
+      </a>
+
+      <a class="menu-item {% if request.resolver_match.url_name in 'customer_list,add_customer,edit_customer,delete_customer,customer_ledger,add_customer_payment' %}active{% endif %}"
+         href="{% url 'customer_list' %}">
+        <span class="menu-icon">👥</span><span>{% translate "Customers" %}</span>
+      </a>
+
+      <a class="menu-item {% if request.resolver_match.url_name in 'broker_list,add_broker,broker_report_detail,edit_broker,add_broker_payment' %}active{% endif %}"
+         href="{% url 'broker_list' %}">
+        <span class="menu-icon">🤝</span><span>{% translate "Brokers" %}</span>
+      </a>
+
+      <div class="menu-label">{% translate "Reports" %}</div>
+
+      <a class="menu-item {% if request.resolver_match.url_name == 'trade_register' %}active{% endif %}"
+         href="{% url 'trade_register' %}">
+        <span class="menu-icon">📊</span><span>{% translate "Truck register" %}</span>
+      </a>
+
+      <div class="menu-label">{% translate "Account" %}</div>
+
+      <a class="menu-item {% if request.resolver_match.url_name == 'business_profile' %}active{% endif %}"
+         href="{% url 'accounts:business_profile' %}">
+        <span class="menu-icon">🏪</span><span>{% translate "Business profile" %}</span>
+        {% if business_profile and not business_profile.complete %}
+          <span class="badge badge-orange" style="margin-left:auto;">{{ business_profile.percent }}%</span>
+        {% endif %}
+      </a>
+
+      <a class="menu-item {% if request.resolver_match.namespace == 'billing' and request.resolver_match.url_name == 'home' %}active{% endif %}"
+         href="{% url 'billing:home' %}">
+        <span class="menu-icon">💳</span><span>{% translate "Subscription" %}</span>
+      </a>
+
+      {% if request.user.is_staff %}
+        <a class="menu-item {% if request.resolver_match.url_name == 'manage_companies' %}active{% endif %}"
+           href="{% url 'billing:manage_companies' %}">
+          <span class="menu-icon">🛡</span><span>{% translate "All companies" %}</span>
+        </a>
+      {% endif %}
     </nav>
 
     <div class="sidebar-footer">
-      <!-- <button class="logout-btn" type="button">Logout</button> -->
-       <a href="{% url 'logout' %}" class="logout-btn">
-    Logout
-</a>
+      <a href="{% url 'logout' %}" class="logout-btn">
+        <span class="menu-icon">⏻</span><span>{% translate "Logout" %}</span>
+      </a>
     </div>
   </aside>
 
-  <!-- MAIN -->
+  <!-- ============================= MAIN ============================== -->
   <div class="main">
 
-    <!-- TOPBAR -->
     <header class="topbar">
       <div class="topbar-left">
-        <h1 class="topbar-title">{% block page_title %}{% endblock %}</h1>
+        <button class="icon-btn nav-toggle" type="button" data-toggle-nav title="{% translate 'Menu' %}">☰</button>
+        <button class="icon-btn" type="button" data-toggle-sidebar title="{% translate 'Show / hide the menu' %}" aria-label="{% translate 'Show / hide the menu' %}">☰</button>
+
+        {% block back_button %}
+          {# A plain link to the page one level up, named after it ("← Purchases"), #}
+          {# so it is always clear where it goes. Not shown on the dashboard. #}
+          {% if request.resolver_match.url_name != 'dashboard' %}
+            <a class="back-btn" href="{% block back_url %}{% url 'dashboard' %}{% endblock %}" data-back
+               title="{% translate 'Go up one level' %}">
+              <span aria-hidden="true">←</span> <span class="back-label">{% translate "Back" %}</span>
+            </a>
+          {% endif %}
+        {% endblock %}
+        <h1 class="topbar-title">{% block page_title %}{% translate "Dashboard" %}{% endblock %}</h1>
       </div>
 
       <div class="topbar-right">
-        <button class="icon-btn" type="button" title="Notifications">🔔</button>
+        {% block topbar_search %}{% endblock %}
 
-        <div class="user">
-          <div class="user-avatar">S</div>
-          <div class="user-name">{{ request.user.username }}</div>
+        {% include "core/partials/language_switch.html" %}
+
+        <button class="icon-btn" type="button" data-toggle-theme title="{% translate 'Switch light / dark' %}" data-title-light="{% translate 'Switch to light mode' %}" data-title-dark="{% translate 'Switch to dark mode' %}">🌙</button>
+
+        <div class="user-menu-wrap">
+          <div class="user" data-toggle-user-menu>
+            <div class="user-avatar">{{ request.user.username|slice:":1"|upper|default:"U" }}</div>
+            <div>
+              <div class="user-name">{{ request.user.get_full_name|default:request.user.username }}</div>
+              <div class="user-role">{% if request.user_profile %}{{ request.user_profile.get_role_display }}{% else %}{% translate "user" %}{% endif %}</div>
+            </div>
+          </div>
+
+          <div class="user-menu" id="userMenu" hidden>
+            <div class="user-menu-head">
+              <div class="bold">{{ request.company.company_name|default:"—" }}</div>
+              <div class="muted">{{ request.user.email|default:request.user.username }}</div>
+            </div>
+            <a href="{% url 'billing:home' %}">💳 {% translate "Subscription" %}
+              {% if request.subscription %}
+                <span class="badge {% if request.read_only %}badge-red{% elif request.subscription.in_trial %}badge-orange{% else %}badge-green{% endif %}" style="margin-left:auto;">
+                  {{ request.subscription.days_left }}d
+                </span>
+              {% endif %}
+            </a>
+            {% if request.user.is_staff %}
+              <a href="/admin/">🛠 {% translate "Django admin" %}</a>
+            {% endif %}
+            <a href="{% url 'accounts:business_profile' %}">🏪 {% translate "Business profile" %}</a>
+            <a href="{% url 'password_reset' %}">🔑 {% translate "Change password" %}</a>
+            <div class="divider" style="margin:6px 0;"></div>
+            <a href="{% url 'logout' %}">⏻ {% translate "Logout" %}</a>
+          </div>
         </div>
       </div>
     </header>
 
-    <!-- PAGE CONTENT -->
-    <main class="content">
+    <main class="content {% block content_class %}{% endblock %}">
+
+      {% if request.subscription %}
+        {% if request.read_only %}
+          <div class="banner is-danger">
+            <span>⛔</span>
+            <div>
+              <strong>{% translate "Your subscription has ended." %}</strong>
+              {% translate "Your data is safe and every report still opens, but nothing new can be saved." %}
+            </div>
+            <a href="{% url 'billing:home' %}" style="margin-left:auto;">{% translate "Renew now" %} →</a>
+          </div>
+        {% elif request.subscription.needs_warning %}
+          <div class="banner is-warning">
+            <span>⏳</span>
+            <div>
+              {% with days=request.subscription.days_left %}
+                {% if request.subscription.in_trial %}
+                  {% blocktranslate count days=days %}Your free trial ends in <strong>{{ days }} day</strong>.{% plural %}Your free trial ends in <strong>{{ days }} days</strong>.{% endblocktranslate %}
+                {% else %}
+                  {% blocktranslate count days=days %}Your subscription ends in <strong>{{ days }} day</strong>.{% plural %}Your subscription ends in <strong>{{ days }} days</strong>.{% endblocktranslate %}
+                {% endif %}
+              {% endwith %}
+            </div>
+            <a href="{% url 'billing:home' %}" style="margin-left:auto;">{% translate "Choose a plan" %} →</a>
+          </div>
+        {% endif %}
+      {% endif %}
+
+      {% if business_profile and not business_profile.complete and request.resolver_match.url_name != 'business_profile' %}
+        <div class="banner is-warning">
+          <span>🧾</span>
+          <div>
+            <strong>{% translate "Your business details are incomplete." %}</strong>
+            {% blocktranslate count counter=business_profile.missing|length %}{{ counter }} detail your invoices need is missing.{% plural %}{{ counter }} details your invoices need are missing.{% endblocktranslate %}
+          </div>
+          <a href="{% url 'accounts:business_profile' %}" style="margin-left:auto;">{% translate "Complete now" %} →</a>
+        </div>
+      {% endif %}
 
       {% if messages %}
-        <div class="msg-wrap">
+        <div class="msg-wrap" id="toasts">
           {% for message in messages %}
-            <div class="msg success">{{ message }}</div>
+            {# The level tag decides the colour: errors are no longer green. #}
+            <div class="msg {{ message.tags }}">
+              <span>
+                {% if 'error' in message.tags %}⛔
+                {% elif 'warning' in message.tags %}⚠️
+                {% elif 'info' in message.tags or 'debug' in message.tags %}ℹ️
+                {% else %}✅{% endif %}
+              </span>
+              <div>{{ message }}</div>
+              <button class="msg-close" type="button" data-close-toast aria-label="{% translate 'Dismiss' %}">×</button>
+            </div>
           {% endfor %}
         </div>
       {% endif %}
@@ -87,12 +236,25 @@
       {% block content %}{% endblock %}
     </main>
 
-    <!-- FOOTER -->
     <footer class="footer">
-      © 2026 Rice Billing App
+      © {% now "Y" %} {{ request.company.company_name|default:"Rice Billing App" }} · {% translate "powered by Rice Billing" %}
     </footer>
 
   </div>
 
+  <!-- confirm dialog, used by any [data-confirm] form or link -->
+  <div class="modal-backdrop" id="confirmModal" data-default-title="{% translate 'Please confirm' %}" hidden>
+    <div class="modal">
+      <h3 id="confirmTitle">{% translate "Are you sure?" %}</h3>
+      <p id="confirmText"></p>
+      <div class="modal-actions">
+        <button class="btn btn-outline" type="button" data-confirm-cancel>{% translate "Cancel" %}</button>
+        <button class="btn btn-danger" type="button" data-confirm-ok>{% translate "Yes, continue" %}</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="{% static 'core/app.js' %}?v={{ asset_version }}"></script>
+  {% block extra_js %}{% endblock %}
 </body>
 </html>

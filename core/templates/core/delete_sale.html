@@ -1,0 +1,66 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'sale_detail' sale.id %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
+{% block page_title %}{% translate "Delete sale" %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      <a href="{% url 'sale_list' %}">{% translate "Sales" %}</a> ›
+      <a href="{% url 'sale_detail' sale.id %}">{{ sale.invoice_no }}</a> › <span>{% translate "Delete" %}</span>
+    </div>
+    <h1>{% blocktranslate with no=sale.invoice_no %}Delete invoice {{ no }}?{% endblocktranslate %}</h1>
+  </div>
+</div>
+
+<div class="card card-narrow">
+
+  <div class="banner {% if can_delete %}is-warning{% else %}is-danger{% endif %}">
+    <span>{% if can_delete %}⚠️{% else %}🔒{% endif %}</span>
+    <div>
+      {% if can_delete %}
+        {% blocktranslate with bags=sale.total_bags trimmed %}
+          Deleting this invoice puts <strong>{{ bags }} bags</strong> back into stock and removes it
+          from the customer's ledger. This cannot be undone.
+        {% endblocktranslate %}
+      {% else %}
+        {% blocktranslate count counter=payment_count trimmed %}
+          This invoice has {{ counter }} payment recorded against it and <strong>cannot be deleted</strong>.
+          Delete that payment first, or edit the invoice instead.
+        {% plural %}
+          This invoice has {{ counter }} payments recorded against it and <strong>cannot be deleted</strong>.
+          Delete those payments first, or edit the invoice instead.
+        {% endblocktranslate %}
+      {% endif %}
+    </div>
+  </div>
+
+  <dl class="kv">
+    <dt>{% translate "Customer" %}</dt><dd>{{ sale.customer_name }}</dd>
+    <dt>{% translate "Invoice date" %}</dt><dd>{{ sale.sale_date|date:"d M Y" }}</dd>
+    <dt>{% translate "Invoice total" %}</dt><dd>₹ {{ sale.total_amount }}</dd>
+    <dt>{% translate "Bags" %}</dt>
+    <dd>
+      {% for item in items %}
+        {{ item.bag_count }} × {{ item.bag_weight }}kg {{ item.product.rice_name }}{% if not forloop.last %}<br>{% endif %}
+      {% empty %}—{% endfor %}
+    </dd>
+  </dl>
+
+  <form method="POST" class="form-actions">
+    {% csrf_token %}
+    {% if can_delete %}
+      <button class="btn btn-danger" type="submit"
+              data-confirm="{% blocktranslate with no=sale.invoice_no %}Invoice {{ no }} will be removed permanently.{% endblocktranslate %}"
+              data-confirm-title="{% translate 'Delete this sale?' %}">🗑 {% translate "Delete permanently" %}</button>
+    {% endif %}
+    <a class="btn btn-ghost" href="{% url 'sale_detail' sale.id %}">{% translate "Cancel" %}</a>
+  </form>
+
+</div>
+
+{% endblock %}

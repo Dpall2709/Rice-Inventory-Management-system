@@ -1,0 +1,73 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+{% block nav_kind %}form{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
+{% block back_url %}{% if kind == 'sale' %}{% url 'sale_detail' sale.id %}{% elif kind == 'broker' or kind == 'broker_receipt' %}{% url 'broker_report_detail' broker.id %}{% else %}{% url 'customer_ledger' customer.id %}{% endif %}{% endblock %}
+{% block page_title %}{% if kind == 'broker' %}{% translate "Pay commission" %}{% elif kind == 'broker_receipt' %}{% translate "Receive from broker" %}{% else %}{% translate "Receive payment" %}{% endif %}{% endblock %}
+
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="crumbs">
+      {% if kind == 'broker' or kind == 'broker_receipt' %}
+        <a href="{% url 'broker_list' %}">{% translate "Brokers" %}</a> ›
+        <a href="{% url 'broker_report_detail' broker.id %}">{{ broker.broker_name }}</a> ›
+      {% elif kind == 'sale' %}
+        <a href="{% url 'sale_list' %}">{% translate "Sales" %}</a> ›
+        <a href="{% url 'sale_detail' sale.id %}">{{ sale.invoice_no }}</a> ›
+      {% else %}
+        <a href="{% url 'customer_list' %}">{% translate "Customers" %}</a> ›
+        <a href="{% url 'customer_ledger' customer.id %}">{{ customer.customer_name }}</a> ›
+      {% endif %}
+      <span>{% if kind == 'broker' %}{% translate "Pay" %}{% else %}{% translate "Receive" %}{% endif %}</span>
+    </div>
+    <h1>
+      {% if kind == 'broker' %}
+        {% blocktranslate with name=broker.broker_name %}Pay commission to {{ name }}{% endblocktranslate %}
+      {% elif kind == 'broker_receipt' %}
+        {% blocktranslate with name=broker.broker_name %}Money received from {{ name }}{% endblocktranslate %}
+      {% elif kind == 'sale' %}
+        {% blocktranslate with no=sale.invoice_no %}Money received for {{ no }}{% endblocktranslate %}
+      {% else %}
+        {% blocktranslate with name=customer.customer_name %}Money received from {{ name }}{% endblocktranslate %}
+      {% endif %}
+    </h1>
+    <p class="muted">
+      {% if kind == 'broker' %}
+        {% translate "Commission you still owe him" %}: <strong>₹ {{ due }}</strong>
+      {% elif kind == 'broker_receipt' %}
+        {% translate "He still has to pay you for his trucks" %}: <strong>₹ {{ due }}</strong>.
+        {% translate "The money is applied to his oldest unpaid trucks first." %}
+      {% elif kind == 'sale' %}
+        {% translate "Still due on this invoice" %}: <strong>₹ {{ due }}</strong>.
+        {% if broker %}<br>🤝 {% blocktranslate with name=broker.broker_name %}This truck was sold through {{ name }} - the money is recorded as paid by him.{% endblocktranslate %}<br>{% endif %}
+        {% translate "Anything extra is applied to the customer's other unpaid invoices." %}
+      {% else %}
+        {% translate "This customer owes you" %}: <strong>₹ {{ due }}</strong>.
+        {% translate "The money is applied to the oldest unpaid invoices first." %}
+        {% if advance > 0 %}<br>{% translate "Advance already with you" %}: ₹ {{ advance }}{% endif %}
+      {% endif %}
+    </p>
+  </div>
+</div>
+
+<form method="POST" class="card card-narrow" novalidate>
+  {% csrf_token %}
+  <div class="form-grid">
+    {% for field in form %}
+      <div class="field {% if field.errors %}has-error{% endif %}">
+        <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+        {{ field }}
+        {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="submit">💾 {% if kind == 'broker' %}{% translate "Save payment" %}{% else %}{% translate "Save receipt" %}{% endif %}</button>
+    <a class="btn btn-ghost" href="{% if kind == 'sale' %}{% url 'sale_detail' sale.id %}{% elif kind == 'broker' or kind == 'broker_receipt' %}{% url 'broker_report_detail' broker.id %}{% else %}{% url 'customer_ledger' customer.id %}{% endif %}">{% translate "Cancel" %}</a>
+  </div>
+</form>
+
+{% endblock %}

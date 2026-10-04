@@ -1,0 +1,95 @@
+{% load static i18n %}{% get_current_language as LANGUAGE_CODE %}<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#4f46e5">
+  <title>{% block title %}{% translate "Login" %}{% endblock %} · Rice Billing</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'core/style.css' %}?v={{ asset_version }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>">
+
+  {# Same saved theme as the app, applied before the first paint. #}
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("theme");
+        if (t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body class="auth">
+
+  <div class="auth-shell">
+
+    <!-- Brand panel: hidden on phones, where every pixel goes to the form. -->
+    <aside class="auth-brand">
+      <div class="auth-brand-top">
+        <span class="auth-logo">🌾</span>
+        <span class="auth-name">Rice Billing</span>
+      </div>
+
+      <div class="auth-pitch">
+        <h2>{% translate "Billing, stock and dues for rice traders - in one place." %}</h2>
+        <ul>
+          <li><span>🧾</span>{% translate "GST invoices and purchase bills in a minute" %}</li>
+          <li><span>📦</span>{% translate "Live stock by lot, with real cost per kg" %}</li>
+          <li><span>💰</span>{% translate "Know who owes you and whom you owe, every day" %}</li>
+          <li><span>📷</span>{% translate "Scan a mill's bill instead of typing it" %}</li>
+        </ul>
+      </div>
+
+      <div class="auth-brand-foot">{% translate "Works on phone and computer · English / हिन्दी" %}</div>
+    </aside>
+
+    <main class="auth-main">
+      <div class="auth-top">
+        <a class="auth-mobile-brand" href="{% url 'login' %}"><span>🌾</span> Rice Billing</a>
+        <div class="auth-top-actions">
+          {% include "core/partials/language_switch.html" %}
+          <button class="icon-btn" type="button" data-toggle-theme
+                  data-title-light="{% translate 'Switch to light mode' %}"
+                  data-title-dark="{% translate 'Switch to dark mode' %}"
+                  title="{% translate 'Switch light / dark' %}">🌙</button>
+        </div>
+      </div>
+
+      <div class="auth-card {% block card_class %}{% endblock %}">
+        {% if messages %}
+          {% for message in messages %}
+            <div class="auth-msg {% if 'error' in message.tags %}is-error{% elif 'warning' in message.tags %}is-warning{% else %}is-ok{% endif %}" role="alert">
+              <span>{% if 'error' in message.tags %}⛔{% elif 'warning' in message.tags %}⚠️{% else %}✅{% endif %}</span>
+              <div>{{ message }}</div>
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        {% block content %}{% endblock %}
+      </div>
+
+      <div class="auth-foot">© {% now "Y" %} Rice Billing</div>
+    </main>
+  </div>
+
+  <script src="{% static 'core/app.js' %}?v={{ asset_version }}"></script>
+  <script>
+    // Show / hide password.
+    document.querySelectorAll("[data-toggle-password]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var input = document.getElementById(btn.getAttribute("data-toggle-password"));
+        if (!input) return;
+        var show = input.type === "password";
+        input.type = show ? "text" : "password";
+        btn.textContent = show ? "🙈" : "👁";
+        btn.setAttribute("aria-pressed", show ? "true" : "false");
+      });
+    });
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
