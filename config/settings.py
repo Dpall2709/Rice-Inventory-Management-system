@@ -54,8 +54,8 @@ if not SECRET_KEY:
         )
 
 # Example: ALLOWED_HOSTS=ricebilling.in,www.ricebilling.in
-ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "127.0.0.1,localhost" if DEBUG else "")
-
+# ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "127.0.0.1,localhost" if DEBUG else "")
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
 # While developing, allow sharing the local server through an ngrok tunnel
