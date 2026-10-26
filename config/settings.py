@@ -55,7 +55,12 @@ if not SECRET_KEY:
 
 # Example: ALLOWED_HOSTS=ricebilling.in,www.ricebilling.in
 # ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "127.0.0.1,localhost" if DEBUG else "")
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+# ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+ALLOWED_HOSTS = env_list(
+    "ALLOWED_HOSTS",
+    "localhost,127.0.0.1"
+)
+
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
 # While developing, allow sharing the local server through an ngrok tunnel
@@ -87,6 +92,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     # Picks English or Hindi for each request, from the language cookie set by
     # the switcher in the top bar (falls back to the browser's language).
@@ -197,6 +203,7 @@ STATIC_URL = '/static/'
 # Project-wide static folder, used only if it exists (app static always works).
 STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # ---------------------------------------------------------------------------
 # Fallback company details for invoices.
