@@ -25,6 +25,7 @@ from django.utils.translation import gettext_lazy
 from core.models import Payment, Sale
 from core.services.customer_ledger import status_map_for_sales
 from core.services.sale_service import earned_profit, money, payment_status, sale_profit
+from core.utils import qty_str
 
 ON_THE_WAY = "on_the_way"
 AWAITING = "awaiting_payment"
@@ -44,7 +45,7 @@ def _purchase_lines(lots):
     grouped = OrderedDict()
     for lot in lots:
         key = (lot.mill.mill_name, Decimal(lot.buy_rate_per_kg))
-        grouped[key] = grouped.get(key, 0) + int(lot.bag_count)
+        grouped[key] = grouped.get(key, 0) + Decimal(lot.bag_count)
     return [(mill, rate, bags) for (mill, rate), bags in grouped.items()]
 
 
@@ -142,7 +143,7 @@ def register_totals(rows):
         "bills_partial": sum(1 for r in rows if r["payment_status"] == "partial"),
         "bills_due": sum(1 for r in rows if r["payment_status"] == "due"),
         "trucks": len(rows),
-        "bags": sum(int(r["bags"] or 0) for r in rows),
+        "bags": sum(Decimal(r["bags"] or 0) for r in rows),
         "weight_kg": total("weight_kg"),
         "investment": total("total_cost"),
         "party_owes": total("net_receivable"),
@@ -210,7 +211,7 @@ def register_excel(company, rows, totals, title):
 
     wb = Workbook()
     ws = wb.active
-    ws.title = _("Truck register")[:31]
+    ws.title = _("Trade register")[:31]
 
     ws.append([company.company_name])
     ws.append([title])
@@ -218,10 +219,10 @@ def register_excel(company, rows, totals, title):
     ws.append([])
 
     headers = [
-        _("S. No"), _("Date"), _("Invoice"), _("Truck no"), _("Mill"), _("Purchase rate × bags"),
-        _("Bags"), _("Weight (kg)"), _("Rice cost"), _("Loading"), _("Freight advance"),
-        _("Freight balance (party)"), _("Total cost"), _("Sale rate/kg"), _("Customer"),
-        _("Unloaded on"), _("Party weight (kg)"), _("Shortage (kg)"), _("Party value"), _("Broker"),
+        _("S. No"), _("Date"), _("Invoice"), _("Vehicle no"), _("Supplier"), _("Purchase rate × qty"),
+        _("Qty"), _("Total (units)"), _("Goods cost"), _("Loading"), _("Freight advance"),
+        _("Freight balance (party)"), _("Total cost"), _("Sale rate"), _("Customer"),
+        _("Unloaded on"), _("Party qty (units)"), _("Shortage (units)"), _("Party value"), _("Broker"),
         _("Who pays us"),
         _("Cash discount"), _("Brokerage"), _("Party owes"), _("Received"), _("Last payment"),
         _("Due"), _("Full profit / loss"), _("Profit earned"), _("Payment"), _("Status"),
@@ -241,7 +242,7 @@ def register_excel(company, rows, totals, title):
         sale = r["sale"]
         ws.append([
             index, sale.sale_date, sale.invoice_no, sale.vehicle_number, ", ".join(r["mills"]),
-            "; ".join(f"{rate} × {bags}" for _mill, rate, bags in r["purchase_lines"]),
+            "; ".join(f"{qty_str(rate)} × {qty_str(bags)}" for _mill, rate, bags in r["purchase_lines"]),
             r["bags"], num(r["weight_kg"]), num(r["goods_cost"]), num(r["loading"]),
             num(r["freight_advance"]), num(r["freight_balance"]), num(r["total_cost"]),
             num(r["sale_rate"]), sale.customer_name, r["unload_date"], num(r["received_kg"]),
@@ -258,7 +259,7 @@ def register_excel(company, rows, totals, title):
 
     ws.append([])
     for label, value in [
-        (_("Trucks"), totals["trucks"]),
+        (_("Sales"), totals["trucks"]),
         (_("Paid"), totals["bills_paid"]),
         (_("Part paid"), totals["bills_partial"]),
         (_("Unpaid"), totals["bills_due"]),
@@ -291,6 +292,6 @@ def register_excel(company, rows, totals, title):
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-    response["Content-Disposition"] = 'attachment; filename="truck-register.xlsx"'
+    response["Content-Disposition"] = 'attachment; filename="trade-register.xlsx"'
     wb.save(response)
     return response

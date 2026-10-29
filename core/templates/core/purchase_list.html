@@ -1,5 +1,5 @@
 {% extends 'core/base.html' %}
-{% load i18n %}
+{% load i18n form_tags %}
 {% block page_title %}{% translate "Purchases" %}{% endblock %}
 
 {% block content %}
@@ -8,7 +8,7 @@
   <div>
     <div class="crumbs"><a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> › <span>{% translate "Purchases" %}</span></div>
     <h1>{% translate "Purchases" %}</h1>
-    <p class="muted">{% translate "Every mill bill: what you bought, what it cost, what you paid and what you still owe." %}</p>
+    <p class="muted">{% translate "Every supplier bill: what you bought, what it cost, what you paid and what you still owe." %}</p>
   </div>
   <div class="page-actions">
     <a class="btn btn-outline" href="{% url 'scan_purchase_bill' %}">📷 {% translate "Scan bill" %}</a>
@@ -22,14 +22,14 @@
     {% include "core/partials/period_chips.html" %}
     <div class="filter-grid">
       <label class="filter-field filter-wide"><span>{% translate "Search" %}</span>
-        <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Bill no, our ref, or mill…' %}"></label>
+        <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Bill no, our ref, or supplier…' %}"></label>
       <label class="filter-field"><span>{% translate "From" %}</span>
         <input class="input" type="date" name="from" value="{{ date_from|date:'Y-m-d' }}"></label>
       <label class="filter-field"><span>{% translate "To" %}</span>
         <input class="input" type="date" name="to" value="{{ date_to|date:'Y-m-d' }}"></label>
-      <label class="filter-field"><span>{% translate "Mill" %}</span>
+      <label class="filter-field"><span>{% translate "Supplier" %}</span>
         <select class="select" name="mill">
-          <option value="">{% translate "All mills" %}</option>
+          <option value="">{% translate "All suppliers" %}</option>
           {% for mill in mills %}<option value="{{ mill.id }}" {% if mill_id == mill.id|stringformat:"s" %}selected{% endif %}>{{ mill.mill_name }}</option>{% endfor %}
         </select></label>
       <label class="filter-field"><span>{% translate "Payment" %}</span>
@@ -59,7 +59,7 @@
     <div>
       <div class="stat-label">{% translate "Purchase value" %}</div>
       <div class="stat-value inr" data-value="{{ total_value }}">₹ {{ total_value }}</div>
-      <div class="stat-hint">{% blocktranslate count counter=count with bags=total_bags %}{{ counter }} bill · {{ bags }} bags{% plural %}{{ counter }} bills · {{ bags }} bags{% endblocktranslate %}</div>
+      <div class="stat-hint">{% blocktranslate count counter=count with qty=total_bags|qty %}{{ counter }} bill · qty {{ qty }}{% plural %}{{ counter }} bills · qty {{ qty }}{% endblocktranslate %}</div>
     </div>
   </div>
   <div class="stat">
@@ -90,7 +90,7 @@
 
 <!-- ===================== BILLS (newest first) ===================== -->
 <div class="list-header" style="margin:4px 0 10px;">
-  <div class="list-title">🧾 {% translate "Mill bills" %} <span class="muted small">· {% translate "newest first" %}</span></div>
+  <div class="list-title">🧾 {% translate "Supplier bills" %} <span class="muted small">· {% translate "newest first" %}</span></div>
 </div>
 
 {% for purchase in purchases %}
@@ -122,9 +122,9 @@
   <div class="doc-body">
     <section class="doc-col">
       <h4>① {% translate "Bought from" %}</h4>
-      <div class="line"><span>{% translate "Mill" %}</span><a href="{% url 'mill_report_detail' purchase.mill.id %}">{{ purchase.mill.mill_name }}</a></div>
-      <div class="line"><span>{% translate "Rice" %}</span><span>{{ purchase.rice|join:", "|default:"—" }}</span></div>
-      <div class="line"><span>{% translate "Bags" %}</span><span>{{ purchase.bags }} · {{ purchase.weight_kg|floatformat:"-2g" }} kg</span></div>
+      <div class="line"><span>{% translate "Supplier" %}</span><a href="{% url 'mill_report_detail' purchase.mill.id %}">{{ purchase.mill.mill_name }}</a></div>
+      <div class="line"><span>{% translate "Products" %}</span><span>{{ purchase.rice|join:", "|default:"—" }}</span></div>
+      <div class="line"><span>{% translate "Qty" %}</span><span>{{ purchase.bags|qty }} · {{ purchase.weight_kg|qty }} {% translate "units" %}</span></div>
     </section>
 
     <section class="doc-col">
@@ -137,7 +137,7 @@
     <section class="doc-col">
       <h4>③ {% translate "Payment" %}</h4>
       <div class="line"><span>{% translate "Paid" %}</span><span class="text-success inr" data-value="{{ purchase.paid }}">₹ {{ purchase.paid }}</span></div>
-      {% if purchase.applied_from_account %}<div class="muted small">{% blocktranslate with amount=purchase.applied_from_account %}incl. ₹ {{ amount }} from money paid to the mill on account{% endblocktranslate %}</div>{% endif %}
+      {% if purchase.applied_from_account %}<div class="muted small">{% blocktranslate with amount=purchase.applied_from_account %}incl. ₹ {{ amount }} from money paid to the supplier on account{% endblocktranslate %}</div>{% endif %}
       <div class="line total"><span>{% translate "Due" %}</span>
         {% if purchase.due > 0 %}<span class="text-danger inr" data-value="{{ purchase.due }}">₹ {{ purchase.due }}</span>{% else %}<span class="text-success">₹ 0</span>{% endif %}</div>
       <div class="pay-bar" title="{{ purchase.paid_percent }}%"><span style="width: {{ purchase.paid_percent }}%"></span></div>
@@ -158,7 +158,7 @@
     <div class="empty-title">{% if filtered %}{% translate "No bill matches this filter" %}{% else %}{% translate "No purchases yet" %}{% endif %}</div>
     <p>
       {% if filtered %}{% translate "Try a wider date range or clear the filters." %}
-      {% else %}{% translate "Enter the bills your mills give you — that is what puts rice into your stock." %}{% endif %}
+      {% else %}{% translate "Enter the bills your suppliers give you — that is what puts goods into your stock." %}{% endif %}
     </p>
     {% if filtered %}
       <a class="btn btn-outline" href="{% url 'purchase_list' %}">✕ {% translate "Clear filters" %}</a>

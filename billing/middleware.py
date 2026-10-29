@@ -20,6 +20,8 @@ class SubscriptionMiddleware:
     # Paths that must keep working even when the subscription has expired.
     ALWAYS_ALLOWED_PREFIXES = (
         "/billing/",
+        # The API answers in JSON and enforces read-only mode itself.
+        "/api/",
         "/login/",
         "/logout/",
         "/register/",

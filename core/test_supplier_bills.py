@@ -16,7 +16,7 @@ class SupplierBillTests(TestCase):
         self.client.login(username="phi_user", password="TestPass#2026")
         self.mill_a = Mill.objects.create(company=self.company, mill_name="Supplier A", mobile="9876543210")
         self.mill_b = Mill.objects.create(company=self.company, mill_name="Supplier B", mobile="9876543211")
-        self.product = Product.objects.create(company=self.company, rice_name="Katarni", gst_percent=5)
+        self.product = Product.objects.create(company=self.company, name="Katarni", gst_percent=5)
 
     def bill(self, mill, invoice_no="", **extra):
         data = {

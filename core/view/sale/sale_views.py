@@ -18,6 +18,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 
 from core.forms import ReceiptForm, SaleForm, SaleItemFormSet
+from core.utils import qty_str
 from core.models import Broker, Customer, Payment, Product, Sale
 from core.permissions import manager_required
 from core.services.costing import product_costing
@@ -113,7 +114,7 @@ def sale_list(request):
         "total_value": sum((s.total_amount for s in sales), Decimal("0")),
         "total_received": sum((s.paid for s in sales), Decimal("0")),
         "total_due": sum((s.due for s in sales), Decimal("0")),
-        "total_bags": sum((int(s.total_bags or 0) for s in sales)),
+        "total_bags": sum((Decimal(s.total_bags or 0) for s in sales)),
         "total_tax": sum((s.gst_amount or 0 for s in sales), Decimal("0")),
         "total_cost": sum((s.cost for s in sales if s.profit is not None), Decimal("0")),
         "total_profit_earned": sum((s.profit_earned for s in sales if s.profit is not None), Decimal("0")),
@@ -184,13 +185,16 @@ def _form_data(company, sale=None):
     for product in Product.objects.for_company(company):
         costing = product_costing(company, product)
         products[str(product.id)] = {
-            "name": product.rice_name,
+            "name": product.name,
+            "pack_size": float(product.default_pack_size or 1),
+            "unit": product.unit_label,
+            "rate_unit": product.rate_unit_label,
             "gst": float(product.gst_percent or 0),
             "hsn": product.hsn_code or "",
             "cost_per_kg": float(costing["cost_per_kg"]),
             "suggested_per_kg": float(costing["suggested_per_kg"]),
             "stock": {
-                str(weight): bags
+                qty_str(weight): float(bags)
                 for (product_id, weight), bags in stock.items()
                 if product_id == product.id
             },
@@ -199,15 +203,16 @@ def _form_data(company, sale=None):
     lots = {
         str(lot.id): {
             "product": lot.product_id,
-            "bag_weight": lot.bag_weight,
-            "left": lot.bags_left,
+            "bag_weight": qty_str(lot.bag_weight),
+            "left": float(lot.bags_left),
             "mill": lot.purchase.mill.mill_name,
             "date": f"{lot.purchase.purchase_date:%d %b %Y}",
             "rate": float(lot.purchase_price or 0),
             "bill": lot.purchase.invoice_no,
-            # e.g. "Piyush Rice Mill · 02 Oct 2026 · ₹30.00/kg · 500 bags left (bill 245)"
+            # e.g. "Piyush Traders · 02 Oct 2026 · ₹30/kg · 500 bag left (bill 245)"
             "label": f"{lot.purchase.mill.mill_name} · {lot.purchase.purchase_date:%d %b %Y} · "
-                     f"₹{lot.purchase_price}/kg · {lot.bags_left} bags left (bill {lot.purchase.invoice_no})",
+                     f"₹{qty_str(lot.purchase_price)}/{lot.product.rate_unit_label} · "
+                     f"{qty_str(lot.bags_left)} {lot.product.unit_label} left (bill {lot.purchase.invoice_no})",
         }
         for lot in stock_lots(company, exclude_sale=sale)
     }
@@ -244,10 +249,14 @@ def _render_form(request, company, form, formset, mode, sale=None, stock_errors=
     })
 
 
-def _save(company, form, formset, mode):
+def _save(company, form, formset, mode, user=None):
     """Shared by add and edit. Returns (sale, None), or (None, stock errors)."""
+    from core.services.gst import record_adjustment, saved_manual_values
+    from core.services.sale_service import calculated_gst
+
     sale = form.save(commit=False)
     _apply_customer(sale, form.cleaned_data["customer"])
+    gst_before = saved_manual_values(sale)
 
     items = formset.filled_items()
 
@@ -263,6 +272,7 @@ def _save(company, form, formset, mode):
     except StockError as error:
         return None, error.messages
 
+    record_adjustment(sale, gst_before, calculated_gst(items, sale.tax_type), user)
     return sale, None
 
 
@@ -275,13 +285,13 @@ def add_sale(request):
         formset = SaleItemFormSet(request.POST, form_kwargs={"company": company})
 
         if form.is_valid() and formset.is_valid():
-            sale, stock_errors = _save(company, form, formset, "add")
+            sale, stock_errors = _save(company, form, formset, "add", request.user)
 
             if sale is not None:
                 messages.success(
                     request,
-                    _("Invoice %(no)s saved · %(bags)s bags · ₹ %(total)s") % {
-                        "no": sale.invoice_no, "bags": sale.total_bags, "total": sale.total_amount,
+                    _("Invoice %(no)s saved · qty %(qty)s · ₹ %(total)s") % {
+                        "no": sale.invoice_no, "qty": qty_str(sale.total_bags), "total": sale.total_amount,
                     },
                 )
                 if request.POST.get("save_and_new"):
@@ -290,7 +300,11 @@ def add_sale(request):
 
             return _render_form(request, company, form, formset, "add", stock_errors=stock_errors)
     else:
-        initial = {"sale_date": timezone.localdate(), "tax_type": Sale.CGST_SGST}
+        initial = {
+            "sale_date": timezone.localdate(),
+            "tax_type": Sale.CGST_SGST,
+            "freight_borne_by": company.default_freight_mode or Sale.FREIGHT_US,
+        }
 
         # "New sale" from a customer's page arrives with ?customer=<id>.
         customer_id = request.GET.get("customer", "")
@@ -318,7 +332,7 @@ def edit_sale(request, sale_id):
         formset = SaleItemFormSet(request.POST, instance=sale, form_kwargs={"company": company})
 
         if form.is_valid() and formset.is_valid():
-            saved, stock_errors = _save(company, form, formset, "edit")
+            saved, stock_errors = _save(company, form, formset, "edit", request.user)
 
             if saved is not None:
                 messages.success(request, _("Invoice %(no)s updated.") % {"no": saved.invoice_no})
@@ -618,8 +632,8 @@ def settle_sale(request, sale_id):
             sale.save()
             messages.success(
                 request,
-                _("Truck %(no)s settled · %(kg)s kg received · party owes ₹ %(net)s") % {
-                    "no": sale.invoice_no, "kg": figures["received_kg"], "net": figures["net_receivable"],
+                _("Sale %(no)s settled · %(kg)s units received · party owes ₹ %(net)s") % {
+                    "no": sale.invoice_no, "kg": qty_str(figures["received_kg"]), "net": figures["net_receivable"],
                 },
             )
             return redirect("sale_detail", sale_id=sale.id)

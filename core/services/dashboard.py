@@ -176,7 +176,7 @@ def period_kpis(company, start, end):
     return {
         "sales_total": _d(totals["total"]),
         "sales_taxable": _d(totals["taxable"]),
-        "sales_bags": int(totals["bags"] or 0),
+        "sales_bags": Decimal(totals["bags"] or 0),
         "sales_count": int(totals["count"] or 0),
 
         "purchases_total": _d(bought["total"]),
@@ -368,7 +368,7 @@ def stock_overview(company, today=None):
         .filter(sale__sale_date__range=(window_start, today))
         .values("product", "bag_weight").annotate(bags=Sum("bag_count"))
     ):
-        recent[(row["product"], row["bag_weight"])] += int(row["bags"] or 0)
+        recent[(row["product"], row["bag_weight"])] += Decimal(row["bags"] or 0)
     sold_recently = {product_id for (product_id, _w), bags in recent.items() if bags > 0}
 
     stock = product_stock(company)
@@ -380,7 +380,7 @@ def stock_overview(company, today=None):
         product = products.get(key[0])
         if product is None:
             continue
-        bags_left = max(int(bags), 0)
+        bags_left = max(Decimal(bags), Decimal(0))
         if not product.is_active and bags_left == 0:
             continue
 
@@ -417,7 +417,7 @@ def stock_overview(company, today=None):
             "status": status,
         })
 
-    rows.sort(key=lambda r: ({"out": 0, "low": 1, "ok": 2}[r["status"]], r["product"].rice_name.lower(), r["bag_weight"]))
+    rows.sort(key=lambda r: ({"out": 0, "low": 1, "ok": 2}[r["status"]], r["product"].name.lower(), r["bag_weight"]))
 
     # Low stock worth acting on: anything low, and sold-out rice that is still selling.
     low = [
@@ -472,7 +472,7 @@ def top_customers(company, start, end, due_by_customer):
             "total": ZERO, "bags": 0, "count": 0,
         })
         entry["total"] += _d(row["total"])
-        entry["bags"] += int(row["bags"] or 0)
+        entry["bags"] += Decimal(row["bags"] or 0)
         entry["count"] += int(row["count"] or 0)
 
     result = sorted(merged.values(), key=lambda e: e["total"], reverse=True)[:TOP_N]
@@ -500,14 +500,14 @@ def top_products(company, start, end):
             "product": item.product, "bags": 0, "kg": ZERO, "amount": ZERO,
             "profit": ZERO, "costed_amount": ZERO, "uncosted_bags": 0,
         })
-        entry["bags"] += int(item.bag_count or 0)
+        entry["bags"] += Decimal(item.bag_count or 0)
         entry["kg"] += _d(item.total_weight)
         entry["amount"] += _d(item.amount)
         if item.lot_count:
             entry["profit"] += _d(item.amount) - _d(item.lot_cost)
             entry["costed_amount"] += _d(item.amount)
         else:
-            entry["uncosted_bags"] += int(item.bag_count or 0)
+            entry["uncosted_bags"] += Decimal(item.bag_count or 0)
 
     rows = list(stats.values())
     for row in rows:

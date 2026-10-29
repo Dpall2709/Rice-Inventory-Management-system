@@ -8,7 +8,11 @@ from django.utils.formats import date_format
 from django.contrib.auth.password_validation import validate_password
 from django.utils.translation import gettext_lazy as _
 
-from .models import Broker, Company, Customer, Mill, Product, Purchase, PurchaseItem, Sale, SaleItem
+from .utils import qty_str
+
+from .models import (
+    Broker, Company, Customer, Mill, Product, ProductCategory, Purchase, PurchaseItem, Sale, SaleItem, Unit,
+)
 
 
 
@@ -447,7 +451,41 @@ class MillForm(forms.ModelForm):
 # ==========================================
 # Purchase (bill received from a mill)
 # ==========================================
-class PurchaseForm(forms.ModelForm):
+class ManualGSTMixin:
+    """
+    Manual CGST / SGST / IGST on a sale or purchase form. Leave a box empty to
+    use the calculated figure. Any typed figure needs a reason, which goes to
+    the audit trail.
+    """
+
+    GST_FIELDS = ("manual_cgst", "manual_sgst", "manual_igst")
+
+    def setup_manual_gst(self):
+        for name in self.GST_FIELDS + ("gst_adjust_reason",):
+            self.fields[name].required = False
+        for name, label in (("manual_cgst", "CGST"), ("manual_sgst", "SGST"), ("manual_igst", "IGST")):
+            self.fields[name].label = _("%(head)s as on the bill (₹)") % {"head": label}
+            self.fields[name].widget = forms.NumberInput(attrs={
+                "class": "input", "step": "0.01", "min": "0",
+                "placeholder": _("auto"), "data-manual-gst": name.split("_")[1],
+            })
+        self.fields["gst_adjust_reason"].label = _("Reason for the change")
+        self.fields["gst_adjust_reason"].widget = forms.TextInput(attrs={
+            "class": "input", "data-manual-gst-reason": "1",
+            "placeholder": _("e.g. Supplier rounds GST per line"),
+        })
+
+    def clean_manual_gst(self, cleaned):
+        typed = [cleaned.get(name) for name in self.GST_FIELDS]
+        for name, value in zip(self.GST_FIELDS, typed):
+            if value is not None and value < 0:
+                self.add_error(name, _("Cannot be negative."))
+        if any(v is not None for v in typed) and not (cleaned.get("gst_adjust_reason") or "").strip():
+            self.add_error("gst_adjust_reason", _("Say why the GST was changed - it is kept in the audit trail."))
+        return cleaned
+
+
+class PurchaseForm(ManualGSTMixin, forms.ModelForm):
     """
     The header of a purchase bill: which mill, their bill number, the date,
     how tax is charged, and the bill-level charges.
@@ -519,12 +557,16 @@ class PurchaseForm(forms.ModelForm):
             "purchase_date",
             "tax_type",
             "discount_amount",
+            "manual_cgst",
+            "manual_sgst",
+            "manual_igst",
+            "gst_adjust_reason",
             "notes",
         ]
         widgets = {
-            "mill": forms.Select(attrs={"class": "select", "autofocus": True}),
+            "mill": forms.Select(attrs={"class": "select", "data-quick-kind": "supplier", "data-supplier": "1", "autofocus": True}),
             "invoice_no": forms.TextInput(attrs={
-                "class": "input", "placeholder": _("Number printed on the mill's bill"),
+                "class": "input", "placeholder": _("Number printed on the supplier's bill"),
             }),
             "purchase_date": forms.DateInput(attrs={"class": "input", "type": "date"}),
             "tax_type": forms.Select(attrs={"class": "select", "data-tax-type": "1"}),
@@ -532,14 +574,14 @@ class PurchaseForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"class": "textarea", "rows": 2, "placeholder": _("Anything to remember about this bill")}),
         }
         labels = {
-            "mill": _("Mill / Supplier"),
+            "mill": _("Supplier"),
             "invoice_no": _("Supplier's bill number"),
             "purchase_date": _("Bill date"),
             "tax_type": _("GST on this bill"),
             "discount_amount": _("Discount (₹)"),
         }
         help_texts = {
-            "invoice_no": _("Type the number printed on the mill's bill. No number on the bill? Leave it empty - this supplier's next number is given automatically."),
+            "invoice_no": _("Type the number printed on the supplier's bill. No number on the bill? Leave it empty - this supplier's next number is given automatically."),
             "tax_type": _("Choose 'No GST' for a kacha bill."),
         }
 
@@ -551,8 +593,9 @@ class PurchaseForm(forms.ModelForm):
         self.fields["mill"].queryset = Mill.objects.filter(
             company=company, is_active=True
         ).order_by("mill_name")
-        self.fields["mill"].empty_label = _("Select the mill you bought from")
+        self.fields["mill"].empty_label = _("Select the supplier you bought from")
         self.fields["invoice_no"].required = False
+        self.setup_manual_gst()
 
         self.fields["discount_amount"].required = False
 
@@ -566,6 +609,9 @@ class PurchaseForm(forms.ModelForm):
             raise forms.ValidationError(_("The bill date cannot be in the future."))
 
         return purchase_date
+
+    def clean_discount_amount(self):
+        return self.cleaned_data.get("discount_amount") or 0
 
     def clean_invoice_no(self):
         # Empty is allowed: the bill then gets the supplier's next automatic
@@ -602,21 +648,21 @@ class PurchaseForm(forms.ModelForm):
         if paid and not cleaned.get("payment_mode"):
             self.add_error("payment_mode", _("Choose how you paid."))
 
-        return cleaned
+        return self.clean_manual_gst(cleaned)
 
 
 class PurchaseItemForm(forms.ModelForm):
-    """One rice line on the bill."""
+    """One product line on the bill."""
 
     class Meta:
         model = PurchaseItem
         fields = ["product", "bag_weight", "bag_count", "purchase_price", "gst_percent"]
         widgets = {
-            "product": forms.Select(attrs={"class": "select", "data-product": "1"}),
-            "bag_weight": forms.NumberInput(attrs={"class": "input", "min": "1", "step": "1", "inputmode": "numeric", "data-cell": "bag_weight"}),
-            "bag_count": forms.NumberInput(attrs={"class": "input", "min": "0", "step": "1", "inputmode": "numeric", "data-cell": "bag_count"}),
-            "purchase_price": forms.NumberInput(attrs={"class": "input", "min": "0", "step": "0.01", "inputmode": "decimal", "data-cell": "rate"}),
-            "gst_percent": forms.NumberInput(attrs={"class": "input", "min": "0", "max": "28", "step": "0.01", "data-cell": "gst"}),
+            "product": forms.Select(attrs={"class": "select", "data-product": "1", "data-quick-kind": "product"}),
+            "bag_weight": forms.NumberInput(attrs={"class": "input", "min": "0.001", "step": "0.001", "inputmode": "decimal", "data-cell": "bag_weight"}),
+            "bag_count": forms.NumberInput(attrs={"class": "input", "min": "0", "step": "0.001", "inputmode": "decimal", "data-cell": "bag_count"}),
+            "purchase_price": forms.NumberInput(attrs={"class": "input", "min": "0", "step": "0.001", "inputmode": "decimal", "data-cell": "rate"}),
+            "gst_percent": forms.NumberInput(attrs={"class": "input", "min": "0", "max": "100", "step": "0.01", "data-cell": "gst"}),
         }
 
     def __init__(self, *args, company=None, **kwargs):
@@ -625,12 +671,12 @@ class PurchaseItemForm(forms.ModelForm):
 
         self.fields["product"].queryset = Product.objects.filter(
             company=company, is_active=True
-        ).order_by("rice_name")
-        self.fields["product"].empty_label = _("Select rice")
+        ).order_by("name")
+        self.fields["product"].empty_label = _("Select product")
 
-        # Most rice here comes in 50 kg bags, so start there and let the user change it.
+        # Filled from the product's own pack size when one is chosen.
         if not self.instance.pk:
-            self.fields["bag_weight"].initial = 50
+            self.fields["bag_weight"].initial = 1
 
         for name in self.fields:
             self.fields[name].required = False
@@ -651,13 +697,13 @@ class PurchaseItemForm(forms.ModelForm):
             return cleaned
 
         if not product:
-            self.add_error("product", _("Choose which rice this line is for."))
+            self.add_error("product", _("Choose which product this line is for."))
         if bags <= 0:
-            self.add_error("bag_count", _("Enter how many bags."))
+            self.add_error("bag_count", _("Enter the quantity."))
         if weight <= 0:
-            self.add_error("bag_weight", _("Enter the weight of one bag."))
+            self.add_error("bag_weight", _("Enter the pack size (1 if bought per unit)."))
         if rate <= 0:
-            self.add_error("purchase_price", _("Enter the rate per kg."))
+            self.add_error("purchase_price", _("Enter the rate."))
 
         return cleaned
 
@@ -680,7 +726,7 @@ class BasePurchaseItemFormSet(forms.BaseInlineFormSet):
                 filled += 1
 
         if filled == 0:
-            raise forms.ValidationError(_("Add at least one rice line to this bill."))
+            raise forms.ValidationError(_("Add at least one product line to this bill."))
 
 
 PurchaseItemFormSet = forms.inlineformset_factory(
@@ -720,7 +766,7 @@ class BrokerForm(forms.ModelForm):
             "address": forms.Textarea(attrs={"class": "textarea", "rows": 2}),
             "gst_number": forms.TextInput(attrs={"class": "input", "style": "text-transform:uppercase"}),
             "commission_type": forms.Select(attrs={"class": "select"}),
-            "commission_rate": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0"}),
+            "commission_rate": forms.NumberInput(attrs={"class": "input", "step": "0.001", "min": "0"}),
             "default_cash_discount_percent": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "max": "100"}),
             "opening_balance": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0"}),
             "notes": forms.Textarea(attrs={"class": "textarea", "rows": 2}),
@@ -791,7 +837,7 @@ PAYMENT_MODE_CHOICES = [
 ]
 
 
-class SaleForm(forms.ModelForm):
+class SaleForm(ManualGSTMixin, forms.ModelForm):
     """
     The header of a sale invoice: who is buying, through which broker, the
     truck, transport, and money received on the spot.
@@ -813,6 +859,8 @@ class SaleForm(forms.ModelForm):
             "driver_mobile",
             "transporter_name",
             "freight_borne_by",
+            "freight_amount",
+            "freight_customer_share",
             "transport_rate_per_ton",
             "transport_paid_by_dealer",
             "transport_paid_by_customer",
@@ -822,29 +870,35 @@ class SaleForm(forms.ModelForm):
             "cash_discount_percent",
             "advance_received",
             "advance_mode",
+            "manual_cgst",
+            "manual_sgst",
+            "manual_igst",
+            "gst_adjust_reason",
             "notes",
         ]
         widgets = {
-            "customer": forms.Select(attrs={"class": "select", "data-customer": "1", "autofocus": True}),
+            "customer": forms.Select(attrs={"class": "select", "data-customer": "1", "data-quick-kind": "customer", "autofocus": True}),
             "sale_date": forms.DateInput(attrs={"class": "input", "type": "date"}, format="%Y-%m-%d"),
             "due_date": forms.DateInput(attrs={"class": "input", "type": "date"}, format="%Y-%m-%d"),
             "tax_type": forms.Select(attrs={"class": "select", "data-tax-type": "1"}),
             "broker": forms.Select(attrs={"class": "select", "data-broker": "1"}),
             "broker_commission_type": forms.Select(attrs={"class": "select", "data-commission-type": "1"}),
-            "broker_commission_rate": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "data-commission-rate": "1"}),
+            "broker_commission_rate": forms.NumberInput(attrs={"class": "input", "step": "0.001", "min": "0", "data-commission-rate": "1"}),
             "vehicle_number": forms.TextInput(attrs={"class": "input", "placeholder": "BR 01 AB 1234", "style": "text-transform:uppercase"}),
             "driver_name": forms.TextInput(attrs={"class": "input"}),
             "driver_mobile": forms.TextInput(attrs={"class": "input", "inputmode": "numeric"}),
             "transporter_name": forms.TextInput(attrs={"class": "input"}),
-            "transport_rate_per_ton": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "data-transport": "rate"}),
+            "transport_rate_per_ton": forms.NumberInput(attrs={"class": "input", "step": "0.001", "min": "0", "data-transport": "rate"}),
+            "freight_amount": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "data-transport": "amount"}),
+            "freight_customer_share": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "data-transport": "share"}),
             "transport_paid_by_dealer": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "data-transport": "dealer"}),
             "transport_paid_by_customer": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "data-transport": "customer"}),
             "freight_borne_by": forms.Select(attrs={"class": "select", "data-freight-by": "1"}),
             "loading_charge": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "data-loading": "1"}),
-            "loading_weight_kg": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "data-loading-weight": "1"}),
+            "loading_weight_kg": forms.NumberInput(attrs={"class": "input", "step": "0.001", "min": "0", "data-loading-weight": "1"}),
             "collect_from": forms.Select(attrs={"class": "select", "data-collect-from": "1"}),
             "broker_paid_by": forms.Select(attrs={"class": "select", "data-broker-paid-by": "1"}),
-            "cash_discount_percent": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "max": "100", "data-cd": "1"}),
+            "cash_discount_percent": forms.NumberInput(attrs={"class": "input", "step": "0.001", "min": "0", "max": "100", "data-cd": "1"}),
             "advance_received": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "data-advance": "1"}),
             "advance_mode": forms.Select(attrs={"class": "select"}, choices=PAYMENT_MODE_CHOICES),
             "notes": forms.Textarea(attrs={"class": "textarea", "rows": 2, "placeholder": _("Anything to remember about this sale")}),
@@ -862,10 +916,12 @@ class SaleForm(forms.ModelForm):
             "driver_mobile": _("Driver mobile"),
             "transporter_name": _("Transporter"),
             "transport_rate_per_ton": _("Freight rate per ton (₹)"),
-            "transport_paid_by_dealer": _("Freight advance paid by you (₹)"),
-            "transport_paid_by_customer": _("Freight balance the party pays the driver (₹)"),
-            "freight_borne_by": _("Who carries the freight"),
-            "loading_charge": _("Loading / hamali at the mill (₹)"),
+            "freight_amount": _("Total freight (₹)"),
+            "freight_customer_share": _("Buyer's share of freight (₹)"),
+            "transport_paid_by_dealer": _("Freight paid by you to the transporter (₹)"),
+            "transport_paid_by_customer": _("Freight the buyer paid the transporter (₹)"),
+            "freight_borne_by": _("Freight arrangement"),
+            "loading_charge": _("Loading / handling charge (₹)"),
             "loading_weight_kg": _("Weighbridge weight at loading (kg)"),
             "collect_from": _("Who pays us"),
             "broker_paid_by": _("Who pays the broker"),
@@ -881,7 +937,10 @@ class SaleForm(forms.ModelForm):
             "broker_commission_rate": _("For this truck. Can be changed again at unloading."),
             "advance_received": _("Money the customer paid at the time of sale. Later payments are added from the invoice page."),
             "loading_charge": _("Your cost for loading this truck - counted in profit, not billed. Filled as weight × your loading rate."),
-            "loading_weight_kg": _("Leave empty if it equals bags × bag weight."),
+            "loading_weight_kg": _("Leave empty if it equals quantity × pack size."),
+            "freight_amount": _("Leave empty to use weight × rate per ton, or what was paid to the transporter."),
+            "freight_customer_share": _("Only for shared freight: the part the buyer pays. It is added to the invoice."),
+            "transport_paid_by_customer": _("Money the buyer paid the transporter on your behalf - cut from what they owe you."),
             "collect_from": _("Through a broker, he usually collects from the party, keeps his brokerage, cuts the CD and pays you the rest."),
             "cash_discount_percent": _("The discount the party cuts when paying, e.g. 1.5. Filled from the customer."),
         }
@@ -913,8 +972,10 @@ class SaleForm(forms.ModelForm):
         for name in ("transport_rate_per_ton", "transport_paid_by_dealer",
                      "transport_paid_by_customer", "advance_received", "broker_commission_rate",
                      "loading_charge", "cash_discount_percent", "freight_borne_by", "broker_paid_by",
-                     "collect_from", "loading_weight_kg"):
+                     "collect_from", "loading_weight_kg", "freight_amount", "freight_customer_share"):
             self.fields[name].required = False
+
+        self.setup_manual_gst()
 
     def clean_freight_borne_by(self):
         return self.cleaned_data.get("freight_borne_by") or Sale.FREIGHT_US
@@ -943,7 +1004,7 @@ class SaleForm(forms.ModelForm):
 
         for name in ("transport_rate_per_ton", "transport_paid_by_dealer",
                      "transport_paid_by_customer", "advance_received", "broker_commission_rate",
-                     "loading_charge", "cash_discount_percent"):
+                     "loading_charge", "cash_discount_percent", "freight_amount", "freight_customer_share"):
             value = cleaned.get(name)
             if value is None:
                 cleaned[name] = 0
@@ -974,21 +1035,24 @@ class SaleForm(forms.ModelForm):
         if cleaned.get("broker") and not cleaned.get("broker_commission_type"):
             cleaned["broker_commission_type"] = cleaned["broker"].commission_type
 
-        return cleaned
+        if cleaned.get("freight_borne_by") != Sale.FREIGHT_SHARED:
+            cleaned["freight_customer_share"] = 0
+
+        return self.clean_manual_gst(cleaned)
 
 
 class SaleItemForm(forms.ModelForm):
-    """One rice line on the customer's invoice."""
+    """One product line on the customer's invoice."""
 
     class Meta:
         model = SaleItem
         fields = ["product", "bag_weight", "bag_count", "rate_per_kg", "gst_percent", "purchase_item"]
         widgets = {
-            "product": forms.Select(attrs={"class": "select", "data-product": "1"}),
-            "bag_weight": forms.NumberInput(attrs={"class": "input", "min": "1", "step": "1", "inputmode": "numeric", "data-cell": "bag_weight"}),
-            "bag_count": forms.NumberInput(attrs={"class": "input", "min": "0", "step": "1", "inputmode": "numeric", "data-cell": "bag_count"}),
-            "rate_per_kg": forms.NumberInput(attrs={"class": "input", "min": "0", "step": "0.01", "inputmode": "decimal", "data-cell": "rate"}),
-            "gst_percent": forms.NumberInput(attrs={"class": "input", "min": "0", "max": "28", "step": "0.01", "data-cell": "gst"}),
+            "product": forms.Select(attrs={"class": "select", "data-product": "1", "data-quick-kind": "product"}),
+            "bag_weight": forms.NumberInput(attrs={"class": "input", "min": "0.001", "step": "0.001", "inputmode": "decimal", "data-cell": "bag_weight"}),
+            "bag_count": forms.NumberInput(attrs={"class": "input", "min": "0", "step": "0.001", "inputmode": "decimal", "data-cell": "bag_count"}),
+            "rate_per_kg": forms.NumberInput(attrs={"class": "input", "min": "0", "step": "0.001", "inputmode": "decimal", "data-cell": "rate"}),
+            "gst_percent": forms.NumberInput(attrs={"class": "input", "min": "0", "max": "100", "step": "0.01", "data-cell": "gst"}),
             "purchase_item": forms.Select(attrs={"class": "select", "data-lot": "1"}),
         }
 
@@ -998,10 +1062,10 @@ class SaleItemForm(forms.ModelForm):
 
         self.fields["product"].queryset = Product.objects.filter(
             company=company, is_active=True
-        ).order_by("rice_name") | Product.objects.filter(
+        ).order_by("name") | Product.objects.filter(
             pk=getattr(self.instance, "product_id", None) or 0
         )
-        self.fields["product"].empty_label = _("Select rice")
+        self.fields["product"].empty_label = _("Select product")
 
         self.fields["purchase_item"].queryset = (
             PurchaseItem.objects.for_company(company).select_related("purchase", "purchase__mill")
@@ -1009,11 +1073,11 @@ class SaleItemForm(forms.ModelForm):
         self.fields["purchase_item"].empty_label = _("Oldest stock first (auto)")
         self.fields["purchase_item"].label_from_instance = lambda lot: (
             f"{lot.purchase.invoice_no} · {lot.purchase.mill.mill_name} · "
-            f"{lot.bag_weight} kg · ₹{lot.purchase_price}/kg"
+            f"pack {qty_str(lot.bag_weight)} · ₹{qty_str(lot.purchase_price)}"
         )
 
         if not self.instance.pk:
-            self.fields["bag_weight"].initial = 50
+            self.fields["bag_weight"].initial = 1
 
         for name in self.fields:
             self.fields[name].required = False
@@ -1033,13 +1097,13 @@ class SaleItemForm(forms.ModelForm):
             return cleaned
 
         if not product:
-            self.add_error("product", _("Choose which rice this line is for."))
+            self.add_error("product", _("Choose which product this line is for."))
         if bags <= 0:
-            self.add_error("bag_count", _("Enter how many bags."))
+            self.add_error("bag_count", _("Enter the quantity."))
         if weight <= 0:
-            self.add_error("bag_weight", _("Enter the weight of one bag."))
+            self.add_error("bag_weight", _("Enter the pack size (1 if sold per unit)."))
         if rate <= 0:
-            self.add_error("rate_per_kg", _("Enter the selling rate per kg."))
+            self.add_error("rate_per_kg", _("Enter the selling rate."))
         if (cleaned.get("gst_percent") or 0) < 0:
             self.add_error("gst_percent", _("Cannot be negative."))
 
@@ -1064,7 +1128,7 @@ class BaseSaleItemFormSet(forms.BaseInlineFormSet):
                 filled += 1
 
         if filled == 0:
-            raise forms.ValidationError(_("Add at least one rice line to this invoice."))
+            raise forms.ValidationError(_("Add at least one product line to this invoice."))
 
     def filled_items(self):
         """Unsaved SaleItem objects for every real, non-deleted line."""
@@ -1119,9 +1183,9 @@ class SettlementForm(forms.ModelForm):
         ]
         widgets = {
             "broker_commission_type": forms.Select(attrs={"class": "select"}),
-            "broker_commission_rate": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0"}),
+            "broker_commission_rate": forms.NumberInput(attrs={"class": "input", "step": "0.001", "min": "0"}),
             "unload_date": forms.DateInput(attrs={"class": "input", "type": "date"}, format="%Y-%m-%d"),
-            "received_weight_kg": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "data-received": "1"}),
+            "received_weight_kg": forms.NumberInput(attrs={"class": "input", "step": "0.001", "min": "0", "data-received": "1"}),
             "cash_discount_percent": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "max": "100", "data-cd": "1"}),
             "broker_paid_by": forms.Select(attrs={"class": "select"}),
             "transport_paid_by_customer": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0"}),
@@ -1226,3 +1290,152 @@ class ReceiptForm(forms.Form):
         if value > timezone.localdate():
             raise forms.ValidationError(_("A payment cannot be dated in the future."))
         return value
+
+
+# ==========================================
+# Products, units and categories
+# ==========================================
+class ProductForm(forms.ModelForm):
+    """
+    Any product - rice in 50 kg bags priced per kg, biscuits in cartons of 24
+    priced per packet, cement in bags priced per bag. Used on the products
+    page and in the quick "Add product" pop-up on sale and purchase screens.
+    """
+
+    class Meta:
+        model = Product
+        fields = [
+            "name", "sku", "category", "unit", "rate_unit", "default_pack_size",
+            "hsn_code", "gst_percent", "description", "is_active",
+        ]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "input", "placeholder": _("e.g. Parle-G 100 g, IR-64 rice, OPC cement"), "autofocus": True}),
+            "sku": forms.TextInput(attrs={"class": "input", "placeholder": _("Optional code")}),
+            "category": forms.Select(attrs={"class": "select"}),
+            "unit": forms.Select(attrs={"class": "select"}),
+            "rate_unit": forms.Select(attrs={"class": "select"}),
+            "default_pack_size": forms.NumberInput(attrs={"class": "input", "step": "0.001", "min": "0.001"}),
+            "hsn_code": forms.TextInput(attrs={"class": "input", "placeholder": _("e.g. 1905")}),
+            "gst_percent": forms.NumberInput(attrs={"class": "input", "step": "0.01", "min": "0", "max": "100"}),
+            "description": forms.Textarea(attrs={"class": "textarea", "rows": 2}),
+        }
+        labels = {
+            "name": _("Product name"),
+            "sku": _("SKU / item code"),
+            "category": _("Category"),
+            "unit": _("Counted in (pack unit)"),
+            "rate_unit": _("Priced per (rate unit)"),
+            "default_pack_size": _("Rate units in one pack"),
+            "hsn_code": _("HSN / SAC code"),
+            "gst_percent": _("GST %"),
+            "description": _("Description"),
+            "is_active": _("Active"),
+        }
+        help_texts = {
+            "unit": _("What you count when goods come in and go out: bag, box, carton, piece."),
+            "rate_unit": _("What the price is quoted per. Same as the pack unit if you sell per box."),
+            "default_pack_size": _("50 for a 50 kg bag priced per kg · 24 for a carton of 24 priced per piece · 1 when both units are the same."),
+        }
+
+    def __init__(self, *args, company=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.company = company or getattr(self.instance, "company", None)
+
+        units = Unit.objects.filter(company=self.company, is_active=True)
+        categories = ProductCategory.objects.filter(company=self.company, is_active=True)
+        # Keep a since-deactivated unit or category visible on edit.
+        for field, model, queryset in (("unit", Unit, units), ("rate_unit", Unit, units),
+                                       ("category", ProductCategory, categories)):
+            current = getattr(self.instance, f"{field}_id", None)
+            if current:
+                queryset = queryset | model.objects.filter(pk=current)
+            self.fields[field].queryset = queryset.order_by("name")
+
+        self.fields["default_pack_size"].required = False
+        self.fields["gst_percent"].required = False
+        self.fields["category"].empty_label = _("No category")
+        self.fields["unit"].empty_label = _("Choose")
+        self.fields["rate_unit"].empty_label = _("Same as pack unit")
+        if not self.instance.pk:
+            self.fields["is_active"].initial = True
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        duplicates = Product.objects.filter(company=self.company, name__iexact=name)
+        if self.instance.pk:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise forms.ValidationError(_("A product with this name already exists."))
+        return name
+
+    def clean_default_pack_size(self):
+        size = self.cleaned_data.get("default_pack_size")
+        if size is None:
+            return Decimal("1")
+        if size <= 0:
+            raise forms.ValidationError(_("Must be more than zero."))
+        return size
+
+    def clean_gst_percent(self):
+        gst = self.cleaned_data.get("gst_percent") or 0
+        if gst < 0 or gst > 100:
+            raise forms.ValidationError(_("Enter a GST rate between 0 and 100."))
+        return gst
+
+    def clean(self):
+        cleaned = super().clean()
+        # No separate rate unit = priced per pack, so one pack is one rate unit.
+        if cleaned.get("unit") and not cleaned.get("rate_unit"):
+            cleaned["rate_unit"] = cleaned["unit"]
+            if "default_pack_size" not in self.errors:
+                cleaned["default_pack_size"] = Decimal("1")
+        return cleaned
+
+
+class UnitForm(forms.ModelForm):
+    class Meta:
+        model = Unit
+        fields = ["name", "symbol", "allow_decimal"]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "input", "placeholder": _("e.g. Dozen, Roll, Sheet")}),
+            "symbol": forms.TextInput(attrs={"class": "input", "placeholder": _("e.g. dz")}),
+        }
+        labels = {
+            "name": _("Unit name"),
+            "symbol": _("Short form"),
+            "allow_decimal": _("Allow decimals (12.345)"),
+        }
+
+    def __init__(self, *args, company=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.company = company or getattr(self.instance, "company", None)
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        duplicates = Unit.objects.filter(company=self.company, name__iexact=name)
+        if self.instance.pk:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise forms.ValidationError(_("This unit already exists."))
+        return name
+
+
+class ProductCategoryForm(forms.ModelForm):
+    class Meta:
+        model = ProductCategory
+        fields = ["name"]
+        widgets = {"name": forms.TextInput(attrs={"class": "input", "placeholder": _("e.g. Biscuits, Cement, Rice")})}
+        labels = {"name": _("Category name")}
+
+    def __init__(self, *args, company=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.company = company or getattr(self.instance, "company", None)
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        duplicates = ProductCategory.objects.filter(company=self.company, name__iexact=name)
+        if self.instance.pk:
+            duplicates = duplicates.exclude(pk=self.instance.pk)
+        if duplicates.exists():
+            raise forms.ValidationError(_("This category already exists."))
+        return name

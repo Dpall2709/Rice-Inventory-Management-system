@@ -1,14 +1,16 @@
 """
 Sale money maths and stock, in one place.
 
-    invoice lines       bags x bag weight x selling rate   = taxable amount
-                        + GST per line (each rice can carry its own rate)
+    invoice lines       packs x pack size x selling rate   = taxable amount
+                        + GST per line (each product can carry its own rate)
     tax split           CGST + SGST (same state) / IGST (other state) / none
+                        (or the figures typed in by hand - see services/gst.py)
+    + freight           only when the buyer pays it on this invoice (B, C)
     round off           grand total rounded to whole rupees
-    = invoice total     what the customer owes you (rice only)
+    = invoice total     what the customer owes you
 
-Transport is NOT part of the invoice total: it is shown for information and
-settled between the customer and the truck.
+How freight is carried is chosen per sale - see Sale.FREIGHT_CHOICES and
+freight_figures() below.
 
 Stock is tracked per purchase lot (one PurchaseItem = one lot):
 
@@ -27,12 +29,18 @@ from django.db.models import Sum
 from django.utils.translation import gettext as _
 
 from core.models import Broker, PurchaseItem, Sale, SaleItem, SaleLot
+from core.utils import qty_str
 
 TWO = Decimal("0.01")
 
 
 def money(value):
     return Decimal(value or 0).quantize(TWO, rounding=ROUND_HALF_UP)
+
+
+def quantity(value):
+    """Quantities and weights keep 3 decimals (12.345 kg)."""
+    return Decimal(value or 0).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
 
 
 class StockError(Exception):
@@ -61,14 +69,19 @@ def suggested_tax_type(company, customer):
     return Sale.CGST_SGST
 
 
-def compute_totals(items, tax_type):
+def compute_totals(items, tax_type, freight=0, manual=(None, None, None)):
     """
     Work out every total for one sale. Each SaleItem gets its computed fields
     filled in as a side effect, so the caller can just save them.
+
+    `freight` is freight added to this invoice (scenarios B and C). `manual`
+    is the hand-typed (cgst, sgst, igst), None where automatic.
     """
+    from core.services.gst import apply_manual, split_gst
+
     taxable = Decimal("0")
     gst_total = Decimal("0")
-    bags = 0
+    bags = Decimal("0")
     kg = Decimal("0")
 
     for item in items:
@@ -78,17 +91,13 @@ def compute_totals(items, tax_type):
 
         taxable += item.amount
         gst_total += item.gst_amount
-        bags += int(item.bag_count or 0)
+        bags += Decimal(item.bag_count or 0)
         kg += item.total_weight
 
-    cgst = sgst = igst = Decimal("0")
-    if tax_type == Sale.CGST_SGST:
-        cgst = money(gst_total / 2)
-        sgst = gst_total - cgst          # never lose a paisa on odd amounts
-    elif tax_type == Sale.IGST:
-        igst = gst_total
+    cgst, sgst, igst = apply_manual(split_gst(gst_total, tax_type), manual, tax_type)
 
-    before_round = taxable + cgst + sgst + igst
+    freight = money(freight)
+    before_round = taxable + cgst + sgst + igst + freight
     rounded = before_round.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
     # One rate across the bill is shown on old screens; mixed rates show 0.
@@ -97,24 +106,31 @@ def compute_totals(items, tax_type):
 
     return {
         "total_bags": bags,
-        "total_quantity_kg": money(kg),
+        "total_quantity_kg": quantity(kg),
         "taxable_amount": money(taxable),
         "gst_percent": single_rate,
         "cgst_amount": money(cgst),
         "sgst_amount": money(sgst),
         "igst_amount": money(igst),
         "gst_amount": money(cgst + sgst + igst),
+        "freight_on_invoice": freight,
         "round_off": money(rounded - before_round),
         "total_amount": money(rounded),
     }
+
+
+def calculated_gst(items, tax_type):
+    """The (cgst, sgst, igst) the app works out, ignoring any manual figures."""
+    totals = compute_totals(items, tax_type)
+    return totals["cgst_amount"], totals["sgst_amount"], totals["igst_amount"]
 
 
 def invoice_lines(sale):
     """
     The lines as the customer should see them. A truck filled from two or
     three mills is entered as several lines of the same product (one per
-    lot); on the invoice they are one line - same product, bag size, rate
-    and GST - with the bags and amounts added up.
+    lot); on the invoice they are one line - same product, pack size, rate
+    and GST - with the quantities and amounts added up.
     """
     from types import SimpleNamespace
 
@@ -125,12 +141,12 @@ def invoice_lines(sale):
         if key not in merged:
             merged[key] = SimpleNamespace(
                 product=item.product, bag_weight=item.bag_weight, rate_per_kg=item.rate_per_kg,
-                gst_percent=item.gst_percent, bag_count=0, total_weight=Decimal("0"),
+                gst_percent=item.gst_percent, bag_count=Decimal("0"), total_weight=Decimal("0"),
                 amount=Decimal("0"), gst_amount=Decimal("0"), line_total=Decimal("0"),
             )
             order.append(key)
         line = merged[key]
-        line.bag_count += int(item.bag_count or 0)
+        line.bag_count += Decimal(item.bag_count or 0)
         line.total_weight += Decimal(item.total_weight or 0)
         line.amount += Decimal(item.amount or 0)
         line.gst_amount += Decimal(item.gst_amount or 0)
@@ -207,13 +223,13 @@ def stock_lots(company, exclude_sale=None, only_available=True):
     lots = (
         PurchaseItem.objects
         .for_company(company)
-        .select_related("product", "purchase", "purchase__mill")
+        .select_related("product", "product__unit", "product__rate_unit", "purchase", "purchase__mill")
         .order_by("purchase__purchase_date", "purchase__id", "id")
     )
 
     result = []
     for lot in lots:
-        left = int(lot.bag_count or 0) - int(sold.get(lot.id, 0))
+        left = Decimal(lot.bag_count or 0) - Decimal(sold.get(lot.id, 0))
         if only_available and left <= 0:
             continue
         lot.bags_left = max(left, 0)
@@ -224,7 +240,7 @@ def stock_lots(company, exclude_sale=None, only_available=True):
 
 def product_stock(company, exclude_sale=None):
     """Bags in stock per (product id, bag weight), from every purchase and sale."""
-    bought = defaultdict(int)
+    bought = defaultdict(Decimal)
     for row in (
         PurchaseItem.objects.for_company(company)
         .values("product", "bag_weight")
@@ -250,7 +266,7 @@ def allocate(company, items, exclude_sale=None):
     by_id = {lot.id: lot for lot in lots}
 
     totals = product_stock(company, exclude_sale=exclude_sale)
-    asked = defaultdict(int)
+    asked = defaultdict(Decimal)
 
     errors = []
     plan = {}
@@ -260,9 +276,10 @@ def allocate(company, items, exclude_sale=None):
 
     for index in order:
         item = items[index]
-        need = int(item.bag_count or 0)
-        name = item.product.rice_name
-        key = (item.product_id, int(item.bag_weight or 0))
+        need = Decimal(item.bag_count or 0)
+        name = item.product.name
+        unit = item.product.unit_label
+        key = (item.product_id, Decimal(item.bag_weight or 0))
         asked[key] += need
 
         if item.purchase_item_id:
@@ -270,18 +287,19 @@ def allocate(company, items, exclude_sale=None):
             available = left.get(item.purchase_item_id, 0)
 
             if lot is None:
-                errors.append(_("%(rice)s: the chosen stock lot has no bags left.") % {"rice": name})
+                errors.append(_("%(product)s: the chosen stock lot is empty.") % {"product": name})
                 continue
-            if lot.product_id != item.product_id or int(lot.bag_weight) != int(item.bag_weight or 0):
+            if lot.product_id != item.product_id or Decimal(lot.bag_weight) != Decimal(item.bag_weight or 0):
                 errors.append(
-                    _("%(rice)s: the chosen lot is %(lot_rice)s in %(weight)s kg bags - it does not match this line.")
-                    % {"rice": name, "lot_rice": lot.product.rice_name, "weight": lot.bag_weight}
+                    _("%(product)s: the chosen lot is %(lot_product)s with pack size %(size)s - it does not match this line.")
+                    % {"product": name, "lot_product": lot.product.name, "size": qty_str(lot.bag_weight)}
                 )
                 continue
             if need > available:
                 errors.append(
-                    _("%(rice)s: only %(left)s bags left in lot %(lot)s, you asked for %(need)s.")
-                    % {"rice": name, "left": available, "lot": lot.purchase.invoice_no, "need": need}
+                    _("%(product)s: only %(left)s %(unit)s left in lot %(lot)s, you asked for %(need)s.")
+                    % {"product": name, "left": qty_str(available), "unit": unit,
+                       "lot": lot.purchase.invoice_no, "need": qty_str(need)}
                 )
                 continue
 
@@ -289,13 +307,13 @@ def allocate(company, items, exclude_sale=None):
             plan[index] = [(lot, need)]
             continue
 
-        # FIFO: oldest lots of this rice and bag size first.
+        # FIFO: oldest lots of this product and pack size first.
         taken = []
         remaining = need
         for lot in lots:
             if remaining <= 0:
                 break
-            if lot.product_id != item.product_id or int(lot.bag_weight) != int(item.bag_weight or 0):
+            if lot.product_id != item.product_id or Decimal(lot.bag_weight) != Decimal(item.bag_weight or 0):
                 continue
             available = left.get(lot.id, 0)
             if available <= 0:
@@ -308,8 +326,9 @@ def allocate(company, items, exclude_sale=None):
         if remaining > 0:
             in_stock = need - remaining
             errors.append(
-                _("%(rice)s (%(weight)s kg bags): only %(left)s bags in stock, you asked for %(need)s.")
-                % {"rice": name, "weight": item.bag_weight, "left": in_stock, "need": need}
+                _("%(product)s (pack size %(size)s): only %(left)s %(unit)s in stock, you asked for %(need)s.")
+                % {"product": name, "size": qty_str(item.bag_weight), "left": qty_str(in_stock),
+                   "unit": unit, "need": qty_str(need)}
             )
             continue
 
@@ -321,10 +340,11 @@ def allocate(company, items, exclude_sale=None):
         for key, need in asked.items():
             available = totals.get(key, 0)
             if need > available:
-                product = next(i.product for i in items if (i.product_id, int(i.bag_weight or 0)) == key)
+                product = next(i.product for i in items if (i.product_id, Decimal(i.bag_weight or 0)) == key)
                 errors.append(
-                    _("%(rice)s (%(weight)s kg bags): only %(left)s bags in stock, you asked for %(need)s.")
-                    % {"rice": product.rice_name, "weight": key[1], "left": max(available, 0), "need": need}
+                    _("%(product)s (pack size %(size)s): only %(left)s %(unit)s in stock, you asked for %(need)s.")
+                    % {"product": product.name, "size": qty_str(key[1]), "left": qty_str(max(available, 0)),
+                       "unit": product.unit_label, "need": qty_str(need)}
                 )
 
     if errors:
@@ -359,6 +379,7 @@ def save_sale(sale, items, company):
     objects. On edit, the old lines and lots are replaced.
 
     Raises StockError when the stock does not cover the lines.
+    Manual GST figures set on `sale` (manual_cgst...) are kept and applied.
     """
     with transaction.atomic():
         # Lock this company's lots for the moment we count them, so two people
@@ -367,9 +388,25 @@ def save_sale(sale, items, company):
 
         plan = allocate(company, items, exclude_sale=sale if sale.pk else None)
 
-        totals = compute_totals(items, sale.tax_type)
+        from core.services.gst import clear_unused_manual, manual_values
+
+        clear_unused_manual(sale)
+        manual = manual_values(sale)
+        totals = compute_totals(items, sale.tax_type, manual=manual)
         for field, value in totals.items():
             setattr(sale, field, value)
+
+        # Freight on the invoice needs the weight, so it is added second.
+        on_invoice = freight_figures(sale)["on_invoice"]
+        if on_invoice:
+            totals = compute_totals(items, sale.tax_type, freight=on_invoice, manual=manual)
+            for field, value in totals.items():
+                setattr(sale, field, value)
+
+        if sale.freight_borne_by == Sale.FREIGHT_BILL and not sale.transport_invoice_no:
+            from core.services.invoice_number import next_number
+
+            sale.transport_invoice_no = next_number(company, "TRN", sale.sale_date)
 
         if not sale.broker_id:
             sale.broker_commission_type = ""
@@ -410,6 +447,61 @@ def save_sale(sale, items, company):
     return sale
 
 
+def freight_figures(sale, dispatched_kg=None):
+    """
+    Who owes what for the truck, for every freight arrangement.
+
+        total freight    = the amount typed in, else weight x rate per ton,
+                           else what was paid to the driver
+        buyer's share    = A, E: 0 · B, D: all of it · C: the share typed in
+        on the invoice   = the buyer's share for B and C (D gets its own bill)
+        adjustment       = buyer's share - what the buyer paid the driver
+                           (added to / cut from what the buyer owes you)
+        your cost        = total freight - buyer's share
+
+    "Separate" freight is between the buyer and the truck: none of it is in
+    your books.
+    """
+    if dispatched_kg is None:
+        dispatched_kg = Decimal(sale.loading_weight_kg or 0) or Decimal(sale.total_quantity_kg or 0)
+
+    paid_by_us = money(sale.transport_paid_by_dealer)
+    paid_by_party = money(sale.transport_paid_by_customer)
+    entered = money(sale.freight_amount)
+    rate_based = money(Decimal(dispatched_kg) / Decimal("1000") * Decimal(sale.transport_rate_per_ton or 0))
+    if entered > 0:
+        total = entered
+    elif rate_based > 0:
+        total = rate_based
+    else:
+        total = paid_by_us + paid_by_party
+
+    mode = sale.freight_borne_by
+    zero = Decimal("0.00")
+    if mode == Sale.FREIGHT_SEPARATE:
+        return {
+            "total": total, "paid_by_us": paid_by_us, "paid_by_party": paid_by_party,
+            "customer_share": zero, "on_invoice": zero, "adjustment": zero, "cost": zero,
+        }
+
+    if mode in (Sale.FREIGHT_CUSTOMER, Sale.FREIGHT_BILL):
+        share = total
+    elif mode == Sale.FREIGHT_SHARED:
+        share = min(money(sale.freight_customer_share), total)
+    else:   # seller pays (A) or freight is inside the rate (E)
+        share = zero
+
+    return {
+        "total": total,
+        "paid_by_us": paid_by_us,
+        "paid_by_party": paid_by_party,
+        "customer_share": share,
+        "on_invoice": share if mode in Sale.FREIGHT_ON_INVOICE else zero,
+        "adjustment": money(share - paid_by_party),
+        "cost": money(total - share),
+    }
+
+
 def settlement(sale):
     """
     The truck's money from dispatch to final payment, the way a rice trader's
@@ -421,8 +513,8 @@ def settlement(sale):
       - brokerage        = only when the party pays the broker and cuts it
       - other deductions
       = what the party pays for the goods
-      - freight the party paid the driver   (when you carry the freight)
-      + your freight advance                (when the party carries it)
+      + the buyer's share of the freight    (on this invoice or a transport bill)
+      - freight the party paid the driver
       = net receivable   -> the customer ledger
 
     Before unloading, the received weight is taken as the dispatched weight.
@@ -434,8 +526,10 @@ def settlement(sale):
     # The party pays the invoice rate on the weight they received.
     ratio = (received / billed) if billed else Decimal("1")
 
-    total = Decimal(sale.total_amount or 0)
-    party_value = money(total * ratio)
+    # Freight on the invoice is not shrunk by a transit shortage, and no CD
+    # is taken on it - only the goods are.
+    goods_total = Decimal(sale.total_amount or 0) - Decimal(sale.freight_on_invoice or 0)
+    party_value = money(goods_total * ratio)
     party_taxable = money(Decimal(sale.taxable_amount or 0) * ratio)
 
     commission = broker_commission(
@@ -456,29 +550,16 @@ def settlement(sale):
     cash_discount = money(party_value * Decimal(sale.cash_discount_percent or 0) / Decimal("100"))
     other = money(sale.other_deductions)
 
-    rate_based = money(dispatched / Decimal("1000") * Decimal(sale.transport_rate_per_ton or 0))
     collected_by_broker = bool(sale.broker_id) and sale.collect_from == Sale.COLLECT_FROM_BROKER
-    paid_by_us = money(sale.transport_paid_by_dealer)
-    paid_by_party = money(sale.transport_paid_by_customer)
-    freight_total = rate_based if rate_based > 0 else paid_by_us + paid_by_party
-
-    if sale.freight_borne_by == Sale.FREIGHT_US:
-        freight_adjustment = -paid_by_party
-        freight_cost = freight_total
-    elif sale.freight_borne_by == Sale.FREIGHT_CUSTOMER:
-        freight_adjustment = paid_by_us
-        freight_cost = Decimal("0.00")
-    else:
-        freight_adjustment = Decimal("0.00")
-        freight_cost = Decimal("0.00")
+    freight = freight_figures(sale, dispatched)
 
     goods_payable = party_value - cash_discount - brokerage_cut - other
-    net_receivable = money(goods_payable + freight_adjustment)
+    net_receivable = money(goods_payable + freight["adjustment"])
 
     return {
-        "dispatched_kg": money(dispatched),
-        "received_kg": money(received),
-        "weight_loss_kg": money(dispatched - received),
+        "dispatched_kg": quantity(dispatched),
+        "received_kg": quantity(received),
+        "weight_loss_kg": quantity(dispatched - received),
         "unloaded": sale.received_weight_kg is not None,
         "party_value": party_value,
         "party_taxable": party_taxable,
@@ -488,11 +569,13 @@ def settlement(sale):
         "brokerage_cut": brokerage_cut,
         "other_deductions": other,
         "goods_payable": money(goods_payable),
-        "freight_total": freight_total,
-        "freight_paid_by_us": paid_by_us,
-        "freight_paid_by_party": paid_by_party,
-        "freight_adjustment": money(freight_adjustment),
-        "freight_cost": money(freight_cost),
+        "freight_total": freight["total"],
+        "freight_paid_by_us": freight["paid_by_us"],
+        "freight_paid_by_party": freight["paid_by_party"],
+        "freight_customer_share": freight["customer_share"],
+        "freight_on_invoice": freight["on_invoice"],
+        "freight_adjustment": freight["adjustment"],
+        "freight_cost": freight["cost"],
         "net_receivable": net_receivable,
         "collected_by_broker": collected_by_broker,
     }

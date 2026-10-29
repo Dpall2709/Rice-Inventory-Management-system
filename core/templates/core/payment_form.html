@@ -10,7 +10,7 @@
 <div class="page-head">
   <div>
     <div class="crumbs">
-      <a href="{% url 'mill_list' %}">{% translate "Mills / Suppliers" %}</a> ›
+      <a href="{% url 'mill_list' %}">{% translate "Suppliers" %}</a> ›
       <a href="{% url 'mill_report_detail' mill.id %}">{{ mill.mill_name }}</a> ›
       {% if purchase %}
         <a href="{% url 'purchase_detail' purchase.id %}">{% blocktranslate with invoice_no=purchase.invoice_no %}Bill {{ invoice_no }}{% endblocktranslate %}</a> ›
@@ -22,7 +22,7 @@
       {% if purchase %}
         {{ mill.mill_name }} · {% blocktranslate with date=purchase.purchase_date|date:"d M Y" %}bill dated {{ date }}{% endblocktranslate %} · {% translate "total" %} ₹ {{ purchase.total_amount }}
       {% else %}
-        {% translate "Money paid to the mill is applied to its oldest unpaid bills first." %}
+        {% translate "Money paid to the supplier is applied to its oldest unpaid bills first." %}
       {% endif %}
     </p>
   </div>
@@ -36,7 +36,7 @@
       <div class="due-value inr" data-value="{{ due }}">₹ {{ due }}</div>
     </div>
     {% if advance %}
-      <div class="due-side">{% translate "Advance already with mill:" %} <strong>₹ {{ advance }}</strong></div>
+      <div class="due-side">{% translate "Advance already with supplier:" %} <strong>₹ {{ advance }}</strong></div>
     {% elif due <= 0 %}
       <div class="due-side">{% translate "Nothing is due. Anything paid now becomes an advance." %}</div>
     {% endif %}

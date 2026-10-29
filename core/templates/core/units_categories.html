@@ -1,0 +1,93 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'product_list' %}{% endblock %}
+{% block page_title %}{% translate "Units & categories" %}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{% translate "Units & categories" %}</h1>
+    <p class="muted">{% translate "Define how your business counts and groups goods - boxes, cartons, kg, litres, or your own units." %}</p>
+  </div>
+</div>
+
+<div class="two-col">
+  <div class="card">
+    <div class="form-section-title">{% translate "Units" %}</div>
+    <form method="POST" novalidate>
+      {% csrf_token %}
+      <div class="form-grid">
+        {% for field in unit_form %}
+          <div class="field {% if field.errors %}has-error{% endif %}">
+            {% if field.name == 'allow_decimal' %}
+              <label style="flex-direction:row; display:flex; gap:8px; align-items:center;">{{ field }} {{ field.label }}</label>
+            {% else %}
+              <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+            {% endif %}
+            {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <button class="btn btn-primary" type="submit" name="add_unit" value="1" style="margin-top:12px;">➕ {% translate "Add unit" %}</button>
+    </form>
+
+    <div class="table-wrap" style="margin-top:16px;">
+      <table class="table">
+        <thead><tr><th>{% translate "Unit" %}</th><th>{% translate "Short form" %}</th><th>{% translate "Decimals" %}</th><th></th></tr></thead>
+        <tbody>
+          {% for unit in units %}
+            <tr {% if not unit.is_active %}class="muted"{% endif %}>
+              <td>{{ unit.name }}</td>
+              <td>{{ unit.symbol }}</td>
+              <td>{% if unit.allow_decimal %}✓{% else %}—{% endif %}</td>
+              <td class="right">
+                <form method="POST" action="{% url 'toggle_unit' unit.id %}">{% csrf_token %}
+                  <button class="btn btn-ghost btn-sm" type="submit">{% if unit.is_active %}{% translate "Switch off" %}{% else %}{% translate "Switch on" %}{% endif %}</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="form-section-title">{% translate "Categories" %}</div>
+    <form method="POST" novalidate>
+      {% csrf_token %}
+      <div class="form-grid">
+        {% for field in category_form %}
+          <div class="field {% if field.errors %}has-error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+            {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <button class="btn btn-primary" type="submit" name="add_category" value="1" style="margin-top:12px;">➕ {% translate "Add category" %}</button>
+    </form>
+
+    <div class="table-wrap" style="margin-top:16px;">
+      <table class="table">
+        <thead><tr><th>{% translate "Category" %}</th><th>{% translate "Products" %}</th><th></th></tr></thead>
+        <tbody>
+          {% for category in categories %}
+            <tr {% if not category.is_active %}class="muted"{% endif %}>
+              <td>{{ category.name }}</td>
+              <td>{{ category.products.count }}</td>
+              <td class="right">
+                <form method="POST" action="{% url 'toggle_category' category.id %}">{% csrf_token %}
+                  <button class="btn btn-ghost btn-sm" type="submit">{% if category.is_active %}{% translate "Switch off" %}{% else %}{% translate "Switch on" %}{% endif %}</button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="3" class="muted">{% translate "No categories yet." %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,5 +1,5 @@
 {% extends 'core/base.html' %}
-{% load i18n %}
+{% load i18n form_tags %}
 {% block nav_kind %}form{% endblock %}
 {% block back_url %}{% url 'sale_detail' sale.id %}{% endblock %}
 {% block content_class %}page-narrow{% endblock %}
@@ -23,8 +23,8 @@
     <span>{% if can_delete %}⚠️{% else %}🔒{% endif %}</span>
     <div>
       {% if can_delete %}
-        {% blocktranslate with bags=sale.total_bags trimmed %}
-          Deleting this invoice puts <strong>{{ bags }} bags</strong> back into stock and removes it
+        {% blocktranslate with qty=sale.total_bags|qty trimmed %}
+          Deleting this invoice puts <strong>qty {{ qty }}</strong> back into stock and removes it
           from the customer's ledger. This cannot be undone.
         {% endblocktranslate %}
       {% else %}
@@ -43,10 +43,10 @@
     <dt>{% translate "Customer" %}</dt><dd>{{ sale.customer_name }}</dd>
     <dt>{% translate "Invoice date" %}</dt><dd>{{ sale.sale_date|date:"d M Y" }}</dd>
     <dt>{% translate "Invoice total" %}</dt><dd>₹ {{ sale.total_amount }}</dd>
-    <dt>{% translate "Bags" %}</dt>
+    <dt>{% translate "Items" %}</dt>
     <dd>
       {% for item in items %}
-        {{ item.bag_count }} × {{ item.bag_weight }}kg {{ item.product.rice_name }}{% if not forloop.last %}<br>{% endif %}
+        {{ item.bag_count|qty }} {{ item.product.unit_label }} × {{ item.bag_weight|qty }} {{ item.product.rate_unit_label }} {{ item.product.name }}{% if not forloop.last %}<br>{% endif %}
       {% empty %}—{% endfor %}
     </dd>
   </dl>

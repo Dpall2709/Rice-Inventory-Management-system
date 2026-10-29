@@ -37,11 +37,11 @@
       {% if kind == 'broker' %}
         {% translate "Commission you still owe him" %}: <strong>₹ {{ due }}</strong>
       {% elif kind == 'broker_receipt' %}
-        {% translate "He still has to pay you for his trucks" %}: <strong>₹ {{ due }}</strong>.
-        {% translate "The money is applied to his oldest unpaid trucks first." %}
+        {% translate "He still has to pay you for his invoices" %}: <strong>₹ {{ due }}</strong>.
+        {% translate "The money is applied to his oldest unpaid invoices first." %}
       {% elif kind == 'sale' %}
         {% translate "Still due on this invoice" %}: <strong>₹ {{ due }}</strong>.
-        {% if broker %}<br>🤝 {% blocktranslate with name=broker.broker_name %}This truck was sold through {{ name }} - the money is recorded as paid by him.{% endblocktranslate %}<br>{% endif %}
+        {% if broker %}<br>🤝 {% blocktranslate with name=broker.broker_name %}This sale was made through {{ name }} - the money is recorded as paid by him.{% endblocktranslate %}<br>{% endif %}
         {% translate "Anything extra is applied to the customer's other unpaid invoices." %}
       {% else %}
         {% translate "This customer owes you" %}: <strong>₹ {{ due }}</strong>.

@@ -1,19 +1,19 @@
 {% extends 'core/base.html' %}
 {% load i18n %}
-{% block page_title %}{% translate "Mill Reports" %}{% endblock %}
+{% block page_title %}{% translate "Supplier Reports" %}{% endblock %}
 
 {% block content %}
 <div class="panel">
 
   <div class="list-header">
     <div>
-      <h2 class="list-title">{% translate "Mill Wise Report" %}</h2>
+      <h2 class="list-title">{% translate "Supplier Wise Report" %}</h2>
       <p class="muted">{% translate "Search and open supplier ledger" %}</p>
     </div>
 
     <div class="list-actions">
       <form method="GET" class="search-box">
-        <input type="text" name="q" value="{{ q }}" placeholder="{% translate 'Search mill name...' %}">
+        <input type="text" name="q" value="{{ q }}" placeholder="{% translate 'Search supplier name...' %}">
         <button type="submit" class="btn btn-outline">{% translate "Search" %}</button>
       </form>
     </div>
@@ -24,7 +24,7 @@
       <thead>
         <tr>
           <th>#</th>
-          <th>{% translate "Mill Name" %}</th>
+          <th>{% translate "Supplier Name" %}</th>
           <th>{% translate "Mobile" %}</th>
           <th>{% translate "GST" %}</th>
           <th>{% translate "Action" %}</th>
@@ -46,7 +46,7 @@
         </tr>
         {% empty %}
         <tr>
-          <td colspan="5" style="text-align:center; padding:20px;">{% translate "No mills found" %}</td>
+          <td colspan="5" style="text-align:center; padding:20px;">{% translate "No suppliers found" %}</td>
         </tr>
         {% endfor %}
       </tbody>

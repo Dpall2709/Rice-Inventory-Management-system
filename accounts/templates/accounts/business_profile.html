@@ -134,6 +134,8 @@
         {% include "accounts/_field.html" with field=form.invoice_prefix hint=True %}
         {% include "accounts/_field.html" with field=form.default_margin_percent hint=True %}
         {% include "accounts/_field.html" with field=form.default_loading_rate_per_kg hint=True %}
+        {% include "accounts/_field.html" with field=form.industry hint=True %}
+        {% include "accounts/_field.html" with field=form.default_freight_mode hint=True %}
         {% include "accounts/_field.html" with field=form.invoice_terms full=True hint=True %}
       </div>
     </section>
@@ -159,7 +161,7 @@
     <div class="inv-preview" aria-label="{% translate 'Invoice header preview' %}">
       <div class="inv-label">{% translate "Invoice preview" %}</div>
       <div class="inv-head">
-        <div class="inv-logo" id="pv-logo">{% if company.logo %}<img src="{{ company.logo.url }}" alt="">{% else %}🌾{% endif %}</div>
+        <div class="inv-logo" id="pv-logo">{% if company.logo %}<img src="{{ company.logo.url }}" alt="">{% else %}📦{% endif %}</div>
         <div style="min-width:0;">
           <div class="inv-name" data-pv="company_name">{{ company.company_name }}</div>
           <div class="inv-line" data-pv="address">{{ company.address }}</div>

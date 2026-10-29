@@ -1,7 +1,7 @@
 """
 Entering and editing a purchase bill.
 
-One screen records: the mill's bill, its rice lines with GST, the bill-level
+One screen records: the supplier's bill, its product lines with GST, the bill-level
 charges, and whatever you paid at that moment.
 """
 
@@ -16,7 +16,9 @@ from core.forms import PurchaseForm, PurchaseItemFormSet
 from core.models import Payment, Product, Purchase
 from core.permissions import manager_required
 from core.services.invoice_number import next_purchase_ref, next_supplier_bill_no
-from core.services.purchase_service import apply_totals, suggested_tax_type
+from core.services.gst import record_adjustment, saved_manual_values
+from core.services.purchase_service import apply_totals, calculated_gst, suggested_tax_type
+from core.utils import qty_str
 from core.tenancy import company_of, tenant_object_or_404
 
 from ..base_imports import *
@@ -24,15 +26,18 @@ from ..base_imports import *
 
 def product_tax_map(company):
     """
-    GST% and HSN of each rice, handed to the page as JSON so choosing a product
-    fills its tax rate in automatically.
+    GST%, HSN and pack size of each product, handed to the page as JSON so
+    choosing a product fills them in automatically.
     """
-    products = Product.objects.filter(company=company, is_active=True)
+    products = Product.objects.filter(company=company, is_active=True).select_related("unit", "rate_unit")
     return json.dumps({
         str(p.id): {
             "gst": float(p.gst_percent or 0),
             "hsn": p.hsn_code or "",
-            "name": p.rice_name,
+            "name": p.name,
+            "pack_size": float(p.default_pack_size or 1),
+            "unit": p.unit_label,
+            "rate_unit": p.rate_unit_label,
         }
         for p in products
     })
@@ -166,6 +171,7 @@ def add_purchase(request):
     supplier = _supplier_from(request, company)
 
     if request.method == "POST":
+        gst_before = (None, None, None)
         form = PurchaseForm(request.POST, company=company)
         formset = PurchaseItemFormSet(request.POST, form_kwargs={"company": company})
         if supplier:
@@ -206,6 +212,12 @@ def add_purchase(request):
                 for item in items:
                     item.save()
 
+                record_adjustment(
+                    purchase, gst_before,
+                    calculated_gst(items, purchase.tax_type, form.cleaned_data.get("discount_amount") or 0),
+                    request.user,
+                )
+
                 purchase.save()
 
                 save_own_expenses(purchase, form)
@@ -226,9 +238,9 @@ def add_purchase(request):
 
             messages.success(
                 request,
-                _("Purchase %(ref)s saved · %(bags)s bags · ₹ %(total)s") % {
+                _("Purchase %(ref)s saved · qty %(qty)s · ₹ %(total)s") % {
                     "ref": purchase.purchase_ref,
-                    "bags": purchase.total_bags,
+                    "qty": qty_str(purchase.total_bags),
                     "total": purchase.total_amount,
                 },
             )
@@ -274,6 +286,7 @@ def edit_purchase(request, purchase_id):
     purchase = tenant_object_or_404(Purchase, request, purchase_id)
 
     if request.method == "POST":
+        gst_before = saved_manual_values(purchase)
         form = PurchaseForm(request.POST, instance=purchase, company=company)
         formset = PurchaseItemFormSet(request.POST, instance=purchase, form_kwargs={"company": company})
 
@@ -297,6 +310,12 @@ def edit_purchase(request, purchase_id):
 
                 for item in items:
                     item.save()
+
+                record_adjustment(
+                    purchase, gst_before,
+                    calculated_gst(items, purchase.tax_type, form.cleaned_data.get("discount_amount") or 0),
+                    request.user,
+                )
 
                 if not purchase.invoice_no:
                     purchase.invoice_no = next_supplier_bill_no(purchase.mill)

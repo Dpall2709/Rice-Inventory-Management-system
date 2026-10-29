@@ -192,8 +192,8 @@ def _history(opening, sales, payments):
 
     for sale in sales:
         items = list(sale.items.all())
-        bags = sum(int(item.bag_count or 0) for item in items) or sale.total_bags
-        rice = ", ".join(sorted({item.product.rice_name for item in items})) or _("goods")
+        bags = sum(Decimal(item.bag_count or 0) for item in items) or sale.total_bags
+        rice = ", ".join(sorted({item.product.name for item in items})) or _("goods")
 
         entries.append({
             "date": sale.sale_date,
@@ -410,7 +410,7 @@ def broker_statement(company, broker):
         "payments": payments,
         "opening": opening,
         "total_sales_value": sum((_money(s.total_amount) for s in sales), Decimal("0")),
-        "total_bags": sum((int(s.total_bags or 0) for s in sales)),
+        "total_bags": sum((Decimal(s.total_bags or 0) for s in sales)),
         "earned": earned,
         "paid_by_parties": paid_by_party,
         "paid": paid,

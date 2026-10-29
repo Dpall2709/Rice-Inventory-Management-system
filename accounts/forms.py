@@ -232,6 +232,7 @@ class BusinessProfileForm(forms.ModelForm):
             "bank_account_name", "bank_account_no", "bank_ifsc", "bank_name",
             "bank_branch", "upi_id",
             "invoice_prefix", "invoice_terms", "default_margin_percent", "default_loading_rate_per_kg",
+            "industry", "default_freight_mode",
         ]
         labels = {
             "company_name": _("Business name"),
@@ -254,6 +255,8 @@ class BusinessProfileForm(forms.ModelForm):
             "invoice_terms": _("Terms printed on invoice"),
             "default_margin_percent": _("Default margin %"),
             "default_loading_rate_per_kg": _("Loading charge per kg (₹)"),
+            "industry": _("Type of business"),
+            "default_freight_mode": _("Usual freight arrangement"),
         }
         help_texts = {
             "gst_number": _("Optional. Filling it sets your state and PAN automatically."),
@@ -264,6 +267,8 @@ class BusinessProfileForm(forms.ModelForm):
             "invoice_terms": _("For example: Goods once sold will not be taken back."),
             "default_margin_percent": _("Used to suggest a selling price from your cost."),
             "default_loading_rate_per_kg": _("e.g. 0.10 - each truck's loading charge is filled as weight × this rate."),
+            "industry": _("Only used to suggest starting categories. Every feature works for every business."),
+            "default_freight_mode": _("New sales start with this; it can be changed on each sale."),
             "bank_ifsc": _("11 characters, e.g. SBIN0001234. Printed on the invoice."),
         }
         widgets = {
@@ -302,6 +307,16 @@ class BusinessProfileForm(forms.ModelForm):
             )
 
         self.fields["default_loading_rate_per_kg"].required = False
+
+        from core.models import Sale
+
+        self.fields["default_freight_mode"] = forms.ChoiceField(
+            choices=Sale.FREIGHT_CHOICES, required=False,
+            label=self.Meta.labels["default_freight_mode"],
+            help_text=self.Meta.help_texts["default_freight_mode"],
+            initial=self.instance.default_freight_mode,
+        )
+        self.fields["industry"].required = False
 
         if read_only:
             for field in self.fields.values():
@@ -444,3 +459,9 @@ class BusinessProfileForm(forms.ModelForm):
             self.instance.state = self.cleaned_data["state"] or ""
         if "pan_number" in self.cleaned_data:
             self.instance.pan_number = self.cleaned_data["pan_number"] or ""
+
+    def clean_default_freight_mode(self):
+        return self.cleaned_data.get("default_freight_mode") or "us"
+
+    def clean_industry(self):
+        return self.cleaned_data.get("industry") or self.instance.industry or "general"

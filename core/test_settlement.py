@@ -32,7 +32,7 @@ class TruckSettlementTests(TestCase):
         today = timezone.localdate()
 
         mill = Mill.objects.create(company=self.company, mill_name="Goyal Agro Raipur", mobile="9876543210")
-        self.rice = Product.objects.create(company=self.company, rice_name="Parboiled", gst_percent=0)
+        self.rice = Product.objects.create(company=self.company, name="Parboiled", gst_percent=0)
         purchase = Purchase.objects.create(
             company=self.company, mill=mill, invoice_no="GA-1", purchase_date=today - timedelta(days=5),
             total_amount=0, tax_type="none",
@@ -330,7 +330,7 @@ class TruckSettlementTests(TestCase):
         url = reverse("broker_statement_export", args=[self.broker.id, "xlsx"]) + f"?month={sale.sale_date:%Y-%m}"
 
         def headers(response):
-            sheet = load_workbook(BytesIO(response.content))["Trucks"]
+            sheet = load_workbook(BytesIO(response.content))["Sales"]
             return [cell.value for cell in sheet[5]]
 
         self.assertNotIn("Profit / loss", headers(self.client.get(url)))

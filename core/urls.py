@@ -22,9 +22,17 @@ urlpatterns = [
     path('mills/delete/<int:mill_id>/', view.delete_mill, name='delete_mill'),
     path('mills/restore/<int:mill_id>/', view.restore_mill, name='restore_mill'),
     
-    path('products/', views.product_list, name='product_list'),
-    path('products/add/', views.add_product, name='add_product'),
-    path('products/edit/<int:product_id>/', views.edit_product, name='edit_product'),
+    path('products/', view.product_list, name='product_list'),
+    path('products/add/', view.add_product, name='add_product'),
+    path('products/edit/<int:product_id>/', view.edit_product, name='edit_product'),
+    path('products/units/', view.units_and_categories, name='units_and_categories'),
+    path('products/units/<int:unit_id>/toggle/', view.toggle_unit, name='toggle_unit'),
+    path('products/categories/<int:category_id>/toggle/', view.toggle_category, name='toggle_category'),
+
+    # Create a master record from inside a sale / purchase (pop-up).
+    path('quick/customer/', view.quick_customer, name='quick_customer'),
+    path('quick/supplier/', view.quick_supplier, name='quick_supplier'),
+    path('quick/product/', view.quick_product, name='quick_product'),
     path('products/delete/<int:product_id>/', views.delete_product, name='delete_product'),
     path("products/report/<int:product_id>/", views.product_report, name="product_report"),
 
@@ -58,6 +66,7 @@ urlpatterns = [
     path("sales/<int:sale_id>/print/", view.sale_print, name="sale_print"),
     path("sales/<int:sale_id>/payment/add/", view.add_sale_payment, name="add_sale_payment"),
     path("sales/<int:sale_id>/invoice.pdf", views.sale_invoice_pdf, name="sale_invoice_pdf"),
+    path("sales/<int:sale_id>/transport-invoice.pdf", views.sale_transport_invoice_pdf, name="sale_transport_invoice_pdf"),
     path("sales/<int:sale_id>/statement.pdf", views.sale_statement_pdf, name="sale_statement_pdf"),
     path("reports/trucks/", view.trade_register, name="trade_register"),
     path("customers/<int:customer_id>/statement.<str:fmt>", view.customer_statement_export, name="customer_statement_export"),

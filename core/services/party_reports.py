@@ -29,6 +29,7 @@ from django.utils.translation import gettext as _
 
 from core.services.customer_ledger import broker_collections, broker_statement, customer_statement
 from core.services.sale_service import money, sale_profit, settlement
+from core.utils import qty_str
 
 ZERO = Decimal("0")
 
@@ -235,7 +236,7 @@ def report_excel(company, report, label, internal=False):
         # These trucks are paid to us through the broker, so they are on his
         # account, not this one - list them so the sheet is never blank.
         ws.append([])
-        ws.append([None, _("Trucks paid through the broker (on the broker's account)")])
+        ws.append([None, _("Sales paid through the broker (on the broker's account)")])
         ws.cell(row=ws.max_row, column=2).font = Font(bold=True)
         for row in report["broker_sales"]:
             sale = row["sale"]
@@ -246,9 +247,9 @@ def report_excel(company, report, label, internal=False):
 
     # ---- trucks / invoices ----
     rows = report["invoices"] + report["broker_sales"] if report["kind"] == "customer" else report["trucks"]
-    ws = sheet(_("Trucks"))
-    columns = [_("Date"), _("Invoice"), _("Truck no"), _("Customer"), _("Broker"), _("Bags"),
-               _("Weight sent (kg)"), _("Unloaded on"), _("Weight received (kg)"), _("Shortage (kg)"),
+    ws = sheet(_("Sales"))
+    columns = [_("Date"), _("Invoice"), _("Vehicle no"), _("Customer"), _("Broker"), _("Qty"),
+               _("Qty sent (units)"), _("Unloaded on"), _("Qty received (units)"), _("Shortage (units)"),
                _("Invoice total"), _("Cash discount"), _("Brokerage"), _("Party owes")]
     if internal:
         columns.append(_("Profit / loss"))
@@ -341,7 +342,7 @@ def report_pdf(company, report, label, internal=False):
         return _rs(value) if value else ""
 
     # ---- account with running balance ----
-    title = "Account" if report["kind"] == "customer" else "Money he owes you (trucks he collects on)"
+    title = "Account" if report["kind"] == "customer" else "Money he owes you (sales he collects on)"
     story.append(_p(title, st["bold"]))
     rows = [["Date", "Particulars", "Billed", "Received", "Balance"],
             ["", "Balance brought forward", "", "", _rs(report["opening"])]]
@@ -356,23 +357,23 @@ def report_pdf(company, report, label, internal=False):
     # ---- trucks ----
     trucks = report["invoices"] + report["broker_sales"] if report["kind"] == "customer" else report["trucks"]
     if trucks:
-        story.append(_p("Trucks in this period", st["bold"]))
-        rows = [["Date", "Invoice", "Truck", "Customer" if report["kind"] == "broker" else "Broker",
-                 "Bags", "Sent kg", "Unloaded", "Recd kg", "Short kg", "Invoice", "CD", "Brokerage",
+        story.append(_p("Sales in this period", st["bold"]))
+        rows = [["Date", "Invoice", "Vehicle", "Customer" if report["kind"] == "broker" else "Broker",
+                 "Qty", "Sent", "Unloaded", "Recd", "Short", "Invoice", "CD", "Brokerage",
                  "Party owes"] + (["Profit"] if internal else [])]
         for row in trucks:
             sale, f = row["sale"], row["figures"]
             other = sale.customer_name if report["kind"] == "broker" else (sale.broker.broker_name if sale.broker else "Direct")
             rows.append([
                 f"{sale.sale_date:%d-%m-%Y}", sale.invoice_no, sale.vehicle_number or "-",
-                Paragraph(other, st["small"]), str(sale.total_bags), f"{f['dispatched_kg']:.0f}",
+                Paragraph(other, st["small"]), qty_str(sale.total_bags), qty_str(f["dispatched_kg"]),
                 f"{sale.unload_date:%d-%m-%Y}" if sale.unload_date else "-",
-                f"{f['received_kg']:.0f}" if f["unloaded"] else "-",
-                f"{f['weight_loss_kg']:.0f}" if f["unloaded"] else "-",
+                qty_str(f["received_kg"]) if f["unloaded"] else "-",
+                qty_str(f["weight_loss_kg"]) if f["unloaded"] else "-",
                 _rs(sale.total_amount), amount(f["cash_discount"]), amount(f["commission"]),
                 _rs(f["net_receivable"]),
             ] + ([_rs(row["profit"]) if row["profit"] is not None else "-"] if internal else []))
-        rows.append(["Total", "", "", "", str(sum(int(r["sale"].total_bags or 0) for r in trucks)), "", "", "", "", "",
+        rows.append(["Total", "", "", "", qty_str(sum(Decimal(r["sale"].total_bags or 0) for r in trucks)), "", "", "", "", "",
                      _rs(sum((r["figures"]["cash_discount"] for r in trucks), ZERO)),
                      _rs(sum((r["figures"]["commission"] for r in trucks), ZERO)),
                      _rs(sum((r["figures"]["net_receivable"] for r in trucks), ZERO))]

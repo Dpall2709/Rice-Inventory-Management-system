@@ -1,0 +1,38 @@
+{% load i18n %}
+{# Audit trail of manual GST changes on a sale or purchase (`adjustments`). #}
+{% if adjustments %}
+<div class="card">
+  <div class="list-title" style="margin-bottom:8px;">🧾 {% translate "GST adjustments (audit trail)" %}</div>
+  <div class="table-wrap">
+    <table class="table table-cards">
+      <thead>
+        <tr>
+          <th>{% translate "When" %}</th><th>{% translate "By" %}</th>
+          <th class="right">{% translate "Calculated" %}</th><th class="right">{% translate "Entered" %}</th>
+          <th class="right">{% translate "Difference" %}</th><th>{% translate "Reason" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in adjustments %}
+        <tr>
+          <td data-label="{% translate 'When' %}">{{ a.created_at|date:"d M Y H:i" }}</td>
+          <td data-label="{% translate 'By' %}">{{ a.user.get_full_name|default:a.user.username|default:"—" }}</td>
+          <td data-label="{% translate 'Calculated' %}" class="right small">
+            {% if a.calculated_igst %}IGST ₹ {{ a.calculated_igst }}{% else %}CGST ₹ {{ a.calculated_cgst }} · SGST ₹ {{ a.calculated_sgst }}{% endif %}
+          </td>
+          <td data-label="{% translate 'Entered' %}" class="right small">
+            {% if a.entered_cgst is None and a.entered_sgst is None and a.entered_igst is None %}{% translate "automatic" %}{% else %}
+              {% if a.entered_igst is not None %}IGST ₹ {{ a.entered_igst }}{% endif %}
+              {% if a.entered_cgst is not None %}CGST ₹ {{ a.entered_cgst }}{% endif %}
+              {% if a.entered_sgst is not None %} · SGST ₹ {{ a.entered_sgst }}{% endif %}
+            {% endif %}
+          </td>
+          <td data-label="{% translate 'Difference' %}" class="right">{{ a.difference|floatformat:2 }}</td>
+          <td data-label="{% translate 'Reason' %}">{{ a.reason|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}

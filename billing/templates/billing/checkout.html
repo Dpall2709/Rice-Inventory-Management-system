@@ -41,7 +41,7 @@
         key: "{{ razorpay_key }}",
         amount: {{ amount_paise }},
         currency: "INR",
-        name: "Rice Billing App",
+        name: "Trade Billing",
         description: "{% blocktranslate with name=plan.name %}{{ name }} subscription{% endblocktranslate %}",
         order_id: "{{ order_id }}",
         prefill: { name: "{{ company.owner_name }}", email: "{{ company.email }}", contact: "{{ company.mobile }}" },

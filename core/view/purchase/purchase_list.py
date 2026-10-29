@@ -38,7 +38,7 @@ def purchase_list(request):
         .for_company(company)
         .select_related("mill")
         .prefetch_related("purchaseitem_set__product")
-        .annotate(bags=Coalesce(Sum("purchaseitem__bag_count"), Value(0)))
+        .annotate(bags=Coalesce(Sum("purchaseitem__bag_count"), Value(Decimal("0")), output_field=DecimalField(max_digits=14, decimal_places=3)))
         .order_by("-purchase_date", "-id")
     )
 
@@ -70,7 +70,7 @@ def purchase_list(request):
             min(int(purchase.paid * 100 / purchase.total_amount), 100) if purchase.total_amount else 100
         )
         purchase.weight_kg = sum((item.total_kg for item in purchase.purchaseitem_set.all()), Decimal("0"))
-        purchase.rice = sorted({item.product.rice_name for item in purchase.purchaseitem_set.all()})
+        purchase.rice = sorted({item.product.name for item in purchase.purchaseitem_set.all()})
 
     if status == "due":
         purchases = [p for p in purchases if p.due > 0]
@@ -84,7 +84,7 @@ def purchase_list(request):
         "total_paid": sum((p.paid for p in purchases), Decimal("0")),
         "total_due": sum((p.due for p in purchases if p.due > 0), Decimal("0")),
         "total_tax": sum((p.cgst_amount + p.sgst_amount + p.igst_amount for p in purchases), Decimal("0")),
-        "total_bags": sum((int(p.bags or 0) for p in purchases)),
+        "total_bags": sum((Decimal(p.bags or 0) for p in purchases)),
         "total_kg": sum((p.weight_kg for p in purchases), Decimal("0")),
         "bills_paid": sum(1 for p in purchases if p.due <= 0),
         "bills_partial": sum(1 for p in purchases if p.due > 0 and p.paid > 0),

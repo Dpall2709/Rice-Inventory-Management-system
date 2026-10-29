@@ -47,6 +47,7 @@ from ..models import Sale
 from ..services.customer_ledger import sale_payment_status
 from ..services.sale_service import amount_in_words
 from ..tenancy import company_of, tenant_object_or_404
+from ..utils import qty_str
 
 MARGIN = 12 * mm
 PAGE_W, PAGE_H = A4
@@ -169,16 +170,20 @@ FREIGHT_BORDER = colors.HexColor("#B45309")
 
 def _transport_box(sale, st):
     """
-    Freight, in its own highlighted box, separate from the goods: what the
-    truck costs, what WE have paid, and what YOU (the party) have to pay -
-    worded for who carries the freight on this sale. Never part of the
-    invoice total.
+    Freight, in its own highlighted box: what the trip costs, who pays it,
+    and what the buyer has to do - worded for this sale's freight
+    arrangement (see Sale.FREIGHT_CHOICES). Nothing is shown when the freight
+    is included in the rate (E).
     """
     from ..services.sale_service import settlement
+
+    if sale.freight_borne_by == sale.FREIGHT_INCLUDED:
+        return None
 
     figures = settlement(sale)
     total = figures["freight_total"]
     we_paid = figures["freight_paid_by_us"]
+    share = figures["freight_customer_share"]
     if not total and not we_paid and not sale.vehicle_number:
         return None
 
@@ -195,32 +200,44 @@ def _transport_box(sale, st):
         details.append("Driver: " + " ".join(x for x in [sale.driver_name, sale.driver_mobile] if x))
     if sale.transporter_name:
         details.append(f"Transporter: {sale.transporter_name}")
-    weight = f"{figures['dispatched_kg'] / Decimal('1000'):.3f} ton"
-    details.append(f"Weight: {weight}" + (f" @ Rs. {_rs(rate)} per ton" if rate else ""))
+    if rate:
+        details.append(f"Weight: {figures['dispatched_kg'] / Decimal('1000'):.3f} ton @ Rs. {_rs(rate)} per ton")
 
-    lines = [("Total freight for this truck", total)]
-    if sale.freight_borne_by == "us":
+    mode = sale.freight_borne_by
+    lines = [("Total freight for this trip", total)]
+    title = "TRANSPORT / FREIGHT  (not included in the invoice total)"
+    if mode == sale.FREIGHT_US:
         lines += [
-            ("WE HAVE PAID - advance to the driver", we_paid),
-            ("YOU HAVE TO PAY - balance to the driver on unloading", you_pay),
+            ("WE HAVE PAID - to the transporter", we_paid),
+            ("YOU PAY THE TRANSPORTER - balance on delivery", you_pay),
         ]
         note = (
-            f"We have paid Rs. {_rs(we_paid)} to the driver as advance. Please pay the driver the balance "
-            f"Rs. {_rs(you_pay)} when the goods are unloaded, and deduct that amount from your payment to us."
+            f"Freight is paid by us (FOR delivery). If you pay the transporter the balance "
+            f"Rs. {_rs(you_pay)} on delivery, deduct that amount from your payment to us."
         )
-    elif sale.freight_borne_by == "customer":
+    elif mode in (sale.FREIGHT_CUSTOMER, sale.FREIGHT_SHARED):
+        title = "TRANSPORT / FREIGHT  (your share is added to this invoice)"
         lines += [
-            ("WE HAVE PAID - advance to the driver on your behalf", we_paid),
-            ("YOU HAVE TO PAY - balance to the driver on unloading", you_pay),
+            ("YOUR SHARE - added to this invoice", share),
+            ("WE HAVE PAID - to the transporter", we_paid),
+            ("YOU PAY THE TRANSPORTER - balance on delivery", you_pay),
         ]
         note = (
-            f"The freight is to your account. We have paid Rs. {_rs(we_paid)} advance to the driver for you - "
-            f"please add it to your payment to us. Pay the driver the balance Rs. {_rs(you_pay)} on unloading."
+            f"Your share of the freight, Rs. {_rs(share)}, is included in this invoice. Anything you pay "
+            f"the transporter directly (balance Rs. {_rs(you_pay)}) may be deducted from your payment to us."
+        )
+    elif mode == sale.FREIGHT_BILL:
+        title = "TRANSPORT / FREIGHT  (billed on a separate transport invoice)"
+        lines += [("Transport invoice amount", share)]
+        note = (
+            f"Freight is billed separately on transport invoice {sale.transport_invoice_no or '-'}. "
+            f"It is not part of this goods invoice."
         )
     else:
         note = "The freight is to be settled directly between you and the transporter."
 
-    money_rows = [[_p(label, st["bold"] if "PAY" in label else st["base"]), _p(f"Rs. {_rs(value)}", big)]
+    money_rows = [[_p(label, st["bold"] if label.isupper() or "PAY" in label or "SHARE" in label else st["base"]),
+                   _p(f"Rs. {_rs(value)}", big)]
                   for label, value in lines]
     money_table = Table(money_rows, colWidths=[WIDTH * 0.42, WIDTH * 0.18])
     money_table.setStyle(TableStyle([
@@ -229,7 +246,7 @@ def _transport_box(sale, st):
         ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
     ]))
 
-    left = [_p("TRANSPORT / FREIGHT  (not included in the invoice total)", head), Spacer(1, 3)]
+    left = [_p(title, head), Spacer(1, 3)]
     left += [_p(line, st["small"]) for line in details]
     right = [money_table, Spacer(1, 4), _p(note, st["small"])]
 
@@ -242,6 +259,14 @@ def _transport_box(sale, st):
         ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
     ]))
     return KeepTogether([box])
+
+
+def _quantity_text(sale):
+    """"12.5 ton (12500 kg)" when everything is priced per kg, else the plain quantities."""
+    units = {item.product.rate_unit_label for item in sale.items.select_related("product__rate_unit")}
+    if units == {"kg"}:
+        return f"{sale.total_ton:.3f} ton ({qty_str(sale.total_quantity_kg)} kg)"
+    return f"{qty_str(sale.total_bags)} qty"
 
 
 def _logo(company):
@@ -347,7 +372,7 @@ def build_invoice_pdf(company, sale):
         ("Vehicle No.", sale.vehicle_number or "-"),
         ("Driver", " / ".join(x for x in [sale.driver_name, sale.driver_mobile] if x) or "-"),
         ("Transporter", sale.transporter_name or "-"),
-        ("Weight", f"{sale.total_ton:.3f} ton ({sale.total_quantity_kg} kg)"),
+        ("Quantity", _quantity_text(sale)),
     ]
 
     story.append(_box(
@@ -379,19 +404,23 @@ def build_invoice_pdf(company, sale):
     # ---- item lines --------------------------------------------------------
     widths_mm = [8, 50, 15, 12, 18, 15, 22, 11, 16, 19]       # = 186 mm
     widths = [w * mm for w in widths_mm]
-    head = ["#", "Item Description", "HSN", "Bags", "Qty (kg)", "Rate/kg", "Taxable", "GST%", "GST", "Amount"]
+    head = ["#", "Item Description", "HSN", "Qty", "Units", "Rate", "Taxable", "GST%", "GST", "Amount"]
     rows = [[_p(h, st["th"] if i < 3 else st["th_right"]) for i, h in enumerate(head)]]
 
     for index, item in enumerate(items, start=1):
-        description = [_p(item.product.rice_name, st["bold"]),
-                       _p(f"{item.bag_count} {'bag' if item.bag_count == 1 else 'bags'} x {item.bag_weight} kg", st["small"])]
+        product = item.product
+        description = [_p(product.name, st["bold"])]
+        if Decimal(item.bag_weight or 1) != 1 or product.unit_label != product.rate_unit_label:
+            # e.g. "10 bag x 50 kg" or "5 ctn x 24 pcs"
+            description.append(_p(f"{qty_str(item.bag_count)} {product.unit_label} x "
+                                  f"{qty_str(item.bag_weight)} {product.rate_unit_label}", st["small"]))
         rows.append([
             _p(index, st["base"]),
             description,
-            _p(item.product.hsn_code or "-", st["base"]),
-            _p(item.bag_count, st["right"]),
-            _p(f"{item.total_weight:.2f}", st["right"]),
-            _p(f"{item.rate_per_kg:.2f}", st["right"]),
+            _p(product.hsn_code or "-", st["base"]),
+            _p(f"{qty_str(item.bag_count)} {product.unit_label}", st["right"]),
+            _p(qty_str(item.total_weight), st["right"]),
+            _p(f"{qty_str(item.rate_per_kg)}/{product.rate_unit_label}", st["right"]),
             _p(_rs(item.amount), st["right"]),
             _p(f"{item.gst_percent:g}" if item.gst_percent else "-", st["right"]),
             _p(_rs(item.gst_amount) if item.gst_amount else "-", st["right"]),
@@ -403,8 +432,8 @@ def build_invoice_pdf(company, sale):
 
     rows.append([
         "", _p("Total", st["bold"]), "",
-        _p(sale.total_bags, st["right_bold"]),
-        _p(f"{sale.total_quantity_kg:.2f}", st["right_bold"]),
+        _p(qty_str(sale.total_bags), st["right_bold"]),
+        _p(qty_str(sale.total_quantity_kg), st["right_bold"]),
         "",
         _p(_rs(sale.taxable_amount), st["right_bold"]),
         "",
@@ -474,6 +503,8 @@ def build_invoice_pdf(company, sale):
         total_rows.append(("SGST", _rs(sale.sgst_amount)))
     if sale.igst_amount:
         total_rows.append(("IGST", _rs(sale.igst_amount)))
+    if sale.freight_on_invoice:
+        total_rows.append(("Freight charges", _rs(sale.freight_on_invoice)))
     if sale.round_off:
         total_rows.append(("Round Off", f"{sale.round_off:+.2f}"))
     grand_index = len(total_rows)
@@ -487,12 +518,11 @@ def build_invoice_pdf(company, sale):
     figures = _settlement(sale)
     you_pay_driver = max(figures["freight_total"] - figures["freight_paid_by_us"], Decimal("0"))
     payable = Decimal(sale.total_amount or 0)
-    if sale.freight_borne_by == "us" and you_pay_driver:
-        total_rows.append(("Less: freight you pay the driver", "- " + _rs(you_pay_driver)))
+    # Freight the buyer pays the transporter directly comes off what they pay
+    # us - except when it is billed separately (D) or not in our books.
+    if sale.freight_borne_by not in (sale.FREIGHT_BILL, sale.FREIGHT_SEPARATE) and you_pay_driver:
+        total_rows.append(("Less: freight you pay the transporter", "- " + _rs(you_pay_driver)))
         payable -= you_pay_driver
-    elif sale.freight_borne_by == "customer" and figures["freight_paid_by_us"]:
-        total_rows.append(("Add: freight advance paid by us", "+ " + _rs(figures["freight_paid_by_us"])))
-        payable += figures["freight_paid_by_us"]
     if payable != Decimal(sale.total_amount or 0):
         total_rows.append(("Payable to us (Rs.)", _rs(payable)))
     total_rows.append(("Received", _rs(status["paid"])))
@@ -565,6 +595,98 @@ def build_invoice_pdf(company, sale):
     )
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
     return out.getvalue()
+
+
+def build_transport_invoice_pdf(company, sale):
+    """
+    Scenario D: the freight billed on its own invoice, separate from the
+    goods invoice. Returns the PDF as bytes.
+    """
+    from ..services.sale_service import settlement
+
+    st = _styles()
+    figures = settlement(sale)
+    amount = figures["freight_customer_share"]
+    paid_direct = figures["freight_paid_by_party"]
+    half = WIDTH / 2
+    story = []
+
+    story.append(_box(
+        [[_p("Original for recipient", st["small"]), _p("TRANSPORT INVOICE", st["title"]),
+          _p(sale.transport_invoice_no, ParagraphStyle("r", parent=st["small"], alignment=TA_RIGHT))]],
+        [WIDTH * 0.3, WIDTH * 0.4, WIDTH * 0.3],
+        extra=[("VALIGN", (0, 0), (-1, -1), "MIDDLE")],
+    ))
+
+    address = ", ".join(p.strip() for p in [company.address, company.city, company.state, company.pincode] if p and p.strip())
+    seller = [_p(company.company_name, st["company"])]
+    for line in (address, f"GSTIN: {company.gst_number}" if company.gst_number else ""):
+        if line:
+            seller.append(_p(line, st["center"]))
+    story.append(_box([[seller]], [WIDTH]))
+
+    left = [_p("BILL TO", st["label"]), _p(sale.customer_name, st["bold"])]
+    if sale.billing_address:
+        left.append(_p(sale.billing_address, st["base"]))
+    if sale.customer_gst:
+        left.append(_p(f"GSTIN: {sale.customer_gst}", st["base"]))
+    right = [
+        _p(f"Transport Invoice No.: {sale.transport_invoice_no}", st["bold"]),
+        _p(f"Date: {sale.sale_date:%d-%m-%Y}", st["base"]),
+        _p(f"Against goods invoice: {sale.invoice_no}", st["base"]),
+        _p(f"Vehicle: {sale.vehicle_number or '-'}", st["base"]),
+        _p(f"Transporter: {sale.transporter_name or '-'}", st["base"]),
+    ]
+    story.append(_box([[left, right]], [half, half]))
+
+    rows = [[_p("Description", st["th"]), _p("Amount (Rs.)", st["th_right"])]]
+    description = f"Freight charges for goods invoice {sale.invoice_no} dated {sale.sale_date:%d-%m-%Y}"
+    if sale.transport_rate_per_ton:
+        description += f" ({figures['dispatched_kg'] / Decimal('1000'):.3f} ton @ Rs. {_rs(sale.transport_rate_per_ton)}/ton)"
+    rows.append([_p(description, st["base"]), _p(_rs(amount), st["right"])])
+    rows.append([_p("Invoice Total", st["bold"]), _p(_rs(amount), st["right_bold"])])
+    if paid_direct:
+        rows.append([_p("Less: paid by you to the transporter", st["base"]), _p("- " + _rs(paid_direct), st["right"])])
+        rows.append([_p("Balance payable to us", st["bold"]), _p(_rs(max(amount - paid_direct, Decimal("0"))), st["right_bold"])])
+    table = Table(rows, colWidths=[WIDTH * 0.75, WIDTH * 0.25])
+    table.setStyle(TableStyle([
+        ("BOX", (0, 0), (-1, -1), 0.8, BORDER),
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, GRID),
+        ("BACKGROUND", (0, 0), (-1, 0), SHADE),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+    ]))
+    story.append(table)
+
+    story.append(_box(
+        [[[_p("Amount in Words", st["label"]), _p(amount_in_words(amount), st["bold"])],
+          [_p(f"For {company.company_name}", st["right_bold"]), Spacer(1, 14 * mm),
+           _p("Authorised Signatory", st["right"])]]],
+        [WIDTH * 0.6, WIDTH * 0.4],
+    ))
+
+    out = BytesIO()
+    doc = SimpleDocTemplate(
+        out, pagesize=A4, leftMargin=MARGIN, rightMargin=MARGIN, topMargin=MARGIN, bottomMargin=MARGIN,
+        title=f"Transport invoice {sale.transport_invoice_no}", author=company.company_name,
+    )
+    doc.build(story)
+    return out.getvalue()
+
+
+@login_required
+def sale_transport_invoice_pdf(request, sale_id):
+    from django.http import Http404
+
+    company = company_of(request)
+    sale = tenant_object_or_404(Sale.objects.select_related("customer"), request, sale_id)
+    if not sale.has_transport_invoice:
+        raise Http404("This sale has no separate transport invoice.")
+
+    response = HttpResponse(build_transport_invoice_pdf(company, sale), content_type="application/pdf")
+    disposition = "attachment" if request.GET.get("download") else "inline"
+    response["Content-Disposition"] = f'{disposition}; filename="Transport_{sale.transport_invoice_no}.pdf"'
+    return response
 
 
 @login_required

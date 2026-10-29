@@ -21,8 +21,8 @@
     </div>
     <h1>{% if mode == 'edit' %}{% translate "Edit purchase bill" %}{% elif supplier %}{% blocktranslate with name=supplier.mill_name %}New bill from {{ name }}{% endblocktranslate %}{% else %}{% translate "Enter a purchase bill" %}{% endif %}</h1>
     <p class="muted">
-      {% translate "What you bought from a mill. Each line adds that rice into your stock." %}
-      {% blocktranslate trimmed %}Rate is <strong>per kg</strong>; total = bags × bag weight × rate.{% endblocktranslate %}
+      {% translate "What you bought from a supplier. Each line adds that product to your stock." %}
+      {% blocktranslate trimmed %}Line value = quantity × pack size × rate. For goods priced per pack, keep pack size 1.{% endblocktranslate %}
     </p>
   </div>
   <div class="page-actions">
@@ -52,19 +52,31 @@
 
   <!-- ===================== BILL HEADER ===================== -->
   <div class="card">
-    <div class="form-section-title">{% translate "The mill's bill" %}</div>
+    <div class="form-section-title">{% translate "The supplier's bill" %}</div>
 
     <div class="form-grid">
       {% if supplier %}
         <div class="field">
-          <label>{% translate "Mill / Supplier" %}</label>
+          <label>{% translate "Supplier" %}</label>
           <div class="locked-supplier">🏭 <strong>{{ supplier.mill_name }}</strong>
             <a class="small" href="{% url 'add_purchase' %}">{% translate "Change" %}</a></div>
           {{ form.mill }}
         </div>
       {% endif %}
+      {% if not supplier %}
+        <div class="field {% if form.mill.errors %}has-error{% endif %}">
+          <label for="{{ form.mill.id_for_label }}">{{ form.mill.label }} <span class="req">*</span></label>
+          <div class="select-with-add">
+            {{ form.mill }}
+            <button type="button" class="btn btn-outline btn-sm" data-quick-create="supplier"
+                    data-quick-url="{% url 'quick_supplier' %}" data-quick-target="#id_mill"
+                    title="{% translate 'Add a new supplier without leaving this bill' %}">➕ {% translate "New" %}</button>
+          </div>
+          {% for error in form.mill.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+        </div>
+      {% endif %}
       {% for field in form %}
-        {% if field.name|one_of:"mill,invoice_no,purchase_date,tax_type" and not supplier or field.name|one_of:"invoice_no,purchase_date,tax_type" %}
+        {% if field.name|one_of:"invoice_no,purchase_date,tax_type" %}
           <div class="field {% if field.errors %}has-error{% endif %}">
             <label for="{{ field.id_for_label }}">
               {{ field.label }}{% if field.name|one_of:"mill,purchase_date" %} <span class="req">*</span>{% endif %}
@@ -82,7 +94,7 @@
   <div class="card">
     <div class="list-header">
       <div>
-        <div class="list-title">{% translate "Rice bought" %}</div>
+        <div class="list-title">{% translate "Products bought" %}</div>
         <p class="muted">{% translate "GST% fills in from the product; change it if the bill says otherwise." %}</p>
       </div>
       <div class="list-actions">
@@ -94,12 +106,12 @@
       <table class="table" id="itemsTable">
         <thead>
           <tr>
-            <th style="min-width:170px;">{% translate "Rice" %}</th>
+            <th style="min-width:200px;">{% translate "Product" %}</th>
             <th style="width:70px;">{% translate "HSN" %}</th>
-            <th style="width:130px;">{% translate "Bag weight (kg)" %}</th>
-            <th style="width:120px;">{% translate "Bags" %}</th>
-            <th style="width:140px;">{% translate "Rate / kg" %}</th>
-            <th class="right">{% translate "Quantity (kg)" %}</th>
+            <th style="width:130px;">{% translate "Pack size" %}</th>
+            <th style="width:120px;">{% translate "Qty" %}</th>
+            <th style="width:140px;">{% translate "Rate" %}</th>
+            <th class="right">{% translate "Total units" %}</th>
             <th class="right">{% translate "Taxable" %}</th>
             <th style="width:110px;">{% translate "GST %" %}</th>
             <th class="right">{% translate "GST" %}</th>
@@ -111,20 +123,24 @@
           {% for item_form in formset %}
             <tr data-line>
               {{ item_form.id }}
-              <td data-label="{% translate 'Rice' %}">
-                {{ item_form.product }}
+              <td data-label="{% translate 'Product' %}">
+                <div class="select-with-add">
+                  {{ item_form.product }}
+                  <button type="button" class="btn btn-ghost btn-sm" data-quick-create="product" data-quick-url="{% url 'quick_product' %}" data-quick-target="row" title="{% translate 'New product' %}">➕</button>
+                </div>
+                <div class="unit-hint" data-cell="unit_hint"></div>
                 {% for error in item_form.product.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
               </td>
               <td data-label="{% translate 'HSN' %}"><span class="muted" data-cell="hsn">—</span></td>
-              <td data-label="{% translate 'Bag weight' %}">
+              <td data-label="{% translate 'Pack size' %}">
                 {{ item_form.bag_weight }}
                 {% for error in item_form.bag_weight.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
               </td>
-              <td data-label="{% translate 'Bags' %}">
+              <td data-label="{% translate 'Qty' %}">
                 {{ item_form.bag_count }}
                 {% for error in item_form.bag_count.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
               </td>
-              <td data-label="{% translate 'Rate / kg' %}">
+              <td data-label="{% translate 'Rate' %}">
                 {{ item_form.purchase_price }}
                 {% for error in item_form.purchase_price.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
               </td>
@@ -157,11 +173,17 @@
     <!-- hidden template used when adding a new line -->
     <template id="emptyLine">
       <tr data-line>
-        <td data-label="{% translate 'Rice' %}">{{ formset.empty_form.product }}</td>
+        <td data-label="{% translate 'Product' %}">
+          <div class="select-with-add">
+            {{ formset.empty_form.product }}
+            <button type="button" class="btn btn-ghost btn-sm" data-quick-create="product" data-quick-url="{% url 'quick_product' %}" data-quick-target="row" title="{% translate 'New product' %}">➕</button>
+          </div>
+          <div class="unit-hint" data-cell="unit_hint"></div>
+        </td>
         <td data-label="{% translate 'HSN' %}"><span class="muted" data-cell="hsn">—</span></td>
-        <td data-label="{% translate 'Bag weight' %}">{{ formset.empty_form.bag_weight }}</td>
-        <td data-label="{% translate 'Bags' %}">{{ formset.empty_form.bag_count }}</td>
-        <td data-label="{% translate 'Rate / kg' %}">{{ formset.empty_form.purchase_price }}</td>
+        <td data-label="{% translate 'Pack size' %}">{{ formset.empty_form.bag_weight }}</td>
+        <td data-label="{% translate 'Qty' %}">{{ formset.empty_form.bag_count }}</td>
+        <td data-label="{% translate 'Rate' %}">{{ formset.empty_form.purchase_price }}</td>
         <td data-label="{% translate 'Quantity' %}" class="right num" data-cell="kg">0</td>
         <td data-label="{% translate 'Taxable' %}" class="right num" data-cell="taxable">0.00</td>
         <td data-label="{% translate 'GST %' %}">{{ formset.empty_form.gst_percent }}</td>
@@ -202,8 +224,8 @@
         <label class="charge-toggle">
           {{ form.transport_by_mill }}
           <span>
-            <strong>{% translate "Mill charged this" %}</strong>
-            <small>{% translate "Tick only if it is printed on the mill's bill. Otherwise it is your own cost." %}</small>
+            <strong>{% translate "Supplier charged this" %}</strong>
+            <small>{% translate "Tick only if it is printed on the supplier's bill. Otherwise it is your own cost." %}</small>
           </span>
         </label>
       </div>
@@ -216,8 +238,8 @@
         <label class="charge-toggle">
           {{ form.labour_by_mill }}
           <span>
-            <strong>{% translate "Mill charged this" %}</strong>
-            <small>{% translate "Tick only if it is printed on the mill's bill. Otherwise it is your own cost." %}</small>
+            <strong>{% translate "Supplier charged this" %}</strong>
+            <small>{% translate "Tick only if it is printed on the supplier's bill. Otherwise it is your own cost." %}</small>
           </span>
         </label>
       </div>
@@ -235,12 +257,12 @@
 
       <div class="field-hint" style="margin-top:10px;">
         {% blocktranslate trimmed %}
-        Unticked, the money is <strong>your cost</strong> and the mill's bill stays pure rice.
-        Either way it counts towards your cost per kg.
+        Unticked, the money is <strong>your cost</strong> and the supplier's bill stays goods only.
+        Either way it counts towards your cost per unit.
         {% endblocktranslate %}
       </div>
 
-      <div class="form-section-title">{% translate "Paid to the mill now" %}</div>
+      <div class="form-section-title">{% translate "Paid to the supplier now" %}</div>
       <div class="form-grid">
         {% for field in form %}
           {% if field.name|one_of:"amount_paid_now,payment_mode" %}
@@ -254,6 +276,8 @@
         {% endfor %}
       </div>
 
+      {% include "core/partials/manual_gst.html" %}
+
       <div class="form-section-title">{% translate "Notes" %}</div>
       {{ form.notes }}
     </div>
@@ -262,8 +286,8 @@
       <div class="list-title" style="margin-bottom:12px;">{% translate "Bill summary" %}</div>
 
       <dl class="kv summary">
-        <dt>{% translate "Total bags" %}</dt><dd class="num" data-sum="bags">0</dd>
-        <dt>{% translate "Total quantity" %}</dt><dd class="num"><span data-sum="kg">0</span> {% translate "kg" %}</dd>
+        <dt>{% translate "Total qty" %}</dt><dd class="num" data-sum="bags">0</dd>
+        <dt>{% translate "Total quantity" %}</dt><dd class="num"><span data-sum="kg">0</span> {% translate "units" %}</dd>
         <dt>{% translate "Goods value" %}</dt><dd class="num">₹ <span data-sum="goods">0.00</span></dd>
         <dt>{% translate "Discount" %}</dt><dd class="num text-warning">− ₹ <span data-sum="discount">0.00</span></dd>
         <dt>{% translate "Taxable amount" %}</dt><dd class="num bold">₹ <span data-sum="taxable">0.00</span></dd>
@@ -274,13 +298,13 @@
           <dt data-tax-label="igst">{% translate "IGST" %}</dt><dd class="num">₹ <span data-sum="igst">0.00</span></dd>
         </div>
 
-        <dt data-billline="freight">{% translate "Transport (mill)" %}</dt><dd class="num" data-billline="freight">+ ₹ <span data-sum="freight">0.00</span></dd>
-        <dt data-billline="labour">{% translate "Labour (mill)" %}</dt><dd class="num" data-billline="labour">+ ₹ <span data-sum="labour">0.00</span></dd>
+        <dt data-billline="freight">{% translate "Transport (on bill)" %}</dt><dd class="num" data-billline="freight">+ ₹ <span data-sum="freight">0.00</span></dd>
+        <dt data-billline="labour">{% translate "Labour (on bill)" %}</dt><dd class="num" data-billline="labour">+ ₹ <span data-sum="labour">0.00</span></dd>
         <dt>{% translate "Round off" %}</dt><dd class="num"><span data-sum="round">0.00</span></dd>
       </dl>
 
       <div class="grand-total">
-        <span>{% translate "Total payable to mill" %}</span>
+        <span>{% translate "Total payable to supplier" %}</span>
         <span class="num">₹ <span data-sum="total">0.00</span></span>
       </div>
 
@@ -289,20 +313,20 @@
         <span class="num">₹ <span data-sum="paid">0.00</span></span>
       </div>
       <div class="due-line">
-        <span class="muted">{% translate "Balance due to mill" %}</span>
+        <span class="muted">{% translate "Balance due to supplier" %}</span>
         <span class="num bold text-danger">₹ <span data-sum="due">0.00</span></span>
       </div>
 
       <div class="cost-box">
-        <div class="cost-title">{% translate "What this rice really costs you" %}</div>
+        <div class="cost-title">{% translate "What these goods really cost you" %}</div>
 
         <dl class="kv summary">
-          <dt>{% translate "Bill rate" %}</dt><dd class="num">₹ <span data-sum="bill_rate">0.00</span> / {% translate "kg" %}</dd>
-          <dt>{% translate "Your expenses" %}</dt><dd class="num">+ ₹ <span data-sum="extra_per_kg">0.00</span> / {% translate "kg" %}</dd>
+          <dt>{% translate "Bill rate" %}</dt><dd class="num">₹ <span data-sum="bill_rate">0.00</span> / {% translate "unit" %}</dd>
+          <dt>{% translate "Your expenses" %}</dt><dd class="num">+ ₹ <span data-sum="extra_per_kg">0.00</span> / {% translate "unit" %}</dd>
         </dl>
 
         <div class="cost-line">
-          <span>{% translate "Cost per kg" %}</span>
+          <span>{% translate "Cost per unit" %}</span>
           <span class="num">₹ <span data-sum="cost_per_kg">0.00</span></span>
         </div>
 
@@ -313,10 +337,10 @@
 
         <div class="sell-line">
           <span>{% translate "Sell at least at" %}</span>
-          <span class="num">₹ <span data-sum="suggested_per_kg">0.00</span> / {% translate "kg" %}</span>
+          <span class="num">₹ <span data-sum="suggested_per_kg">0.00</span> / {% translate "unit" %}</span>
         </div>
         <div class="due-line">
-          <span class="muted">{% blocktranslate trimmed %}Per bag (<span data-sum="avg_bag">0</span> kg){% endblocktranslate %}</span>
+          <span class="muted">{% blocktranslate trimmed %}Per pack (<span data-sum="avg_bag">0</span> units){% endblocktranslate %}</span>
           <span class="num">₹ <span data-sum="suggested_per_bag">0.00</span></span>
         </div>
         <div class="due-line">
@@ -408,17 +432,22 @@
   // "Leave empty for BILL-004": each supplier's next automatic bill number.
   (function () {
     var next = {{ next_bill_numbers|default:"{}"|safe }};
+    // A supplier added from the pop-up brings its own next number.
+    document.addEventListener("quick-created", function (e) {
+      if (e.detail.kind === "supplier") next[e.detail.id] = e.detail.data.next_bill_no;
+    });
     var mill = document.getElementById("id_mill");
     var billNo = document.getElementById("id_invoice_no");
     if (!mill || !billNo) return;
     var word = "{% filter escapejs %}{% translate 'Leave empty for' %}{% endfilter %}";
     function hint() {
       var n = next[mill.value];
-      billNo.placeholder = n ? word + " " + n : "{% filter escapejs %}{% translate 'Number printed on the mill bill' %}{% endfilter %}";
+      billNo.placeholder = n ? word + " " + n : "{% filter escapejs %}{% translate 'Number printed on the supplier bill' %}{% endfilter %}";
     }
     mill.addEventListener("change", hint);
     hint();
   })();
 </script>
+<script src="{% static 'core/quick_create.js' %}?v={{ asset_version }}"></script>
 <script src="{% static 'core/purchase_form.js' %}?v={{ asset_version }}"></script>
 {% endblock %}

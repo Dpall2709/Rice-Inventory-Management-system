@@ -1,5 +1,5 @@
 {% extends 'core/base.html' %}
-{% load i18n %}
+{% load i18n form_tags %}
 {% block page_title %}{% translate "Sales" %}{% endblock %}
 
 {% block content %}
@@ -22,7 +22,7 @@
     {% include "core/partials/period_chips.html" %}
     <div class="filter-grid">
       <label class="filter-field filter-wide"><span>{% translate "Search" %}</span>
-        <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Invoice no, customer, broker, truck…' %}"></label>
+        <input class="input" type="search" name="q" value="{{ q }}" placeholder="{% translate 'Invoice no, customer, broker, vehicle…' %}"></label>
       <label class="filter-field"><span>{% translate "From" %}</span>
         <input class="input" type="date" name="from" value="{{ date_from|date:'Y-m-d' }}"></label>
       <label class="filter-field"><span>{% translate "To" %}</span>
@@ -67,7 +67,7 @@
     <div>
       <div class="stat-label">{% translate "Sales value" %}</div>
       <div class="stat-value inr" data-value="{{ total_value }}">₹ {{ total_value }}</div>
-      <div class="stat-hint">{% blocktranslate count counter=count with bags=total_bags %}{{ counter }} bill · {{ bags }} bags{% plural %}{{ counter }} bills · {{ bags }} bags{% endblocktranslate %}</div>
+      <div class="stat-hint">{% blocktranslate count counter=count with qty=total_bags|qty %}{{ counter }} bill · qty {{ qty }}{% plural %}{{ counter }} bills · qty {{ qty }}{% endblocktranslate %}</div>
     </div>
   </div>
   <div class="stat is-success">
@@ -133,7 +133,7 @@
         <span>{% if sale.customer_id %}<a href="{% url 'customer_ledger' sale.customer_id %}">{{ sale.customer_name }}</a>{% else %}{{ sale.customer_name }}{% endif %}</span></div>
       {% if sale.broker %}<div class="line"><span>{% translate "Broker" %}</span>
         <span><a href="{% url 'broker_report_detail' sale.broker.id %}">{{ sale.broker.broker_name }}</a>{% if sale.collect_from == 'broker' %} <span class="badge badge-blue">{% translate "broker pays" %}</span>{% endif %}</span></div>{% endif %}
-      <div class="line"><span>{% translate "Bags" %}</span><span>{{ sale.total_bags }}</span></div>
+      <div class="line"><span>{% translate "Qty" %}</span><span>{{ sale.total_bags|qty }}</span></div>
       <div class="line"><span>{% translate "GST" %}</span>
         <span>{% if sale.tax_type == 'none' %}{% translate "No GST" %}{% elif sale.tax_type == 'igst' %}IGST{% else %}CGST + SGST{% endif %}</span></div>
     </section>
@@ -179,7 +179,7 @@
     <div class="empty-title">{% if filtered %}{% translate "No invoice matches this filter" %}{% else %}{% translate "No sales yet" %}{% endif %}</div>
     <p>
       {% if filtered %}{% translate "Try a wider date range or clear the filters." %}
-      {% else %}{% translate "Make your first invoice - pick a customer and the rice, and the bags come out of your stock." %}{% endif %}
+      {% else %}{% translate "Make your first invoice - pick a customer and the products, and the goods come out of your stock." %}{% endif %}
     </p>
     {% if filtered %}
       <a class="btn btn-outline" href="{% url 'sale_list' %}">✕ {% translate "Clear filters" %}</a>

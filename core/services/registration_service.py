@@ -32,6 +32,7 @@ def register_company(data, password_hash=None):
         owner_name=data["owner_name"],
         email=data["email"],
         mobile=data["mobile"],
+        industry=data.get("industry") or "general",
 
         # The trial dates below are replaced immediately by start_trial(); they
         # are only here because the columns do not allow null.
@@ -48,6 +49,10 @@ def register_company(data, password_hash=None):
     if password_hash:
         user.password = password_hash
         user.save(update_fields=["password"])
+
+    from core.services.catalog import seed_company_catalog
+
+    seed_company_catalog(company)
 
     UserProfile.objects.create(
         user=user,

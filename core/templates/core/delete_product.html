@@ -11,7 +11,7 @@
   <p class="muted">{% translate "Are you sure you want to delete this product?" %}</p>
 
   <div style="margin: 20px 0; font-size:16px;">
-    <b>{{ product.rice_name }}</b><br>
+    <b>{{ product.name }}</b><br>
     {% translate "HSN:" %} {{ product.hsn_code|default:"-" }}<br>
     {% translate "GST:" %} {{ product.gst_percent }}%
   </div>

@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#4f46e5">
-  <title>{% block title %}{% translate "Login" %}{% endblock %} · Rice Billing</title>
+  <title>{% block title %}{% translate "Login" %}{% endblock %} · Trade Billing</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'core/style.css' %}?v={{ asset_version }}">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
 
   {# Same saved theme as the app, applied before the first paint. #}
   <script>
@@ -30,17 +30,17 @@
     <!-- Brand panel: hidden on phones, where every pixel goes to the form. -->
     <aside class="auth-brand">
       <div class="auth-brand-top">
-        <span class="auth-logo">🌾</span>
-        <span class="auth-name">Rice Billing</span>
+        <span class="auth-logo">📦</span>
+        <span class="auth-name">Trade Billing</span>
       </div>
 
       <div class="auth-pitch">
-        <h2>{% translate "Billing, stock and dues for rice traders - in one place." %}</h2>
+        <h2>{% translate "Billing, stock and dues for traders and distributors - in one place." %}</h2>
         <ul>
           <li><span>🧾</span>{% translate "GST invoices and purchase bills in a minute" %}</li>
-          <li><span>📦</span>{% translate "Live stock by lot, with real cost per kg" %}</li>
+          <li><span>📦</span>{% translate "Live stock by lot, with real cost per unit" %}</li>
           <li><span>💰</span>{% translate "Know who owes you and whom you owe, every day" %}</li>
-          <li><span>📷</span>{% translate "Scan a mill's bill instead of typing it" %}</li>
+          <li><span>📷</span>{% translate "Scan a supplier's bill instead of typing it" %}</li>
         </ul>
       </div>
 
@@ -49,7 +49,7 @@
 
     <main class="auth-main">
       <div class="auth-top">
-        <a class="auth-mobile-brand" href="{% url 'login' %}"><span>🌾</span> Rice Billing</a>
+        <a class="auth-mobile-brand" href="{% url 'login' %}"><span>📦</span> Trade Billing</a>
         <div class="auth-top-actions">
           {% include "core/partials/language_switch.html" %}
           <button class="icon-btn" type="button" data-toggle-theme
@@ -72,7 +72,7 @@
         {% block content %}{% endblock %}
       </div>
 
-      <div class="auth-foot">© {% now "Y" %} Rice Billing</div>
+      <div class="auth-foot">© {% now "Y" %} Trade Billing</div>
     </main>
   </div>
 

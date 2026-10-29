@@ -31,82 +31,9 @@ from .permissions import manager_required, owner_required
 from .services.ledger import mill_statement
 from .services.mill_report import build_excel, build_pdf
 from .tenancy import company_of, tenant_object_or_404
-from .function.sale_invoice_pdf import sale_invoice_pdf, sale_statement_pdf  
+from .function.sale_invoice_pdf import sale_invoice_pdf, sale_statement_pdf, sale_transport_invoice_pdf  
 from django.contrib.auth.decorators import login_required
 from django.utils.translation import gettext as _
-
-# @login_required
-# def product_list(request):
-#     q = request.GET.get("q", "").strip()
-#     company = request.user.userprofile.company
-#     products = Product.objects.all().order_by("-id")  # ✅ no created_at in your model
-
-#     if q:
-#         products = products.filter(
-#             Q(rice_name__icontains=q) |
-#             Q(hsn_code__icontains=q)
-#         )
-
-#     return render(request, "core/product_list.html", {"products": products})
-
-@login_required
-def product_list(request):
-    q = request.GET.get("q", "").strip()
-
-    # Get logged-in user's company
-    company = request.user.userprofile.company
-
-    # Only products belonging to this company
-    products = Product.objects.filter(
-        company=company
-    ).order_by("-id")
-
-    if q:
-        products = products.filter(
-            Q(rice_name__icontains=q) |
-            Q(hsn_code__icontains=q)
-        )
-
-    return render(
-        request,
-        "core/product_list.html",
-        {
-            "products": products
-        }
-    )
-
-@login_required
-def add_product(request):
-    company = request.user.userprofile.company
-    if request.method == "POST":
-        Product.objects.create(
-            company=company,
-            rice_name=request.POST.get("rice_name"),
-            hsn_code=request.POST.get("hsn_code", ""),
-            gst_percent=request.POST.get("gst_percent") or 0,
-            is_active=True if request.POST.get("is_active") == "on" else False,
-        )
-        messages.success(request, "✅ " + _("Product saved successfully!"))
-        return redirect("product_list")
-
-    return render(request, "core/add_product.html")
-
-@login_required
-def edit_product(request, product_id):
-    company = request.user.userprofile.company
-    product = get_object_or_404(Product, id=product_id, company=company,)
-
-    if request.method == "POST":
-        product.rice_name = request.POST.get("rice_name")
-        product.hsn_code = request.POST.get("hsn_code", "")
-        product.gst_percent = request.POST.get("gst_percent") or 0
-        product.is_active = True if request.POST.get("is_active") == "on" else False
-        product.save()
-
-        messages.success(request, "✅ " + _("Product updated successfully!"))
-        return redirect("product_list")
-
-    return render(request, "core/edit_product.html", {"product": product})
 
 @login_required
 @manager_required
@@ -123,7 +50,7 @@ def delete_product(request, product_id):
             messages.warning(
                 request,
                 _("%(name)s is on sale invoices, so it was deactivated instead of deleted.")
-                % {"name": product.rice_name},
+                % {"name": product.name},
             )
             return redirect("product_list")
 

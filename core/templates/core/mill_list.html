@@ -1,15 +1,15 @@
 {% extends 'core/base.html' %}
 {% load i18n %}
-{% block page_title %}{% translate "Mills / Suppliers" %}{% endblock %}
-{% block browser_title %}{% translate "Mills / Suppliers" %}{% endblock %}
+{% block page_title %}{% translate "Suppliers" %}{% endblock %}
+{% block browser_title %}{% translate "Suppliers" %}{% endblock %}
 
 {% block content %}
 
 <div class="page-head">
   <div>
-    <div class="crumbs"><a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> › <span>{% translate "Mills / Suppliers" %}</span></div>
-    <h1>{% translate "Mills / Suppliers" %}</h1>
-    <p class="muted">{% translate "Every mill you buy from: what you bought, what you paid and what you still owe. Open a mill to enter its bills." %}</p>
+    <div class="crumbs"><a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> › <span>{% translate "Suppliers" %}</span></div>
+    <h1>{% translate "Suppliers" %}</h1>
+    <p class="muted">{% translate "Every supplier you buy from: what you bought, what you paid and what you still owe. Open a supplier to enter its bills." %}</p>
   </div>
   <div class="page-actions">
     <a class="btn btn-primary" href="{% url 'add_mill' %}">➕ {% translate "Add supplier" %}</a>
@@ -39,7 +39,7 @@
           <option value="">{% translate "Any balance" %}</option>
           <option value="owe" {% if balance == 'owe' %}selected{% endif %}>{% translate "You owe money" %}</option>
           <option value="settled" {% if balance == 'settled' %}selected{% endif %}>{% translate "Settled" %}</option>
-          <option value="advance" {% if balance == 'advance' %}selected{% endif %}>{% translate "Advance with mill" %}</option>
+          <option value="advance" {% if balance == 'advance' %}selected{% endif %}>{% translate "Advance with supplier" %}</option>
         </select></label>
       <label class="filter-field"><span>{% translate "Sort by" %}</span>
         <select class="select" name="sort">
@@ -106,7 +106,7 @@
     <div class="doc-badges">
       {% if not mill.is_active %}<span class="badge badge-muted">{% translate "Inactive" %}</span>{% endif %}
       {% if mill.balance > 0 %}<span class="badge badge-red">{% translate "You owe" %}</span>
-      {% elif mill.balance < 0 %}<span class="badge badge-orange">{% translate "Advance with mill" %}</span>
+      {% elif mill.balance < 0 %}<span class="badge badge-orange">{% translate "Advance with supplier" %}</span>
       {% else %}<span class="badge badge-green">✓ {% translate "Settled" %}</span>{% endif %}
     </div>
     <div class="doc-amount">
@@ -114,7 +114,7 @@
         <span class="muted small">{% translate "You owe" %}</span>
         <strong class="text-danger inr" data-value="{{ mill.balance }}">₹ {{ mill.balance }}</strong>
       {% elif mill.balance < 0 %}
-        <span class="muted small">{% translate "Advance with mill" %}</span>
+        <span class="muted small">{% translate "Advance with supplier" %}</span>
         <strong class="text-warning">₹ <span class="inr-abs" data-value="{{ mill.balance }}">{{ mill.balance }}</span></strong>
       {% else %}
         <span class="muted small">{% translate "Nothing to pay" %}</span>
@@ -176,7 +176,7 @@
     </div>
     <p>
       {% if filtered %}{% translate "Try a different name, or clear the filters." %}
-      {% else %}{% translate "A supplier is the mill you buy rice from. Add your first one to start recording purchases." %}{% endif %}
+      {% else %}{% translate "A supplier is anyone you buy goods from. Add your first one to start recording purchases." %}{% endif %}
     </p>
     {% if filtered %}
       <a class="btn btn-outline" href="{% url 'mill_list' %}">✕ {% translate "Clear filters" %}</a>

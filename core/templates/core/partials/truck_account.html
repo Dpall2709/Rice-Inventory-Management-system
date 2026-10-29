@@ -1,18 +1,18 @@
-{% load i18n %}
-{# The truck's full account, from mill to party - used on the invoice page and the settlement page. Needs `sale` and `profit` (sale_service.sale_profit). #}
+{% load i18n form_tags %}
+{# The sale's full account, from supplier to party - used on the invoice page and the settlement page. Needs `sale` and `profit` (sale_service.sale_profit). #}
 {% with s=profit.settlement %}
 <div class="truck-account">
   <div class="truck-col">
     <div class="cost-title">{% translate "What the party pays" %}</div>
     <dl class="kv summary">
-      <dt>{% translate "Weight sent" %}</dt><dd class="num">{{ s.dispatched_kg }} kg</dd>
-      <dt>{% translate "Weight received" %}</dt>
-      <dd class="num">{% if s.unloaded %}{{ s.received_kg }} kg{% else %}<span class="muted">{% translate "not unloaded yet" %}</span>{% endif %}</dd>
+      <dt>{% translate "Qty sent" %}</dt><dd class="num">{{ s.dispatched_kg|qty }} {% translate "units" %}</dd>
+      <dt>{% translate "Qty received" %}</dt>
+      <dd class="num">{% if s.unloaded %}{{ s.received_kg|qty }} {% translate "units" %}{% else %}<span class="muted">{% translate "not unloaded yet" %}</span>{% endif %}</dd>
       {% if s.unloaded and s.weight_loss_kg %}
-        <dt>{% translate "Short in transit" %}</dt><dd class="num {% if s.weight_loss_kg > 0 %}text-danger{% endif %}">{{ s.weight_loss_kg }} kg</dd>
+        <dt>{% translate "Short in transit" %}</dt><dd class="num {% if s.weight_loss_kg > 0 %}text-danger{% endif %}">{{ s.weight_loss_kg|qty }} {% translate "units" %}</dd>
       {% endif %}
       <dt>{% translate "Invoice total" %}</dt><dd class="num">₹ <span class="inr-abs" data-value="{{ sale.total_amount }}">{{ sale.total_amount }}</span></dd>
-      {% if s.unloaded %}<dt>{% translate "Value on received weight" %}</dt><dd class="num">₹ <span class="inr-abs" data-value="{{ s.party_value }}">{{ s.party_value }}</span></dd>{% endif %}
+      {% if s.unloaded %}<dt>{% translate "Value on received qty" %}</dt><dd class="num">₹ <span class="inr-abs" data-value="{{ s.party_value }}">{{ s.party_value }}</span></dd>{% endif %}
       {% if s.cash_discount %}<dt>{% blocktranslate with pct=sale.cash_discount_percent %}Cash discount ({{ pct }}%){% endblocktranslate %}</dt><dd class="num">− ₹ <span class="inr-abs" data-value="{{ s.cash_discount }}">{{ s.cash_discount }}</span></dd>{% endif %}
       {% if s.brokerage_cut %}<dt>{% translate "Brokerage (party pays broker)" %}</dt><dd class="num">− ₹ <span class="inr-abs" data-value="{{ s.brokerage_cut }}">{{ s.brokerage_cut }}</span></dd>{% endif %}
       {% if s.other_deductions %}<dt>{% translate "Other deductions" %}{% if sale.other_deductions_note %} <span class="muted">({{ sale.other_deductions_note }})</span>{% endif %}</dt><dd class="num">− ₹ <span class="inr-abs" data-value="{{ s.other_deductions }}">{{ s.other_deductions }}</span></dd>{% endif %}
@@ -25,10 +25,10 @@
   </div>
 
   <div class="truck-col">
-    <div class="cost-title">🔒 {% translate "Your profit on this truck" %}</div>
+    <div class="cost-title">🔒 {% translate "Your profit on this sale" %}</div>
     <dl class="kv summary">
       <dt>{% translate "Sale income (before GST)" %}</dt><dd class="num">₹ <span class="inr-abs" data-value="{{ profit.income }}">{{ profit.income }}</span></dd>
-      <dt>{% translate "Rice cost (mill rate + purchase expenses)" %}</dt>
+      <dt>{% translate "Goods cost (supplier rate + purchase expenses)" %}</dt>
       <dd class="num">{% if profit.goods_cost is not None %}− ₹ <span class="inr-abs" data-value="{{ profit.goods_cost }}">{{ profit.goods_cost }}</span>{% else %}<span class="muted">{% translate "unknown" %}</span>{% endif %}</dd>
       {% if profit.loading %}<dt>{% translate "Loading / hamali" %}</dt><dd class="num">− ₹ <span class="inr-abs" data-value="{{ profit.loading }}">{{ profit.loading }}</span></dd>{% endif %}
       {% if profit.freight_cost %}<dt>{% translate "Freight (advance + balance)" %}</dt><dd class="num">− ₹ <span class="inr-abs" data-value="{{ profit.freight_cost }}">{{ profit.freight_cost }}</span></dd>{% endif %}
@@ -39,7 +39,7 @@
         <span>{% if profit.profit < 0 %}{% translate "Loss" %}{% else %}{% translate "Profit" %}{% endif %} <small>({{ profit.margin_percent }}%)</small></span>
         <span class="num">₹ <span class="inr-abs" data-value="{{ profit.profit }}">{{ profit.profit }}</span></span>
       </div>
-      {% if not s.unloaded %}<p class="field-hint" style="margin-top:6px;">{% translate "Estimate on the weight sent. Record the unloading to get the final figure." %}</p>{% endif %}
+      {% if not s.unloaded %}<p class="field-hint" style="margin-top:6px;">{% translate "Estimate on the qty sent. Record the unloading to get the final figure." %}</p>{% endif %}
     {% else %}
       <p class="muted small">{% translate "This sale has no stock-lot data, so its cost is unknown. Edit and save it once." %}</p>
     {% endif %}

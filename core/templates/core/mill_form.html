@@ -12,11 +12,11 @@
   <div>
     <div class="crumbs">
       <a href="{% url 'dashboard' %}">{% translate "Dashboard" %}</a> ›
-      <a href="{% url 'mill_list' %}">{% translate "Mills / Suppliers" %}</a> ›
+      <a href="{% url 'mill_list' %}">{% translate "Suppliers" %}</a> ›
       <span>{% if mode == 'edit' %}{{ mill.mill_name }}{% else %}{% translate "New" %}{% endif %}</span>
     </div>
     <h1>{% if mode == 'edit' %}{% blocktranslate with name=mill.mill_name %}Edit “{{ name }}”{% endblocktranslate %}{% else %}{% translate "Add a supplier" %}{% endif %}</h1>
-    <p class="muted">{% translate "Mills you buy rice from. Only the name and mobile number are required." %}</p>
+    <p class="muted">{% translate "Suppliers you buy goods from. Only the name and mobile number are required." %}</p>
   </div>
   <div class="page-actions">
     <a class="btn btn-outline" href="{% url 'mill_list' %}">📋 {% translate "All suppliers" %}</a>

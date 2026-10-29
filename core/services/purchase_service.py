@@ -7,11 +7,11 @@ Purchase money maths, in one place.
       + CGST + SGST, or IGST, or no tax at all
       + freight + labour
       + round off
-      = total you owe the mill
+      = total you owe the supplier
 
 GST is charged on the value AFTER discount, which is how a GST bill works.
-Freight and labour are added after tax here: on most rice bills they are
-reimbursements rather than taxable supply. If a mill charges GST on freight
+Freight and labour are added after tax here: on most trade bills they are
+reimbursements rather than taxable supply. If a supplier charges GST on freight
 too, enter it as an item line instead.
 """
 
@@ -24,15 +24,20 @@ def _money(value):
     return Decimal(value or 0).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
 
 
-def compute_totals(items, tax_type, discount=0, freight=0, labour=0):
+def compute_totals(items, tax_type, discount=0, freight=0, labour=0, manual=(None, None, None)):
     """
     Work out every total for one purchase.
 
     `items` is a list of PurchaseItem objects (saved or not). Each one gets its
     computed fields filled in as a side effect, so the caller can just save them.
 
+    `manual` is the hand-typed (cgst, sgst, igst) from the supplier's bill,
+    None where the calculated figure should be used.
+
     Returns a dictionary of the bill-level figures.
     """
+    from core.services.gst import apply_manual, split_gst
+
     discount = Decimal(discount or 0)
     freight = Decimal(freight or 0)
     labour = Decimal(labour or 0)
@@ -40,8 +45,8 @@ def compute_totals(items, tax_type, discount=0, freight=0, labour=0):
     # 1. Goods value, before any discount.
     goods = Decimal("0")
     for item in items:
-        kg = Decimal(item.bag_count or 0) * Decimal(item.bag_weight or 0)
-        goods += kg * Decimal(item.purchase_price or 0)
+        quantity = Decimal(item.bag_count or 0) * Decimal(item.bag_weight or 0)
+        goods += quantity * Decimal(item.purchase_price or 0)
 
     if discount > goods:
         discount = goods
@@ -53,8 +58,8 @@ def compute_totals(items, tax_type, discount=0, freight=0, labour=0):
     gst_total = Decimal("0")
 
     for item in items:
-        kg = Decimal(item.bag_count or 0) * Decimal(item.bag_weight or 0)
-        line_goods = kg * Decimal(item.purchase_price or 0)
+        quantity = Decimal(item.bag_count or 0) * Decimal(item.bag_weight or 0)
+        line_goods = quantity * Decimal(item.purchase_price or 0)
 
         share = (line_goods / goods * discount) if goods else Decimal("0")
 
@@ -66,12 +71,8 @@ def compute_totals(items, tax_type, discount=0, freight=0, labour=0):
         taxable_total += item.taxable_amount
         gst_total += item.gst_amount
 
-    # 3. Split the tax the way this bill says.
-    if tax_type == "cgst_sgst":
-        cgst = gst_total / 2
-        sgst = gst_total - cgst          # avoids losing a paisa on odd amounts
-    elif tax_type == "igst":
-        igst = gst_total
+    # 3. Split the tax the way this bill says - or as typed from the bill.
+    cgst, sgst, igst = apply_manual(split_gst(gst_total, tax_type), manual, tax_type)
 
     # 4. Add the charges and round the grand total to whole rupees.
     before_round = taxable_total + cgst + sgst + igst + freight + labour
@@ -92,9 +93,19 @@ def compute_totals(items, tax_type, discount=0, freight=0, labour=0):
     }
 
 
+def calculated_gst(items, tax_type, discount=0):
+    """The (cgst, sgst, igst) the app works out for a bill, ignoring manual figures."""
+    totals = compute_totals(items, tax_type, discount)
+    return totals["cgst_amount"], totals["sgst_amount"], totals["igst_amount"]
+
+
 def apply_totals(purchase, items, tax_type, discount=0, freight=0, labour=0):
-    """Compute the totals and write them onto the purchase object."""
-    totals = compute_totals(items, tax_type, discount, freight, labour)
+    """Compute the totals (honouring manual GST) and write them onto the purchase."""
+    from core.services.gst import clear_unused_manual, manual_values
+
+    purchase.tax_type = tax_type
+    clear_unused_manual(purchase)
+    totals = compute_totals(items, tax_type, discount, freight, labour, manual=manual_values(purchase))
 
     purchase.tax_type = tax_type
     for field, value in totals.items():

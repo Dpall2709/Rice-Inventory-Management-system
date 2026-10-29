@@ -9,7 +9,7 @@ Two sources, used together when both are available:
        SellerGstin, BuyerGstin, DocNo, DocTyp, DocDt (dd/mm/yyyy),
        TotInvVal, ItemCnt, MainHsnCode, Irn, IrnDt
 
-   It never carries the rice lines. The signature is not verified here (that
+   It never carries the goods lines. The signature is not verified here (that
    needs NIC's public key); the values are only used to pre-fill a form the
    user checks before saving.
 
@@ -17,8 +17,8 @@ Two sources, used together when both are available:
    which gives the supplier's name and sometimes the amount.
 
 2. A photo or PDF of the bill, read by Claude into a fixed JSON shape:
-   supplier, bill number, date, tax, and every rice line (bags, bag weight,
-   rate per kg, GST %). Needs ANTHROPIC_API_KEY in the environment.
+   supplier, bill number, date, tax, and every goods line (packs, pack size,
+   rate per unit, GST %). Needs ANTHROPIC_API_KEY in the environment.
 
 The result is a "draft": plain JSON-safe data kept in the session and turned
 into the initial values of the normal purchase form. Nothing is saved until
@@ -211,17 +211,20 @@ BILL_SCHEMA = {
     "additionalProperties": False,
 }
 
-SYSTEM_PROMPT = """You read purchase bills that Indian rice mills and rice wholesalers give to a rice trader, and turn them into data for the trader's billing software. Bills may be printed, handwritten, in English, Hindi or a mix, GST tax invoices or kacha bills without GST.
+SYSTEM_PROMPT = """You read purchase bills that Indian suppliers (mills, manufacturers, distributors, wholesalers) give to a trading business, and turn them into data for its billing software. The goods can be anything - rice and grain, biscuits and FMCG, groceries, packaging, cement and building material. Bills may be printed, handwritten, in English, Hindi or a mix, GST tax invoices or kacha bills without GST.
 
 Fill the schema from what is written on the bill:
-- supplier = the seller who issued the bill (the mill), not the buyer.
+- supplier = the seller who issued the bill, not the buyer.
 - bill_number = the seller's invoice / bill number. bill_date as YYYY-MM-DD.
 - tax_type: "cgst_sgst" if CGST and SGST are charged, "igst" if IGST is charged, "none" if no GST.
-- lines: one entry per rice/goods line. Convert quantities and rates so the software gets bags, kg per bag and rate per kg:
-  - "200 bags x 50 kg" or "200 bori 50 kg" -> bag_count 200, bag_weight_kg 50.
+- lines: one entry per goods line. The software counts goods in PACKS (bags, boxes, cartons, packets, pieces) and prices them per RATE UNIT (kg, litre, piece...). The field names say "bag" and "kg" for history, but mean:
+  bag_count = number of packs, bag_weight_kg = rate units in one pack, quantity_kg = total rate units, rate_per_kg = price per rate unit. Keep up to 3 decimals.
+  - "200 bags x 50 kg" or "200 bori 50 kg" -> bag_count 200, bag_weight_kg 50, rate per kg.
+  - "10 cartons x 24 pcs @ 8.50 per pc" -> bag_count 10, bag_weight_kg 24, rate_per_kg 8.50.
+  - Goods priced per pack ("50 boxes @ 120 per box", "100 bags cement @ 380") -> bag_weight_kg 1, rate_per_kg = price per pack.
   - Quantity given in quintals (qtl, क्विंटल) -> quantity_kg = quintals x 100; rate per quintal -> rate_per_kg = rate / 100.
-  - Rate per bag -> rate_per_kg = rate / bag weight. Rate per ton -> rate / 1000.
-  - If only total weight and bag count are given, bag_weight_kg = weight / bags.
+  - Rate per bag but weight per bag given -> rate_per_kg = rate / bag weight. Rate per ton -> rate / 1000.
+  - If only the total and the pack count are given, bag_weight_kg = total / packs.
   - amount = the line's taxable value as printed. gst_percent = the line's GST rate (CGST + SGST combined, or IGST).
 - discount, freight, labour (hamali, loading), cgst, sgst, igst, round_off, grand_total as printed on the bill.
 - Use null for any number that is not on the bill and cannot be worked out from it; use "" for missing text. Never invent values.
@@ -338,6 +341,12 @@ def read_bill_with_ai(raw, content_type):
 # Turning what was read into a purchase-form draft
 # --------------------------------------------------------------------------
 
+def _qty_number(value):
+    """A quantity for the session draft (JSON): 200 stays 200, 12.3456 becomes 12.346."""
+    value = Decimal(value).quantize(Decimal("0.001"))
+    return int(value) if value == value.to_integral_value() else float(value)
+
+
 def _match_mill(company, gstin, name):
     from core.models import Mill
 
@@ -371,14 +380,14 @@ def _match_product(company, description, hsn):
     text = (description or "").lower()
     best, best_len = None, 0
     for product in products:
-        name = product.rice_name.lower().strip()
+        name = product.name.lower().strip()
         if name and name in text and len(name) > best_len:
             best, best_len = product, len(name)
     if best:
         return best
     # Every word of the product name appears in the description.
     for product in products:
-        words = [w for w in re.split(r"\W+", product.rice_name.lower()) if len(w) > 2]
+        words = [w for w in re.split(r"\W+", product.name.lower()) if len(w) > 2]
         if words and all(w in text for w in words):
             return product
     return None
@@ -458,17 +467,17 @@ def build_draft(company, qr=None, ai=None, bill_file=""):
             "description": line.get("description") or "",
             "hsn": line.get("hsn") or "",
             "product_id": product.id if product else None,
-            "product_name": product.rice_name if product else "",
-            "bag_weight": int(round(weight)) if weight else None,
-            "bag_count": int(round(bags)) if bags else None,
-            "rate": str(rate.quantize(Decimal("0.01"))) if rate else "",
+            "product_name": product.name if product else "",
+            "bag_weight": _qty_number(weight) if weight else None,
+            "bag_count": _qty_number(bags) if bags else None,
+            "rate": str(rate.quantize(Decimal("0.001"))) if rate else "",
             "gst_percent": str(_dec(line.get("gst_percent")) or "") if tax_type != "none" else "0",
             "amount": _money_str(line.get("amount")),
         })
 
-        if bags and bags != int(bags):
+        if bags and bags != bags.quantize(Decimal("0.001")):
             warnings.append(
-                _("“%(line)s”: bag count %(bags)s is not a whole number - check it.")
+                _("“%(line)s”: quantity %(bags)s has more than 3 decimals - check it.")
                 % {"line": line.get("description"), "bags": bags}
             )
 
@@ -482,7 +491,7 @@ def build_draft(company, qr=None, ai=None, bill_file=""):
             "description": f"HSN {hsn}" if hsn else "",
             "hsn": hsn or "",
             "product_id": product.id if product else None,
-            "product_name": product.rice_name if product else "",
+            "product_name": product.name if product else "",
             "bag_weight": None, "bag_count": None, "rate": "",
             "gst_percent": str(product.gst_percent) if product else "",
             "amount": "",

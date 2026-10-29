@@ -1,5 +1,5 @@
 {% extends 'core/base.html' %}
-{% load i18n l10n %}
+{% load i18n l10n form_tags %}
 
 {% block page_title %}{% translate "Dashboard" %}{% endblock %}
 
@@ -103,26 +103,26 @@
   <ol class="steps">
     <li class="step {% if setup.mill %}is-done{% endif %}">
       <span class="step-num">{% if setup.mill %}✓{% else %}1{% endif %}</span>
-      <strong>{% translate "Add a mill" %}</strong>
-      <span class="muted">{% translate "The supplier you buy rice from." %}</span>
-      {% if not setup.mill %}<a class="btn btn-primary btn-sm" href="{% url 'add_mill' %}">{% translate "Add mill" %}</a>{% endif %}
+      <strong>{% translate "Add a supplier" %}</strong>
+      <span class="muted">{% translate "The supplier you buy goods from." %}</span>
+      {% if not setup.mill %}<a class="btn btn-primary btn-sm" href="{% url 'add_mill' %}">{% translate "Add supplier" %}</a>{% endif %}
     </li>
     <li class="step {% if setup.purchase %}is-done{% endif %}">
       <span class="step-num">{% if setup.purchase %}✓{% else %}2{% endif %}</span>
       <strong>{% translate "Enter a purchase" %}</strong>
-      <span class="muted">{% translate "The mill's bill - this puts bags into your stock." %}</span>
+      <span class="muted">{% translate "The supplier's bill - this puts goods into your stock." %}</span>
       {% if not setup.purchase %}<a class="btn {% if setup.mill %}btn-primary{% else %}btn-outline{% endif %} btn-sm" href="{% url 'add_purchase' %}">{% translate "Enter purchase" %}</a>{% endif %}
     </li>
     <li class="step {% if setup.customer %}is-done{% endif %}">
       <span class="step-num">{% if setup.customer %}✓{% else %}3{% endif %}</span>
       <strong>{% translate "Add a customer" %}</strong>
-      <span class="muted">{% translate "The buyer you send trucks to." %}</span>
+      <span class="muted">{% translate "The buyer you sell goods to." %}</span>
       {% if not setup.customer %}<a class="btn btn-outline btn-sm" href="{% url 'add_customer' %}">{% translate "Add customer" %}</a>{% endif %}
     </li>
     <li class="step {% if setup.sale %}is-done{% endif %}">
       <span class="step-num">{% if setup.sale %}✓{% else %}4{% endif %}</span>
       <strong>{% translate "Make a sale" %}</strong>
-      <span class="muted">{% translate "Make the invoice - bags come out of stock and profit is worked out." %}</span>
+      <span class="muted">{% translate "Make the invoice - goods come out of stock and profit is worked out." %}</span>
       {% if not setup.sale %}<a class="btn btn-outline btn-sm" href="{% url 'add_sale' %}">{% translate "New sale" %}</a>{% endif %}
     </li>
   </ol>
@@ -149,7 +149,7 @@
     <div>
       <div class="stat-label">{% translate "Sales" %}</div>
       <div class="stat-value inr" data-value="{{ kpis.sales_total }}">₹ {{ kpis.sales_total }}</div>
-      <div class="stat-hint">{% blocktranslate count counter=kpis.sales_count with bags=kpis.sales_bags %}{{ counter }} invoice · {{ bags }} bags{% plural %}{{ counter }} invoices · {{ bags }} bags{% endblocktranslate %}</div>
+      <div class="stat-hint">{% blocktranslate count counter=kpis.sales_count with qty=kpis.sales_bags|qty %}{{ counter }} invoice · qty {{ qty }}{% plural %}{{ counter }} invoices · qty {{ qty }}{% endblocktranslate %}</div>
     </div>
   </div>
   <div class="stat">
@@ -171,7 +171,7 @@
   <div class="stat is-warning">
     <div class="stat-icon">⬆️</div>
     <div>
-      <div class="stat-label">{% translate "Paid to mills" %}</div>
+      <div class="stat-label">{% translate "Paid to suppliers" %}</div>
       <div class="stat-value inr" data-value="{{ kpis.paid_to_mills }}">₹ {{ kpis.paid_to_mills }}</div>
       {% if kpis.paid_to_brokers %}<div class="stat-hint">{% translate "Brokers" %} ₹ <span class="inr-abs" data-value="{{ kpis.paid_to_brokers }}">{{ kpis.paid_to_brokers }}</span></div>{% endif %}
     </div>
@@ -217,7 +217,7 @@
     <div>
       <div class="stat-label">{% translate "Total cost" %}</div>
       <div class="stat-value inr" data-value="{{ kpis.cost }}">₹ {{ kpis.cost }}</div>
-      <div class="stat-hint">{% translate "rice + loading + freight + commission" %}</div>
+      <div class="stat-hint">{% translate "goods + loading + freight + commission" %}</div>
     </div>
   </div>
   <div class="stat {% if kpis.profit_earned < 0 %}is-danger{% else %}is-success{% endif %}">
@@ -255,9 +255,9 @@
   <a class="stat {% if balances.you_owe_mills > 0 %}is-warning{% else %}is-success{% endif %}" href="{% url 'mill_list' %}" style="color:inherit;">
     <div class="stat-icon">🏭</div>
     <div>
-      <div class="stat-label">{% translate "You owe mills" %}</div>
+      <div class="stat-label">{% translate "You owe suppliers" %}</div>
       <div class="stat-value inr" data-value="{{ balances.you_owe_mills }}">₹ {{ balances.you_owe_mills }}</div>
-      <div class="stat-hint">{% blocktranslate count counter=balances.mills_with_dues %}{{ counter }} mill{% plural %}{{ counter }} mills{% endblocktranslate %}</div>
+      <div class="stat-hint">{% blocktranslate count counter=balances.mills_with_dues %}{{ counter }} supplier{% plural %}{{ counter }} suppliers{% endblocktranslate %}</div>
     </div>
   </a>
   <a class="stat" href="{% url 'broker_list' %}" style="color:inherit;">
@@ -272,7 +272,7 @@
     <div>
       <div class="stat-label">{% translate "Stock value at cost" %}</div>
       <div class="stat-value inr" data-value="{{ balances.stock_value }}">₹ {{ balances.stock_value }}</div>
-      <div class="stat-hint">{% blocktranslate count counter=balances.stock_bags %}{{ counter }} bag in godown{% plural %}{{ counter }} bags in godown{% endblocktranslate %}</div>
+      <div class="stat-hint">{% blocktranslate with qty=balances.stock_bags|qty %}qty {{ qty }} in stock{% endblocktranslate %}</div>
     </div>
   </div>
   <div class="stat {% if kpis.cash_position < 0 %}is-danger{% else %}is-success{% endif %}">
@@ -280,7 +280,7 @@
     <div>
       <div class="stat-label">{% translate "Cash in − out" %}</div>
       <div class="stat-value inr {% if kpis.cash_position < 0 %}is-neg{% endif %}" data-value="{{ kpis.cash_position }}">₹ {{ kpis.cash_position }}</div>
-      <div class="stat-hint">{% blocktranslate with label=period.label %}received − paid to mills, {{ label }}{% endblocktranslate %}</div>
+      <div class="stat-hint">{% blocktranslate with label=period.label %}received − paid to suppliers, {{ label }}{% endblocktranslate %}</div>
     </div>
   </div>
 </div>
@@ -331,7 +331,7 @@
 
     {% if actions.pay_mills %}
     <div class="todo-group">
-      <div class="todo-head"><h3>🏭 {% translate "Mills you owe the most" %}</h3></div>
+      <div class="todo-head"><h3>🏭 {% translate "Suppliers you owe the most" %}</h3></div>
       <ul class="todo-list">
         {% for row in actions.pay_mills %}
         <li class="todo">
@@ -356,12 +356,12 @@
         {% for row in actions.low_stock|slice:":8" %}
         <li class="todo {% if row.status == 'out' %}is-danger{% else %}is-warning{% endif %}">
           <div class="todo-main">
-            <div class="row-title">{% blocktranslate with rice=row.product.rice_name weight=row.bag_weight %}{{ rice }} ({{ weight }} kg bags){% endblocktranslate %}</div>
+            <div class="row-title">{% blocktranslate with name=row.product.name size=row.bag_weight|qty rate_unit=row.product.rate_unit_label unit=row.product.unit_label %}{{ name }} ({{ size }} {{ rate_unit }} / {{ unit }}){% endblocktranslate %}</div>
             <div class="row-sub">
               {% if row.status == 'out' %}
-                {% blocktranslate with per_day=row.per_day %}was selling {{ per_day }} bags a day{% endblocktranslate %}
+                {% blocktranslate with per_day=row.per_day|qty unit=row.product.unit_label %}was selling {{ per_day }} {{ unit }} a day{% endblocktranslate %}
               {% elif row.days_cover is not None %}
-                {% blocktranslate count counter=row.days_cover with per_day=row.per_day %}selling {{ per_day }} bags a day · about {{ counter }} day left{% plural %}selling {{ per_day }} bags a day · about {{ counter }} days left{% endblocktranslate %}
+                {% blocktranslate count counter=row.days_cover with per_day=row.per_day|qty unit=row.product.unit_label %}selling {{ per_day }} {{ unit }} a day · about {{ counter }} day left{% plural %}selling {{ per_day }} {{ unit }} a day · about {{ counter }} days left{% endblocktranslate %}
               {% else %}
                 {% translate "no sales in the last 30 days" %}
               {% endif %}
@@ -369,7 +369,7 @@
           </div>
           <div class="todo-amount">
             {% if row.status == 'out' %}<span class="badge badge-red">{% translate "Out of stock" %}</span>
-            {% else %}{% blocktranslate count counter=row.bags %}{{ counter }} bag left{% plural %}{{ counter }} bags left{% endblocktranslate %}{% endif %}
+            {% else %}{% blocktranslate with qty=row.bags|qty unit=row.product.unit_label %}{{ qty }} {{ unit }} left{% endblocktranslate %}{% endif %}
           </div>
           <div class="actions">
             <a class="btn btn-primary btn-sm" href="{% url 'add_purchase' %}">📥 {% translate "Buy more" %}</a>
@@ -390,10 +390,10 @@
         {% for row in actions.slow_stock|slice:":8" %}
         <li class="todo">
           <div class="todo-main">
-            <div class="row-title">{% blocktranslate with rice=row.product.rice_name weight=row.bag_weight %}{{ rice }} ({{ weight }} kg bags){% endblocktranslate %}</div>
+            <div class="row-title">{% blocktranslate with name=row.product.name size=row.bag_weight|qty rate_unit=row.product.rate_unit_label unit=row.product.unit_label %}{{ name }} ({{ size }} {{ rate_unit }} / {{ unit }}){% endblocktranslate %}</div>
             <div class="row-sub">
               <a href="{% url 'purchase_detail' row.lot.purchase.id %}">{{ row.lot.purchase.invoice_no }}</a> · {{ row.mill.mill_name }} ·
-              {% blocktranslate count counter=row.age with bags=row.bags %}{{ bags }} bags, bought {{ counter }} day ago, no sale in 30 days{% plural %}{{ bags }} bags, bought {{ counter }} days ago, no sale in 30 days{% endblocktranslate %}
+              {% blocktranslate count counter=row.age with qty=row.bags|qty unit=row.product.unit_label %}{{ qty }} {{ unit }}, bought {{ counter }} day ago, no sale in 30 days{% plural %}{{ qty }} {{ unit }}, bought {{ counter }} days ago, no sale in 30 days{% endblocktranslate %}
             </div>
           </div>
           <div class="todo-amount inr" data-value="{{ row.value }}">₹ {{ row.value }}</div>
@@ -508,7 +508,7 @@
       <div class="chart days" aria-hidden="true">
         {% for d in trends.days %}
         <div class="chart-group">
-          <span class="chart-bar {% if d.is_today %}today{% endif %} {% if not d.pct %}is-zero{% endif %}" style="height: {{ d.pct|unlocalize }}%" title="{{ d.day|date:'d M' }}: ₹ {{ d.sales }} · {{ d.bags }} {% translate 'bags' %}"></span>
+          <span class="chart-bar {% if d.is_today %}today{% endif %} {% if not d.pct %}is-zero{% endif %}" style="height: {{ d.pct|unlocalize }}%" title="{{ d.day|date:'d M' }}: ₹ {{ d.sales }} · {% translate 'qty' %} {{ d.bags|qty }}"></span>
         </div>
         {% endfor %}
       </div>
@@ -517,9 +517,9 @@
       </div>
       <div class="sr-only"><table>
         <caption>{% translate "Sales for each of the last 14 days" %}</caption>
-        <thead><tr><th>{% translate "Date" %}</th><th>{% translate "Sales" %}</th><th>{% translate "Bags" %}</th></tr></thead>
+        <thead><tr><th>{% translate "Date" %}</th><th>{% translate "Sales" %}</th><th>{% translate "Qty" %}</th></tr></thead>
         <tbody>
-          {% for d in trends.days %}<tr><td>{{ d.day|date:"d M Y" }}</td><td>₹ {{ d.sales }}</td><td>{{ d.bags }}</td></tr>{% endfor %}
+          {% for d in trends.days %}<tr><td>{{ d.day|date:"d M Y" }}</td><td>₹ {{ d.sales }}</td><td>{{ d.bags|qty }}</td></tr>{% endfor %}
         </tbody>
       </table></div>
     {% else %}
@@ -544,7 +544,7 @@
             <span class="bold inr" data-value="{{ row.total }}">₹ {{ row.total }}</span>
           </div>
           <div class="rank-row row-sub">
-            <span>{% blocktranslate count counter=row.bags %}{{ counter }} bag{% plural %}{{ counter }} bags{% endblocktranslate %}</span>
+            <span>{% blocktranslate with qty=row.bags|qty %}qty {{ qty }}{% endblocktranslate %}</span>
             {% if row.due %}<span class="text-danger">{% translate "owes" %} <span class="inr" data-value="{{ row.due }}">₹ {{ row.due }}</span></span>
             {% elif row.due is not None %}<span class="text-success">{% translate "nothing due" %}</span>{% endif %}
           </div>
@@ -558,7 +558,7 @@
 
   <section class="card" aria-labelledby="topprod-title">
     <div class="list-header">
-      <h2 id="topprod-title">{% translate "Top rice" %}</h2>
+      <h2 id="topprod-title">{% translate "Top products" %}</h2>
       <span class="muted">{{ period.label }}</span>
     </div>
     {% if top_products %}
@@ -566,14 +566,14 @@
         {% for row in top_products %}
         <li>
           <div class="rank-row">
-            <span class="row-title">{{ row.product.rice_name }}</span>
+            <span class="row-title">{{ row.product.name }}</span>
             <span class="bold {% if row.profit < 0 %}text-danger{% else %}text-success{% endif %} inr" data-value="{{ row.profit }}">₹ {{ row.profit }}</span>
           </div>
           <div class="rank-row row-sub">
-            <span>{% blocktranslate count counter=row.bags %}{{ counter }} bag sold{% plural %}{{ counter }} bags sold{% endblocktranslate %}</span>
+            <span>{% blocktranslate with qty=row.bags|qty unit=row.product.unit_label %}{{ qty }} {{ unit }} sold{% endblocktranslate %}</span>
             <span>
               {% if row.margin is not None %}{% blocktranslate with margin=row.margin %}{{ margin }}% margin{% endblocktranslate %}{% endif %}
-              {% if row.uncosted_bags %}· {% blocktranslate with bags=row.uncosted_bags %}{{ bags }} bags without cost{% endblocktranslate %}{% endif %}
+              {% if row.uncosted_bags %}· {% blocktranslate with qty=row.uncosted_bags|qty unit=row.product.unit_label %}{{ qty }} {{ unit }} without cost{% endblocktranslate %}{% endif %}
             </span>
           </div>
         </li>
@@ -617,36 +617,36 @@
   <div class="list-header">
     <div>
       <h2 id="stock-title">📦 {% translate "Stock in godown" %}</h2>
-      <p class="muted">{% blocktranslate with bags=stock.total_bags kg=stock.total_kg %}{{ bags }} bags · {{ kg }} kg{% endblocktranslate %} · {% translate "value at cost" %} <span class="bold inr" data-value="{{ stock.total_value }}">₹ {{ stock.total_value }}</span></p>
+      <p class="muted">{% blocktranslate with qty=stock.total_bags|qty %}qty {{ qty }}{% endblocktranslate %} · {% translate "value at cost" %} <span class="bold inr" data-value="{{ stock.total_value }}">₹ {{ stock.total_value }}</span></p>
     </div>
-    <a class="btn btn-outline btn-sm" href="{% url 'product_list' %}">{% translate "All rice" %}</a>
+    <a class="btn btn-outline btn-sm" href="{% url 'product_list' %}">{% translate "All products" %}</a>
   </div>
   {% if stock.rows %}
   <div class="table-wrap">
     <table class="table table-cards">
       <thead>
         <tr>
-          <th>{% translate "Rice" %}</th>
-          <th class="right">{% translate "Bags left" %}</th>
-          <th class="right">{% translate "Kg" %}</th>
+          <th>{% translate "Product" %}</th>
+          <th class="right">{% translate "Qty left" %}</th>
+          <th class="right">{% translate "Total" %}</th>
           <th class="right">{% translate "Value at cost" %}</th>
-          <th class="right">{% translate "Avg cost / kg" %}</th>
-          <th class="right">{% translate "Sell at / kg" %}</th>
+          <th class="right">{% translate "Avg cost / unit" %}</th>
+          <th class="right">{% translate "Sell at / unit" %}</th>
           <th class="right">{% translate "Status" %}</th>
         </tr>
       </thead>
       <tbody>
         {% for row in stock.rows %}
         <tr>
-          <td data-label="{% translate 'Rice' %}">
-            <a class="row-title" href="{% url 'product_report' row.product.id %}">{{ row.product.rice_name }}</a>
-            <div class="row-sub">{% blocktranslate with weight=row.bag_weight %}{{ weight }} kg bags{% endblocktranslate %}{% if row.sold_30 %} · {% blocktranslate with bags=row.sold_30 %}{{ bags }} sold in 30 days{% endblocktranslate %}{% endif %}</div>
+          <td data-label="{% translate 'Product' %}">
+            <a class="row-title" href="{% url 'product_report' row.product.id %}">{{ row.product.name }}</a>
+            <div class="row-sub">{% blocktranslate with size=row.bag_weight|qty rate_unit=row.product.rate_unit_label unit=row.product.unit_label %}{{ size }} {{ rate_unit }} / {{ unit }}{% endblocktranslate %}{% if row.sold_30 %} · {% blocktranslate with qty=row.sold_30|qty %}{{ qty }} sold in 30 days{% endblocktranslate %}{% endif %}</div>
           </td>
-          <td data-label="{% translate 'Bags left' %}" class="right bold">{{ row.bags }}</td>
-          <td data-label="{% translate 'Kg' %}" class="right">{{ row.kg }}</td>
+          <td data-label="{% translate 'Qty left' %}" class="right bold">{{ row.bags|qty }} {{ row.product.unit_label }}</td>
+          <td data-label="{% translate 'Total' %}" class="right">{{ row.kg|qty }} {{ row.product.rate_unit_label }}</td>
           <td data-label="{% translate 'Value at cost' %}" class="right inr" data-value="{{ row.value }}">₹ {{ row.value }}</td>
-          <td data-label="{% translate 'Avg cost / kg' %}" class="right">{% if row.avg_cost_per_kg %}₹ {{ row.avg_cost_per_kg }}{% else %}–{% endif %}</td>
-          <td data-label="{% translate 'Sell at / kg' %}" class="right">{% if row.suggested_per_kg %}₹ {{ row.suggested_per_kg }}{% else %}–{% endif %}</td>
+          <td data-label="{% translate 'Avg cost / unit' %}" class="right">{% if row.avg_cost_per_kg %}₹ {{ row.avg_cost_per_kg }}/{{ row.product.rate_unit_label }}{% else %}–{% endif %}</td>
+          <td data-label="{% translate 'Sell at / unit' %}" class="right">{% if row.suggested_per_kg %}₹ {{ row.suggested_per_kg }}/{{ row.product.rate_unit_label }}{% else %}–{% endif %}</td>
           <td data-label="{% translate 'Status' %}" class="right">
             {% if row.status == 'out' %}<span class="badge badge-red">{% translate "Out" %}</span>
             {% elif row.status == 'low' %}<span class="badge badge-orange">{% translate "Low" %}</span>

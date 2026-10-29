@@ -1,5 +1,5 @@
 {% extends 'core/base.html' %}
-{% load i18n %}
+{% load i18n form_tags %}
 {% block page_title %}{% translate "Product Report" %}{% endblock %}
 
 {% block content %}
@@ -7,8 +7,8 @@
 
   <div class="list-header">
     <div>
-      <h2 class="list-title">{{ product.rice_name }}</h2>
-      <p class="muted">{% translate "Stock report (Bag wise)" %}</p>
+      <h2 class="list-title">{{ product.name }}</h2>
+      <p class="muted">{% translate "Stock report (pack wise)" %}</p>
     </div>
 
     <div class="list-actions">
@@ -19,18 +19,18 @@
   <!-- Summary -->
   <div class="info-grid">
     <div class="info-card">
-      <div class="info-label">{% translate "Total Purchased Bags" %}</div>
-      <div class="info-value">{{ total_purchase_bags }}</div>
+      <div class="info-label">{% translate "Total Purchased Qty" %}</div>
+      <div class="info-value">{{ total_purchase_bags|qty }} {{ product.unit_label }}</div>
     </div>
 
     <div class="info-card">
-      <div class="info-label">{% translate "Total Sold Bags" %}</div>
-      <div class="info-value">{{ total_sale_bags }}</div>
+      <div class="info-label">{% translate "Total Sold Qty" %}</div>
+      <div class="info-value">{{ total_sale_bags|qty }} {{ product.unit_label }}</div>
     </div>
 
     <div class="info-card">
-      <div class="info-label">{% translate "Current Stock Bags" %}</div>
-      <div class="info-value" style="color:#16a34a;">{{ current_stock_bags }}</div>
+      <div class="info-label">{% translate "Current Stock Qty" %}</div>
+      <div class="info-value" style="color:#16a34a;">{{ current_stock_bags|qty }} {{ product.unit_label }}</div>
     </div>
   </div>
 
@@ -45,9 +45,9 @@
         <tr>
           <th>{% translate "Date" %}</th>
           <th>{% translate "Invoice" %}</th>
-          <th>{% translate "Mill" %}</th>
-          <th class="right">{% translate "Bag Weight" %}</th>
-          <th class="right">{% translate "Bags" %}</th>
+          <th>{% translate "Supplier" %}</th>
+          <th class="right">{% translate "Pack size" %}</th>
+          <th class="right">{% translate "Qty" %}</th>
         </tr>
       </thead>
 
@@ -63,8 +63,8 @@
             </a>
           </td>
 
-          <td class="right">{{ it.bag_weight }}</td>
-          <td class="right"><b>{{ it.bag_count }}</b></td>
+          <td class="right">{{ it.bag_weight|qty }} {{ product.rate_unit_label }}</td>
+          <td class="right"><b>{{ it.bag_count|qty }} {{ product.unit_label }}</b></td>
         </tr>
         {% empty %}
         <tr>

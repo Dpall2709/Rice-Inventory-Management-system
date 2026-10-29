@@ -1,0 +1,22 @@
+{% load i18n %}
+<form class="quick-form" data-quick-form="{{ kind }}" novalidate>
+  {% csrf_token %}
+  <h3>{{ title }}</h3>
+  {% if form.non_field_errors %}
+    <div class="banner is-danger"><span>⛔</span><div>{% for e in form.non_field_errors %}{{ e }}<br>{% endfor %}</div></div>
+  {% endif %}
+  <div class="form-grid">
+    {% for field in form %}
+      <div class="field {% if field.errors %}has-error{% endif %} {% if field.name in 'billing_address,address' %}field-full{% endif %}">
+        <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+        {{ field }}
+        {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+        {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+  <div class="modal-actions" style="margin-top:16px;">
+    <button type="button" class="btn btn-ghost" data-quick-cancel>{% translate "Cancel" %}</button>
+    <button type="submit" class="btn btn-primary">💾 {% translate "Save & select" %}</button>
+  </div>
+</form>

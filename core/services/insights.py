@@ -76,7 +76,7 @@ def pulse(company, start, end, today):
 
     now, before = margin(current), margin(previous)
     if now is None:
-        margin_light = {"tone": "muted", "value": "—", "text": _("No costed trucks in this period yet.")}
+        margin_light = {"tone": "muted", "value": "—", "text": _("No costed sales in this period yet.")}
     else:
         tone = "good" if now >= 3 else ("warn" if now >= 1 else "bad")
         if before is None:
@@ -102,7 +102,7 @@ def pulse(company, start, end, today):
         collect_light = {"tone": tone, "value": _("%(days)s days") % {"days": round(days)},
                          "text": _("Average wait from unloading to full payment.")}
     else:
-        collect_light = {"tone": "muted", "value": "—", "text": _("Shown once a few trucks are fully paid.")}
+        collect_light = {"tone": "muted", "value": "—", "text": _("Shown once a few sales are fully paid.")}
 
     open_rows = [r for r in window if r["due"] > 0]
     owed = sum((r["due"] for r in open_rows), ZERO)
@@ -176,7 +176,7 @@ def reminders(company, today, recv, mills):
             sale = r["sale"]
             items.append({
                 "id": f"unload-{sale.id}", "tone": "warn", "icon": "🚚", "rank": 2,
-                "title": _("Truck %(truck)s to %(party)s: unloading not recorded") % {
+                "title": _("Sale %(truck)s to %(party)s: delivery not recorded") % {
                     "truck": sale.vehicle_number or sale.invoice_no, "party": sale.customer_name},
                 "detail": _("Sent %(days)s days ago. Enter the weight they received so the bill is final.") % {
                     "days": (today - sale.sale_date).days},
@@ -217,7 +217,7 @@ def reminders(company, today, recv, mills):
         phone = party.mobile
         reasons = []
         if days > PAYMENT_LATE_DAYS:
-            reasons.append(_("oldest unpaid truck is %(days)s days old") % {"days": days})
+            reasons.append(_("oldest unpaid sale is %(days)s days old") % {"days": days})
         if share >= BIG_BALANCE_SHARE:
             reasons.append(_("%(pct)s%% of all money owed to you") % {"pct": f"{share * 100:.0f}"})
         buttons = [{
@@ -311,10 +311,10 @@ def profit_tips(company, start, end, today):
         lost = -sum((r["profit"] for r in losses), ZERO)
         tips.append({
             "tone": "bad", "icon": "🔻",
-            "title": _("%(n)s truck(s) made a loss of %(amount)s") % {"n": len(losses), "amount": _short_inr(lost)},
-            "detail": _("Check the selling rate, shortage and freight on these trucks before the next deal with the same party."),
+            "title": _("%(n)s sale(s) made a loss of %(amount)s") % {"n": len(losses), "amount": _short_inr(lost)},
+            "detail": _("Check the selling rate, shortage and freight on these sales before the next deal with the same party."),
             "link": reverse("trade_register") + f"?from={start}&to={end}",
-            "link_label": _("See the trucks"),
+            "link_label": _("See the sales"),
         })
 
     # Brokers compared.
@@ -323,9 +323,9 @@ def profit_tips(company, start, end, today):
         best, worst = brokers[0], brokers[-1]
         tips.append({
             "tone": "good", "icon": "🤝",
-            "title": _("Trucks through %(best)s earn ₹%(b)s/kg, through %(worst)s only ₹%(w)s/kg") % {
+            "title": _("Sales through %(best)s earn ₹%(b)s/unit, through %(worst)s only ₹%(w)s/unit") % {
                 "best": best["name"], "b": best["per_kg"], "worst": worst["name"], "w": worst["per_kg"]},
-            "detail": _("Give more trucks to the better broker, or ask the other for a lower brokerage or CD."),
+            "detail": _("Give more business to the better broker, or ask the other for a lower brokerage or CD."),
             "link": reverse("broker_report_detail", args=[worst["key"]]),
             "link_label": _("Open %(name)s") % {"name": worst["name"]},
         })
@@ -336,7 +336,7 @@ def profit_tips(company, start, end, today):
         best, worst = customers[0], customers[-1]
         tips.append({
             "tone": "info", "icon": "👥",
-            "title": _("%(best)s gives you ₹%(b)s/kg, %(worst)s only ₹%(w)s/kg") % {
+            "title": _("%(best)s gives you ₹%(b)s/unit, %(worst)s only ₹%(w)s/unit") % {
                 "best": best["name"], "b": best["per_kg"], "worst": worst["name"], "w": worst["per_kg"]},
             "detail": _("Quote %(worst)s a little higher, or offer the stock to your better-paying parties first.") % {
                 "worst": worst["name"]},
@@ -353,9 +353,9 @@ def profit_tips(company, start, end, today):
         pct = shortage_kg / kg_sent * 100
         tips.append({
             "tone": "warn" if pct > Decimal("0.3") else "info", "icon": "⚖️",
-            "title": _("Shortage in transit cost you about %(amount)s (%(kg)s kg, %(pct)s%%)") % {
+            "title": _("Shortage in transit cost you about %(amount)s (%(kg)s units, %(pct)s%%)") % {
                 "amount": _short_inr(cost), "kg": f"{shortage_kg:,.0f}", "pct": f"{pct:.2f}"},
-            "detail": _("Weigh trucks at loading and compare transporters - a few kg per truck adds up over a season."),
+            "detail": _("Weigh goods at loading and compare transporters - small shortages add up over a season."),
         })
 
     # CD + brokerage.
@@ -376,9 +376,9 @@ def profit_tips(company, start, end, today):
     if freight and kg:
         tips.append({
             "tone": "info", "icon": "🚛",
-            "title": _("Freight cost you ₹%(per_kg)s per kg (%(amount)s in all)") % {
+            "title": _("Freight cost you ₹%(per_kg)s per unit (%(amount)s in all)") % {
                 "per_kg": f"{freight / kg:.2f}", "amount": _short_inr(freight)},
-            "detail": _("Compare it with your margin per kg - on far routes, quote the freight into your selling rate."),
+            "detail": _("Compare it with your margin per unit - on far routes, quote the freight into your selling rate."),
         })
 
     # Cheapest mill for the same product, last 90 days.
@@ -386,12 +386,12 @@ def profit_tips(company, start, end, today):
     prices = (
         PurchaseItem.objects.for_company(company)
         .filter(purchase__purchase_date__gte=since)
-        .values("product__rice_name", "bag_weight", "purchase__mill__mill_name")
+        .values("product__name", "bag_weight", "purchase__mill__mill_name")
         .annotate(rate=Avg("purchase_price"))
     )
     by_product = defaultdict(list)
     for p in prices:
-        by_product[(p["product__rice_name"], p["bag_weight"])].append(p)
+        by_product[(p["product__name"], p["bag_weight"])].append(p)
     best_gap = None
     for (product, weight), mills in by_product.items():
         if len(mills) < 2:
@@ -404,7 +404,7 @@ def profit_tips(company, start, end, today):
         gap, product, weight, cheap, dear = best_gap
         tips.append({
             "tone": "good", "icon": "🏭",
-            "title": _("%(product)s is ₹%(gap)s/kg cheaper from %(cheap)s than from %(dear)s") % {
+            "title": _("%(product)s is ₹%(gap)s/unit cheaper from %(cheap)s than from %(dear)s") % {
                 "product": product, "gap": f"{gap:.2f}", "cheap": cheap["purchase__mill__mill_name"],
                 "dear": dear["purchase__mill__mill_name"]},
             "detail": _("Average buying rate over the last 90 days. Buying from the cheaper mill adds this straight to your margin."),
@@ -414,13 +414,13 @@ def profit_tips(company, start, end, today):
     products = _compare(
         rows,
         lambda r: r["sale"].items.first().product_id if r["sale"].items.exists() else None,
-        lambda r: r["sale"].items.first().product.rice_name,
+        lambda r: r["sale"].items.first().product.name,
     )
     if len(products) >= 2:
         best = products[0]
         tips.append({
             "tone": "good", "icon": "📦",
-            "title": _("%(product)s earns you the most: ₹%(per_kg)s per kg") % {
+            "title": _("%(product)s earns you the most: ₹%(per_kg)s per unit") % {
                 "product": best["name"], "per_kg": best["per_kg"]},
             "detail": _("Keep it in stock - check the low-stock list below."),
         })

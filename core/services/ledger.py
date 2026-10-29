@@ -22,6 +22,7 @@ from django.db.models import Sum
 from django.utils.translation import gettext as _
 
 from core.models import Payment, Purchase
+from core.utils import qty_str
 
 
 def _money(value):
@@ -204,7 +205,7 @@ def account_history(mill, purchases, payments):
 
         Date  | Particulars              | Bill (you owe) | Paid   | Balance
         01 Sep  Opening balance                               ...
-        05 Sep  Bill 01 - 300 bags          4,41,000                4,41,000
+        05 Sep  Bill 01 - qty 300            4,41,000                4,41,000
         09 Sep  Payment (UPI) - bill 01                1,00,000     3,41,000
 
     Every bill and every payment stays here for good, including those of a
@@ -215,14 +216,14 @@ def account_history(mill, purchases, payments):
 
     for purchase in purchases:
         items = list(purchase.purchaseitem_set.all())
-        bags = sum(item.bag_count or 0 for item in items)
-        rice = ", ".join(sorted({item.product.rice_name for item in items})) or _("rice")
+        bags = qty_str(sum((item.bag_count or 0 for item in items), 0))
+        rice = ", ".join(sorted({item.product.name for item in items})) or _("goods")
 
         entries.append({
             "date": purchase.purchase_date,
             "order": (purchase.purchase_date, 0, purchase.id),
             "kind": "bill",
-            "particulars": _("Bill %(no)s - %(bags)s bags %(rice)s") % {
+            "particulars": _("Bill %(no)s - qty %(bags)s %(rice)s") % {
                 "no": purchase.invoice_no, "bags": bags, "rice": rice,
             },
             "reference": purchase.purchase_ref,

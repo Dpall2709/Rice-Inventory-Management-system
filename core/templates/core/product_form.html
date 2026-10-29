@@ -1,0 +1,51 @@
+{% extends 'core/base.html' %}
+{% load i18n %}
+{% block nav_kind %}form{% endblock %}
+{% block back_url %}{% url 'product_list' %}{% endblock %}
+{% block content_class %}page-narrow{% endblock %}
+{% block page_title %}{% if mode == 'edit' %}{% translate "Edit product" %}{% else %}{% translate "Add product" %}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="panel">
+  <div class="list-header">
+    <div>
+      <h2 class="list-title">{% if mode == 'edit' %}{{ product.name }}{% else %}{% translate "Add product" %}{% endif %}</h2>
+      <p class="muted">
+        {% blocktranslate trimmed %}
+          Choose what you count it in and what the price is per. Example: biscuits counted in
+          cartons of 24 and priced per piece - pack unit Carton, rate unit Piece, 24 in one pack.
+        {% endblocktranslate %}
+      </p>
+    </div>
+    <div class="list-actions">
+      <a href="{% url 'units_and_categories' %}" class="btn btn-outline">📏 {% translate "Units & categories" %}</a>
+    </div>
+  </div>
+
+  <form method="POST" novalidate>
+    {% csrf_token %}
+    <div class="form-grid">
+      {% for field in form %}
+        <div class="field {% if field.errors %}has-error{% endif %} {% if field.name == 'description' %}field-full{% endif %}">
+          {% if field.name == 'is_active' %}
+            <label style="flex-direction:row; display:flex; gap:8px; align-items:center;">{{ field }} {{ field.label }}</label>
+          {% else %}
+            <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="req">*</span>{% endif %}</label>
+            {{ field }}
+          {% endif %}
+          {% if field.help_text %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">💾 {% translate "Save product" %}</button>
+      {% if mode == 'add' %}
+        <button type="submit" class="btn btn-outline" name="save_and_new" value="1">➕ {% translate "Save & add another" %}</button>
+      {% endif %}
+      <a href="{% url 'product_list' %}" class="btn btn-ghost">{% translate "Cancel" %}</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

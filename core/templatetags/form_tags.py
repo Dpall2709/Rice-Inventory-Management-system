@@ -17,3 +17,13 @@ register = template.Library()
 @register.filter
 def one_of(value, names):
     return str(value) in {name.strip() for name in str(names).split(",")}
+
+
+@register.filter
+def qty(value, places=3):
+    """{{ item.bag_count|qty }} - a quantity or rate with up to 3 decimals, no trailing zeros."""
+    from core.utils import qty_str
+
+    if value is None or value == "":
+        return ""
+    return qty_str(value, int(places))

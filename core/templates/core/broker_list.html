@@ -1,5 +1,5 @@
 {% extends 'core/base.html' %}
-{% load i18n %}
+{% load i18n form_tags %}
 {% block page_title %}{% translate "Brokers" %}{% endblock %}
 
 {% block content %}
@@ -57,7 +57,7 @@
       <thead>
         <tr>
           <th>{% translate "Broker" %}</th><th>{% translate "Mobile" %}</th><th>{% translate "Usual commission" %}</th>
-          <th class="right">{% translate "Sales" %}</th><th class="right">{% translate "Bags" %}</th>
+          <th class="right">{% translate "Sales" %}</th><th class="right">{% translate "Qty" %}</th>
           <th class="right">{% translate "He owes you" %}</th>
           <th class="right">{% translate "Commission owed" %}</th><th class="right">{% translate "Actions" %}</th>
         </tr>
@@ -73,7 +73,7 @@
           <td data-label="{% translate 'Mobile' %}">{{ broker.mobile|default:"—" }}</td>
           <td data-label="{% translate 'Usual commission' %}">{% if broker.commission_rate %}{{ broker.commission_rate }} · {{ broker.get_commission_type_display }}{% else %}—{% endif %}</td>
           <td data-label="{% translate 'Sales' %}" class="right">{{ broker.sale_count }}</td>
-          <td data-label="{% translate 'Bags' %}" class="right">{{ broker.total_bags }}</td>
+          <td data-label="{% translate 'Qty' %}" class="right">{{ broker.total_bags|qty }}</td>
           <td data-label="{% translate 'He owes you' %}" class="right">
             {% if broker.owes_us > 0 %}<span class="bold text-danger inr" data-value="{{ broker.owes_us }}">₹ {{ broker.owes_us }}</span>{% else %}—{% endif %}
           </td>

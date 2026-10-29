@@ -17,8 +17,8 @@
     <h1>{% if mode == 'edit' %}{% blocktranslate with no=sale.invoice_no %}Edit invoice {{ no }}{% endblocktranslate %}{% else %}{% translate "Make a sale invoice" %}{% endif %}</h1>
     <p class="muted">
       {% blocktranslate trimmed %}
-        Choose the customer, add the rice lines, and the bags come out of your stock
-        - oldest lot first unless you pick one. Rate is <strong>per kg</strong>, before GST.
+        Choose the customer, add the product lines, and the goods come out of your stock
+        - oldest lot first unless you pick one. Rate is per the product's rate unit, before GST.
       {% endblocktranslate %}
     </p>
   </div>
@@ -30,15 +30,15 @@
 {% if not has_customers %}
   <div class="banner is-warning">
     <span>👥</span>
-    <div>{% translate "You have no customers yet. Add the buyer first - it takes a minute and gives you their ledger." %}</div>
-    <a href="{% url 'add_customer' %}?next=sale" style="margin-left:auto;">{% translate "Add a customer" %} →</a>
+    <div>{% translate "You have no customers yet. Add the buyer right here - it takes a minute and gives you their ledger." %}</div>
+    <a href="#" data-quick-create="customer" data-quick-url="{% url 'quick_customer' %}" data-quick-target="#id_customer" style="margin-left:auto;">{% translate "Add a customer" %} →</a>
   </div>
 {% endif %}
 
 {% if not has_stock %}
   <div class="banner is-warning">
     <span>📦</span>
-    <div>{% translate "There is no rice in stock. Enter a purchase bill first - a sale can only take bags you have." %}</div>
+    <div>{% translate "There is nothing in stock. Enter a purchase bill first - a sale can only take goods you have." %}</div>
     <a href="{% url 'add_purchase' %}" style="margin-left:auto;">{% translate "Enter a purchase" %} →</a>
   </div>
 {% endif %}
@@ -66,8 +66,12 @@
     <div class="form-grid">
       <div class="field {% if form.customer.errors %}has-error{% endif %}">
         <label for="{{ form.customer.id_for_label }}">{{ form.customer.label }} <span class="req">*</span></label>
-        {{ form.customer }}
-        <div class="field-hint"><a href="{% url 'add_customer' %}?next=sale">➕ {% translate "New customer" %}</a></div>
+        <div class="select-with-add">
+          {{ form.customer }}
+          <button type="button" class="btn btn-outline btn-sm" data-quick-create="customer"
+                  data-quick-url="{% url 'quick_customer' %}" data-quick-target="#id_customer"
+                  title="{% translate 'Add a new customer without leaving this sale' %}">➕ {% translate "New" %}</button>
+        </div>
         {% for error in form.customer.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
       </div>
 
@@ -106,8 +110,8 @@
   <div class="card">
     <div class="list-header">
       <div>
-        <div class="list-title">{% translate "Rice sold" %}</div>
-        <p class="muted">{% translate "GST% fills in from the product. The stock column shows bags left of that rice and bag size." %}</p>
+        <div class="list-title">{% translate "Products sold" %}</div>
+        <p class="muted">{% translate "GST% and pack size fill in from the product. The stock column shows what is left of that product and pack size." %}</p>
       </div>
       <div class="list-actions">
         <button type="button" class="btn btn-outline" data-add-line>➕ {% translate "Add line" %}</button>
@@ -118,13 +122,13 @@
       <table class="table" id="itemsTable">
         <thead>
           <tr>
-            <th style="min-width:170px;">{% translate "Rice" %}</th>
-            <th style="width:120px;">{% translate "Bag weight (kg)" %}</th>
-            <th style="width:110px;">{% translate "Bags" %}</th>
+            <th style="min-width:210px;">{% translate "Product" %}</th>
+            <th style="width:110px;">{% translate "Pack size" %}</th>
+            <th style="width:110px;">{% translate "Qty" %}</th>
             <th class="right">{% translate "In stock" %}</th>
-            <th style="width:130px;">{% translate "Rate / kg" %}</th>
+            <th style="width:130px;">{% translate "Rate" %}</th>
             <th style="width:100px;">{% translate "GST %" %}</th>
-            <th class="right">{% translate "Quantity (kg)" %}</th>
+            <th class="right">{% translate "Total units" %}</th>
             <th class="right">{% translate "Taxable" %}</th>
             <th class="right">{% translate "Line total" %}</th>
             <th style="min-width:200px;">{% translate "Take stock from" %}</th>
@@ -135,21 +139,25 @@
           {% for item_form in formset %}
             <tr data-line>
               {{ item_form.id }}
-              <td data-label="{% translate 'Rice' %}">
-                {{ item_form.product }}
+              <td data-label="{% translate 'Product' %}">
+                <div class="select-with-add">
+                  {{ item_form.product }}
+                  <button type="button" class="btn btn-ghost btn-sm" data-quick-create="product" data-quick-url="{% url 'quick_product' %}" data-quick-target="row" title="{% translate 'New product' %}">➕</button>
+                </div>
+                <div class="unit-hint" data-cell="unit_hint"></div>
                 <div class="row-sub" data-cell="hint"></div>
                 {% for error in item_form.product.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
               </td>
-              <td data-label="{% translate 'Bag weight' %}">
+              <td data-label="{% translate 'Pack size' %}">
                 {{ item_form.bag_weight }}
                 {% for error in item_form.bag_weight.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
               </td>
-              <td data-label="{% translate 'Bags' %}">
+              <td data-label="{% translate 'Qty' %}">
                 {{ item_form.bag_count }}
                 {% for error in item_form.bag_count.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
               </td>
               <td data-label="{% translate 'In stock' %}" class="right num" data-cell="stock">—</td>
-              <td data-label="{% translate 'Rate / kg' %}">
+              <td data-label="{% translate 'Rate' %}">
                 {{ item_form.rate_per_kg }}
                 {% for error in item_form.rate_per_kg.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
               </td>
@@ -184,11 +192,18 @@
 
     <template id="emptyLine">
       <tr data-line>
-        <td data-label="{% translate 'Rice' %}">{{ formset.empty_form.product }}<div class="row-sub" data-cell="hint"></div></td>
-        <td data-label="{% translate 'Bag weight' %}">{{ formset.empty_form.bag_weight }}</td>
-        <td data-label="{% translate 'Bags' %}">{{ formset.empty_form.bag_count }}</td>
+        <td data-label="{% translate 'Product' %}">
+          <div class="select-with-add">
+            {{ formset.empty_form.product }}
+            <button type="button" class="btn btn-ghost btn-sm" data-quick-create="product" data-quick-url="{% url 'quick_product' %}" data-quick-target="row" title="{% translate 'New product' %}">➕</button>
+          </div>
+          <div class="unit-hint" data-cell="unit_hint"></div>
+          <div class="row-sub" data-cell="hint"></div>
+        </td>
+        <td data-label="{% translate 'Pack size' %}">{{ formset.empty_form.bag_weight }}</td>
+        <td data-label="{% translate 'Qty' %}">{{ formset.empty_form.bag_count }}</td>
         <td data-label="{% translate 'In stock' %}" class="right num" data-cell="stock">—</td>
-        <td data-label="{% translate 'Rate / kg' %}">{{ formset.empty_form.rate_per_kg }}</td>
+        <td data-label="{% translate 'Rate' %}">{{ formset.empty_form.rate_per_kg }}</td>
         <td data-label="{% translate 'GST %' %}">{{ formset.empty_form.gst_percent }}</td>
         <td data-label="{% translate 'Quantity' %}" class="right num" data-cell="kg">0</td>
         <td data-label="{% translate 'Taxable' %}" class="right num" data-cell="taxable">0.00</td>
@@ -228,16 +243,19 @@
 
       <!-- ===================== TRANSPORT ===================== -->
       <div class="card">
-        <div class="form-section-title">{% translate "Truck & transport" %}</div>
-        <p class="muted small" style="margin-bottom:12px;">
-          {% translate "Freight is never added to the invoice total. Choose who carries it: when you do, it counts in your profit and the balance the party pays the driver is cut from what they owe you." %}
-        </p>
+        <div class="form-section-title">{% translate "Transport & freight" %}</div>
+        <div class="field {% if form.freight_borne_by.errors %}has-error{% endif %}" style="margin-bottom:8px;">
+          <label for="{{ form.freight_borne_by.id_for_label }}">{{ form.freight_borne_by.label }}</label>
+          {{ form.freight_borne_by }}
+          <div class="field-hint" data-freight-explain></div>
+        </div>
         <div class="form-grid">
           {% for field in form %}
-            {% if field.name|one_of:"vehicle_number,driver_name,driver_mobile,transporter_name,freight_borne_by,transport_rate_per_ton,transport_paid_by_dealer,transport_paid_by_customer,loading_weight_kg,loading_charge" %}
-              <div class="field {% if field.errors %}has-error{% endif %}">
+            {% if field.name|one_of:"freight_amount,freight_customer_share,transport_rate_per_ton,transport_paid_by_dealer,transport_paid_by_customer,vehicle_number,driver_name,driver_mobile,transporter_name,loading_weight_kg,loading_charge" %}
+              <div class="field {% if field.errors %}has-error{% endif %}" data-freight-field="{{ field.name }}">
                 <label for="{{ field.id_for_label }}">{{ field.label }}</label>
                 {{ field }}
+                {% if field.help_text and field.name|one_of:"freight_amount,freight_customer_share,transport_paid_by_customer" %}<div class="field-hint">{{ field.help_text }}</div>{% endif %}
                 {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
               </div>
             {% endif %}
@@ -245,9 +263,10 @@
         </div>
         <dl class="kv summary" style="margin-top:12px;">
           <dt>{% translate "Total weight" %}</dt><dd class="num"><span data-sum="ton">0.000</span> {% translate "ton" %}</dd>
-          <dt>{% translate "Freight" %}</dt><dd class="num">₹ <span data-sum="freight">0.00</span></dd>
-          <dt>{% translate "Freight still due to truck" %}</dt><dd class="num text-danger">₹ <span data-sum="freight_due">0.00</span></dd>
-          <dt data-freight-us>{% translate "Party cuts from payment" %}</dt><dd class="num" data-freight-us>− ₹ <span data-sum="freight_cut">0.00</span></dd>
+          <dt>{% translate "Total freight" %}</dt><dd class="num">₹ <span data-sum="freight">0.00</span></dd>
+          <dt>{% translate "Buyer's share" %}</dt><dd class="num">₹ <span data-sum="freight_share">0.00</span></dd>
+          <dt>{% translate "Your freight cost" %}</dt><dd class="num">₹ <span data-sum="freight_cost_box">0.00</span></dd>
+          <dt>{% translate "Freight still due to transporter" %}</dt><dd class="num text-danger">₹ <span data-sum="freight_due">0.00</span></dd>
         </dl>
       </div>
 
@@ -266,6 +285,8 @@
             {% endif %}
           {% endfor %}
         </div>
+        {% include "core/partials/manual_gst.html" %}
+
         <div class="form-section-title">{% translate "Notes" %}</div>
         {{ form.notes }}
       </div>
@@ -276,14 +297,16 @@
       <div class="list-title" style="margin-bottom:12px;">{% translate "Invoice summary" %}</div>
 
       <dl class="kv summary">
-        <dt>{% translate "Total bags" %}</dt><dd class="num" data-sum="bags">0</dd>
-        <dt>{% translate "Total quantity" %}</dt><dd class="num"><span data-sum="kg">0</span> kg</dd>
+        <dt>{% translate "Total qty" %}</dt><dd class="num" data-sum="bags">0</dd>
+        <dt>{% translate "Total units" %}</dt><dd class="num"><span data-sum="kg">0</span></dd>
         <dt>{% translate "Taxable amount" %}</dt><dd class="num bold">₹ <span data-sum="taxable">0.00</span></dd>
         <dt data-tax-label="cgst">CGST</dt><dd class="num" data-tax-label="cgst">₹ <span data-sum="cgst">0.00</span></dd>
         <dt data-tax-label="sgst">SGST</dt><dd class="num" data-tax-label="sgst">₹ <span data-sum="sgst">0.00</span></dd>
         <dt data-tax-label="igst">IGST</dt><dd class="num" data-tax-label="igst">₹ <span data-sum="igst">0.00</span></dd>
+        <dt data-show-freight-invoice>{% translate "Freight (on invoice)" %}</dt><dd class="num" data-show-freight-invoice>+ ₹ <span data-sum="freight_invoice">0.00</span></dd>
         <dt>{% translate "Round off" %}</dt><dd class="num"><span data-sum="round">0.00</span></dd>
       </dl>
+      <div class="field-hint" data-show-transport-bill style="margin-bottom:8px;">🧾 {% translate "Freight is billed on a separate transport invoice" %}: ₹ <span data-sum="freight_bill">0.00</span></div>
 
       <div class="grand-total">
         <span>{% translate "Invoice total" %}</span>
@@ -319,7 +342,7 @@
         <div class="cost-title">{% translate "Your margin (owner only)" %}</div>
         <dl class="kv summary">
           <dt>{% translate "Sale income (before GST, after CD)" %}</dt><dd class="num">₹ <span data-sum="income">0.00</span></dd>
-          <dt>{% translate "Cost of these bags" %}</dt><dd class="num">− ₹ <span data-sum="cost">0.00</span></dd>
+          <dt>{% translate "Cost of these goods" %}</dt><dd class="num">− ₹ <span data-sum="cost">0.00</span></dd>
           <dt>{% translate "Loading" %}</dt><dd class="num">− ₹ <span data-sum="loading">0.00</span></dd>
           <dt>{% translate "Freight you carry" %}</dt><dd class="num">− ₹ <span data-sum="freight_cost">0.00</span></dd>
           <dt>{% translate "Broker commission you pay" %}</dt><dd class="num">− ₹ <span data-sum="commission2">0.00</span></dd>
@@ -328,7 +351,7 @@
           <span>{% translate "Estimated profit" %}</span>
           <span class="num">₹ <span data-sum="profit">0.00</span></span>
         </div>
-        <div class="field-hint" style="margin-top:6px;">{% translate "Uses your average landed cost per kg of each rice; the exact figure is worked out from the lots on save." %}</div>
+        <div class="field-hint" style="margin-top:6px;">{% translate "Uses your average landed cost per unit of each product; the exact figure is worked out from the lots on save." %}</div>
       </div>
 
       <div class="form-actions" style="border:0; padding-top:16px;">
@@ -348,16 +371,25 @@
 {{ form_data|json_script:"sale-data" }}
 <script type="application/json" id="sale-i18n">{
   "noStock": "{% filter escapejs %}{% translate 'none' %}{% endfilter %}",
-  "bags": "{% filter escapejs %}{% translate 'bags' %}{% endfilter %}",
+  "bags": "{% filter escapejs %}{% translate 'left' %}{% endfilter %}",
   "suggested": "{% filter escapejs %}{% translate 'Your cost' %}{% endfilter %}",
   "sellAt": "{% filter escapejs %}{% translate 'sell at least' %}{% endfilter %}",
   "notEnough": "{% filter escapejs %}{% translate 'more than in stock' %}{% endfilter %}",
-  "noLot": "{% filter escapejs %}{% translate 'No stock of this bag size' %}{% endfilter %}",
+  "noLot": "{% filter escapejs %}{% translate 'No stock of this pack size' %}{% endfilter %}",
+  "freight": {
+    "us": "{% filter escapejs %}{% translate 'A · You pay the whole freight (FOR delivery). The buyer pays only for the goods; freight is your expense.' %}{% endfilter %}",
+    "customer": "{% filter escapejs %}{% translate 'B · The buyer pays all the freight. It is added to this invoice.' %}{% endfilter %}",
+    "shared": "{% filter escapejs %}{% translate 'C · Freight is split. The buyer’s share is added to this invoice; the rest is your expense.' %}{% endfilter %}",
+    "bill": "{% filter escapejs %}{% translate 'D · The buyer pays the freight on a separate transport invoice, printed from the sale page.' %}{% endfilter %}",
+    "included": "{% filter escapejs %}{% translate 'E · Freight is already in your sale rate. Nothing about freight is shown on the invoice; it is your expense.' %}{% endfilter %}",
+    "separate": "{% filter escapejs %}{% translate 'The buyer settles freight directly with the transporter. It is not in your books.' %}{% endfilter %}"
+  },
   "inOther": "{% filter escapejs %}{% translate 'have' %}{% endfilter %}"
 }</script>
 
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'core/quick_create.js' %}?v={{ asset_version }}"></script>
 <script src="{% static 'core/sale_form.js' %}?v={{ asset_version }}"></script>
 {% endblock %}

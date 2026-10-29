@@ -1,12 +1,12 @@
-{% load i18n %}
+{% load i18n form_tags %}
 {# Shown on the purchase form when it was filled from a scanned bill. #}
 <div class="card scan-review">
   <div class="list-header">
     <div>
       <div class="list-title">📷 {% translate "Filled from the scanned bill" %}</div>
       <p class="muted">
-        {% if scan.source == 'qr+ai' %}{% translate "Header from the GST e-invoice QR code, rice lines read from the bill photo." %}
-        {% elif scan.source == 'qr' %}{% translate "Header from the bill's QR code. The QR has no rice lines - enter bags and rate below." %}
+        {% if scan.source == 'qr+ai' %}{% translate "Header from the GST e-invoice QR code, product lines read from the bill photo." %}
+        {% elif scan.source == 'qr' %}{% translate "Header from the bill's QR code. The QR has no product lines - enter qty and rate below." %}
         {% else %}{% translate "Read from the bill photo." %}{% endif %}
         <strong>{% translate "Check every value before you save." %}</strong>
       </p>
@@ -26,7 +26,7 @@
             Supplier <strong>{{ name }}</strong> (GSTIN {{ gstin }}) is not in your supplier list.
           {% endblocktranslate %}
         {% else %}
-          {% translate "The supplier could not be read from the bill. Choose the mill below." %}
+          {% translate "The supplier could not be read from the bill. Choose the supplier below." %}
         {% endif %}
       </div>
       {% if scan.supplier.name %}
@@ -52,15 +52,15 @@
   {% if scan.lines %}
   <div class="table-wrap" style="margin-top:12px;">
     <table class="table">
-      <thead><tr><th>{% translate "On the bill" %}</th><th>{% translate "Matched rice" %}</th><th class="right">{% translate "Bags" %}</th><th class="right">{% translate "Bag weight" %}</th><th class="right">{% translate "Rate / kg" %}</th><th class="right">{% translate "Amount" %}</th></tr></thead>
+      <thead><tr><th>{% translate "On the bill" %}</th><th>{% translate "Matched product" %}</th><th class="right">{% translate "Qty" %}</th><th class="right">{% translate "Pack size" %}</th><th class="right">{% translate "Rate" %}</th><th class="right">{% translate "Amount" %}</th></tr></thead>
       <tbody>
         {% for line in scan.lines %}
         <tr>
           <td>{{ line.description|default:"—" }}{% if line.hsn %}<div class="row-sub">HSN {{ line.hsn }}</div>{% endif %}</td>
-          <td>{% if line.product_name %}✅ {{ line.product_name }}{% else %}<span class="text-warning">⚠ {% translate "Choose the rice below" %}</span> · <a href="{% url 'add_product' %}" target="_blank" rel="noopener">{% translate "Add product" %}</a>{% endif %}</td>
-          <td class="right">{{ line.bag_count|default:"—" }}</td>
-          <td class="right">{% if line.bag_weight %}{{ line.bag_weight }} kg{% else %}—{% endif %}</td>
-          <td class="right">{% if line.rate %}₹ {{ line.rate }}{% else %}—{% endif %}</td>
+          <td>{% if line.product_name %}✅ {{ line.product_name }}{% else %}<span class="text-warning">⚠ {% translate "Choose the product below" %}</span> · <a href="{% url 'add_product' %}" target="_blank" rel="noopener">{% translate "Add product" %}</a>{% endif %}</td>
+          <td class="right">{{ line.bag_count|qty|default:"—" }}</td>
+          <td class="right">{% if line.bag_weight %}{{ line.bag_weight|qty }}{% else %}—{% endif %}</td>
+          <td class="right">{% if line.rate %}₹ {{ line.rate|qty }}{% else %}—{% endif %}</td>
           <td class="right">{% if line.amount %}₹ {{ line.amount }}{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}

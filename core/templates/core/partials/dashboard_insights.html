@@ -54,7 +54,7 @@
 
   <section class="card" aria-labelledby="tips-title">
     <h2 id="tips-title" class="insight-title">💡 {% translate "Ways to increase profit" %}</h2>
-    <p class="muted small" style="margin-bottom:12px;">{% blocktranslate with label=period.label %}Worked out from your own trucks - {{ label }}.{% endblocktranslate %}</p>
+    <p class="muted small" style="margin-bottom:12px;">{% blocktranslate with label=period.label %}Worked out from your own sales - {{ label }}.{% endblocktranslate %}</p>
     {% if profit_tips %}
       <ul class="insight-list">
         {% for tip in profit_tips %}
@@ -69,7 +69,7 @@
         {% endfor %}
       </ul>
     {% else %}
-      <p class="muted">{% translate "Advice appears here once a few trucks with known cost are sold in this period. Try 'This financial year' above." %}</p>
+      <p class="muted">{% translate "Advice appears here once a few sales with known cost are made in this period. Try 'This financial year' above." %}</p>
     {% endif %}
   </section>
 </div>

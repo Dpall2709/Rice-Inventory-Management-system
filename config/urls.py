@@ -3,8 +3,9 @@ Top level URL map.
 
     /admin/     Django admin (for you, the developer)
     /billing/   subscription and payment screens
+    /api/v1/    REST API for the mobile app (JWT)
     /i18n/      language switch (English / Hindi)
-    /           the rice billing app itself (core)
+    /           the billing and inventory app itself (core)
 """
 
 from django.conf import settings
@@ -17,6 +18,9 @@ urlpatterns = [
     path("admin/", admin.site.urls),
 
     path("billing/", include("billing.urls")),
+
+    # JSON API used by the Flutter mobile app.
+    path("api/v1/", include("api.urls")),
 
     # Sign-up with email code, login, business profile.
     path("account/", include("accounts.urls")),

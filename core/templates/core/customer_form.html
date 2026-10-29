@@ -16,7 +16,7 @@
       <span>{% if mode == 'edit' %}{{ customer.customer_name }}{% else %}{% translate "New" %}{% endif %}</span>
     </div>
     <h1>{% if mode == 'edit' %}{% blocktranslate with name=customer.customer_name %}Edit “{{ name }}”{% endblocktranslate %}{% else %}{% translate "Add a customer" %}{% endif %}</h1>
-    <p class="muted">{% translate "The people and businesses you sell rice to." %}</p>
+    <p class="muted">{% translate "The people and businesses you sell goods to." %}</p>
   </div>
   <div class="page-actions">
     <a class="btn btn-outline" href="{% url 'customer_list' %}">📋 {% translate "All customers" %}</a>

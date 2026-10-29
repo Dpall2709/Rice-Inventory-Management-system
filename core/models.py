@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import models
 from django.contrib.auth.models import User
@@ -72,6 +72,24 @@ class Company(models.Model):
         default=8,
         help_text="Used to suggest a selling price from the landed cost.",
     )
+
+    # What the business trades in. Only used to seed sensible units and
+    # categories for a new company - nothing in the app is tied to it, so a
+    # rice trader and a biscuit distributor run the same code.
+    INDUSTRY_CHOICES = [
+        ("general", _("General trading")),
+        ("rice", _("Rice / grain trading")),
+        ("agri", _("Agricultural commodities")),
+        ("fmcg", _("FMCG distribution")),
+        ("biscuit", _("Biscuit / confectionery distribution")),
+        ("grocery", _("Grocery wholesale")),
+        ("packaging", _("Packaging materials")),
+        ("building", _("Building materials")),
+    ]
+    industry = models.CharField(max_length=20, choices=INDUSTRY_CHOICES, default="general")
+
+    # The freight arrangement a new sale starts with (see Sale.FREIGHT_CHOICES).
+    default_freight_mode = models.CharField(max_length=10, default="us")
 
     # Subscription (kept in step with the billing app's Subscription row)
     subscription_start = models.DateField()
@@ -186,22 +204,106 @@ class Customer(models.Model):
             return self.shipping_address.strip()
         return self.full_billing_address
 
+class Unit(models.Model):
+    """
+    A unit the business counts or prices goods in: Bag, Box, Carton, Kg,
+    Litre, or anything else the owner defines. Each company keeps its own list.
+    """
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="units")
+    name = models.CharField(max_length=40)
+    symbol = models.CharField(max_length=12, help_text="Short form printed on bills, e.g. kg, pcs, ctn.")
+    # Kg and litres can be split (12.345 kg); boxes and pieces usually cannot.
+    allow_decimal = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
+
+    objects = TenantManager()
+
+    class Meta:
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(fields=["company", "name"], name="unique_unit_name_per_company"),
+        ]
+
+    def __str__(self):
+        return self.symbol or self.name
+
+
+class ProductCategory(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="product_categories")
+    name = models.CharField(max_length=80)
+    is_active = models.BooleanField(default=True)
+
+    objects = TenantManager()
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name_plural = "product categories"
+        constraints = [
+            models.UniqueConstraint(fields=["company", "name"], name="unique_category_name_per_company"),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class Product(models.Model):
+    """
+    Anything the business buys and sells.
+
+    Quantities are kept in two units, which is how goods really move:
+
+        pack unit  - what you count: bags, boxes, cartons, pieces
+        rate unit  - what the price is per: kg, litre, piece, box
+        pack size  - rate units in one pack (50 kg per bag, 24 pcs per carton)
+
+        line value = packs x pack size x rate
+
+    When both units are the same (sold per box, priced per box) the pack size
+    is simply 1.
+    """
+
     company = models.ForeignKey(
     Company,
     on_delete=models.CASCADE,
     related_name="products"
     )
-    rice_name = models.CharField(max_length=100)
-    hsn_code = models.CharField(max_length=20)
-    gst_percent = models.IntegerField()
+    name = models.CharField(max_length=100)
+    sku = models.CharField(max_length=40, blank=True)
+    category = models.ForeignKey(
+        ProductCategory, on_delete=models.SET_NULL, null=True, blank=True, related_name="products"
+    )
+    unit = models.ForeignKey(
+        Unit, on_delete=models.PROTECT, null=True, blank=True, related_name="+",
+        help_text="What you count: bag, box, carton, piece...",
+    )
+    rate_unit = models.ForeignKey(
+        Unit, on_delete=models.PROTECT, null=True, blank=True, related_name="+",
+        help_text="What the rate is per: kg, litre, piece...",
+    )
+    default_pack_size = models.DecimalField(
+        max_digits=12, decimal_places=3, default=1,
+        help_text="Rate units in one pack, e.g. 50 (kg per bag) or 24 (pieces per carton).",
+    )
+    hsn_code = models.CharField(max_length=20, blank=True)
+    gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
 
     objects = TenantManager()
 
     def __str__(self):
-        return self.rice_name
-    
+        return self.name
+
+    @property
+    def unit_label(self):
+        """Short name of the pack unit, e.g. "bag" - "nos" (numbers) when none is set."""
+        return str(self.unit) if self.unit_id else "nos"
+
+    @property
+    def rate_unit_label(self):
+        return str(self.rate_unit) if self.rate_unit_id else self.unit_label
+
 class Mill(models.Model):
     company = models.ForeignKey(
     Company,
@@ -230,6 +332,8 @@ class Mill(models.Model):
 
     class Meta:
         ordering = ["mill_name"]
+        # "Mill" is the original rice-trade name; on screen it is a supplier.
+        verbose_name = "supplier"
 
     def __str__(self):
         return self.mill_name
@@ -313,6 +417,19 @@ class Purchase(models.Model):
 
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
 
+    # Manual GST: the supplier's or customer's bill sometimes differs from the
+    # calculated tax by a few paise. When filled, these replace the calculated
+    # CGST / SGST / IGST and the total is worked out again. Empty = automatic.
+    # Every change is also written to TaxAdjustment with the reason.
+    manual_cgst = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    manual_sgst = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    manual_igst = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    gst_adjust_reason = models.CharField(max_length=200, blank=True)
+
+    @property
+    def gst_is_manual(self):
+        return any(v is not None for v in (self.manual_cgst, self.manual_sgst, self.manual_igst))
+
     notes = models.TextField(blank=True)
 
     # The supplier's bill as scanned or photographed, kept as proof.
@@ -383,16 +500,18 @@ class PurchaseItem(models.Model):
 
     purchase = models.ForeignKey(Purchase, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    bag_weight = models.IntegerField()   # 20 / 30 / 50
-    bag_count = models.IntegerField()
-    purchase_price = models.DecimalField(max_digits=10, decimal_places=2)   # rate per kg
+    # Pack size (rate units per pack, e.g. 50 kg per bag) and number of packs.
+    # The names are from the rice days; they hold any unit now.
+    bag_weight = models.DecimalField(max_digits=12, decimal_places=3)
+    bag_count = models.DecimalField(max_digits=12, decimal_places=3)
+    purchase_price = models.DecimalField(max_digits=12, decimal_places=3)   # rate per rate unit
 
     # GST copied from the product when the bill is entered, so a later change to
     # the product's rate never rewrites an old bill.
     gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
 
     # Computed once and stored, so reports never have to recalculate them.
-    total_kg = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_kg = models.DecimalField(max_digits=14, decimal_places=3, default=0)   # total in rate units
     taxable_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     gst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     line_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -400,7 +519,7 @@ class PurchaseItem(models.Model):
     objects = TenantManager()
 
     def __str__(self):
-        return f"{self.product.rice_name} x {self.bag_count} bags"
+        return f"{self.product.name} x {self.bag_count:g} {self.product.unit_label}"
 
     def compute(self, discount_share=0):
         """
@@ -414,11 +533,14 @@ class PurchaseItem(models.Model):
         self.total_kg = Decimal(self.bag_count or 0) * Decimal(self.bag_weight or 0)
         goods = self.total_kg * Decimal(self.purchase_price or 0)
 
-        self.taxable_amount = goods - Decimal(discount_share or 0)
-        if self.taxable_amount < 0:
-            self.taxable_amount = Decimal("0")
+        two = Decimal("0.01")
+        taxable = goods - Decimal(discount_share or 0)
+        if taxable < 0:
+            taxable = Decimal("0")
 
-        self.gst_amount = self.taxable_amount * Decimal(self.gst_percent or 0) / Decimal("100")
+        # Full precision until the very end, then rounded once to paise.
+        self.taxable_amount = taxable.quantize(two, rounding=ROUND_HALF_UP)
+        self.gst_amount = (taxable * Decimal(self.gst_percent or 0) / Decimal("100")).quantize(two, rounding=ROUND_HALF_UP)
         self.line_total = self.taxable_amount + self.gst_amount
 
         return self
@@ -435,9 +557,9 @@ class Broker(models.Model):
     PERCENT = "percent"
 
     COMMISSION_TYPES = [
-        (PER_KG, _("₹ per kg")),
-        (PER_BAG, _("₹ per bag")),
-        (PER_QUINTAL, _("₹ per quintal (100 kg)")),
+        (PER_KG, _("₹ per rate unit (kg, litre, piece...)")),
+        (PER_BAG, _("₹ per pack (bag, box, carton...)")),
+        (PER_QUINTAL, _("₹ per 100 rate units (quintal)")),
         (PERCENT, _("% of sale value (before GST)")),
     ]
 
@@ -455,7 +577,7 @@ class Broker(models.Model):
     # The usual deal with this broker. Copied onto each sale, where it can be
     # changed for that one truck without touching the broker's default.
     commission_type = models.CharField(max_length=20, choices=COMMISSION_TYPES, default=PER_KG)
-    commission_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    commission_rate = models.DecimalField(max_digits=12, decimal_places=3, default=0)
 
     # Cash discount (CD) the broker takes off sales he brings, e.g. 1.5%.
     default_cash_discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
@@ -557,7 +679,7 @@ class Sale(models.Model):
     broker_commission_type = models.CharField(
         max_length=20, choices=Broker.COMMISSION_TYPES, blank=True, default=""
     )
-    broker_commission_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    broker_commission_rate = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     broker_commission = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     sale_date = models.DateField()
@@ -568,30 +690,56 @@ class Sale(models.Model):
     driver_mobile = models.CharField(max_length=15, blank=True)
     transporter_name = models.CharField(max_length=100, blank=True)
 
-    # Who carries the truck fare:
-    #   us        - you pay it (advance to the driver + the balance the party pays
-    #               the driver on unloading, which the party then cuts from your bill)
-    #   customer  - the party pays it; any advance you gave the driver is added to their bill
-    #   separate  - settled between the party and the truck, not in your accounts
+    # Who carries the freight. The stored values are kept from the first
+    # version ("us", "customer", "separate") so old sales read the same.
+    #
+    #   us        A  seller pays it all (FOR delivery) - a business expense
+    #   customer  B  buyer pays it all - it is added to the invoice
+    #   shared    C  split - the buyer's share is added to the invoice
+    #   bill      D  buyer pays, billed on a separate transport invoice
+    #   included  E  already inside the sale rate - nothing shown on the bill
+    #   separate     settled between the buyer and the truck, not in your books
+    #
+    # Whoever physically paid the driver, the books come out right:
+    #   buyer owes for freight = buyer's share - what the buyer paid the driver
+    #   your freight cost      = total freight - buyer's share
     FREIGHT_US = "us"
     FREIGHT_CUSTOMER = "customer"
+    FREIGHT_SHARED = "shared"
+    FREIGHT_BILL = "bill"
+    FREIGHT_INCLUDED = "included"
     FREIGHT_SEPARATE = "separate"
     FREIGHT_CHOICES = [
-        (FREIGHT_US, _("We pay the freight (party's part is cut from their payment)")),
-        (FREIGHT_CUSTOMER, _("Party pays the freight (our advance is added to their bill)")),
-        (FREIGHT_SEPARATE, _("Separate - between party and truck")),
+        (FREIGHT_US, _("A - Seller pays freight (FOR delivery)")),
+        (FREIGHT_CUSTOMER, _("B - Buyer pays freight (added to invoice)")),
+        (FREIGHT_SHARED, _("C - Shared (buyer's share added to invoice)")),
+        (FREIGHT_BILL, _("D - Separate transport invoice to buyer")),
+        (FREIGHT_INCLUDED, _("E - Freight included in the sale rate")),
+        (FREIGHT_SEPARATE, _("Buyer settles directly with the transporter")),
     ]
+    # Freight that appears on the goods invoice itself.
+    FREIGHT_ON_INVOICE = (FREIGHT_CUSTOMER, FREIGHT_SHARED)
     freight_borne_by = models.CharField(max_length=10, choices=FREIGHT_CHOICES, default=FREIGHT_US)
+
+    # Total freight for the trip, typed in. When empty it is worked out from
+    # the rate per ton, or from what was paid to the driver.
+    freight_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Scenario C: the buyer's part of the freight, in rupees.
+    freight_customer_share = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Freight added to the goods invoice total (B and C). Computed on save.
+    freight_on_invoice = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Scenario D: the number of the separate transport invoice.
+    transport_invoice_no = models.CharField(max_length=30, blank=True)
 
     # Loading / hamali paid at the mill for this truck - your cost.
     loading_charge = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     # The truck's weight from the weighbridge at loading, when it differs
     # from bags x bag weight. Empty = bags x bag weight.
-    loading_weight_kg = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    loading_weight_kg = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
 
     # ✅ Transport is separate
-    transport_rate_per_ton = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    transport_rate_per_ton = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     transport_charge = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     transport_paid_by_dealer = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     transport_paid_by_customer = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -599,8 +747,8 @@ class Sale(models.Model):
     tax_type = models.CharField(max_length=20, choices=TAX_TYPES, default=CGST_SGST)
 
     # ✅ Rice selling totals only (NOT include transport)
-    total_bags = models.IntegerField(default=0)
-    total_quantity_kg = models.DecimalField(max_digits=10, decimal_places=2)
+    total_bags = models.DecimalField(max_digits=14, decimal_places=3, default=0)   # packs
+    total_quantity_kg = models.DecimalField(max_digits=14, decimal_places=3)       # rate units
     taxable_amount = models.DecimalField(max_digits=12, decimal_places=2)
     # Kept for old single-rate sales; each line now carries its own GST %.
     gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
@@ -609,14 +757,27 @@ class Sale(models.Model):
     igst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     gst_amount = models.DecimalField(max_digits=12, decimal_places=2)
     round_off = models.DecimalField(max_digits=6, decimal_places=2, default=0)
-    total_amount = models.DecimalField(max_digits=12, decimal_places=2)  # ✅ rice_total only
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)  # goods + freight_on_invoice
+
+    # Manual GST: the supplier's or customer's bill sometimes differs from the
+    # calculated tax by a few paise. When filled, these replace the calculated
+    # CGST / SGST / IGST and the total is worked out again. Empty = automatic.
+    # Every change is also written to TaxAdjustment with the reason.
+    manual_cgst = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    manual_sgst = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    manual_igst = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    gst_adjust_reason = models.CharField(max_length=200, blank=True)
+
+    @property
+    def gst_is_manual(self):
+        return any(v is not None for v in (self.manual_cgst, self.manual_sgst, self.manual_igst))
 
     # ---- settlement, after the truck is unloaded at the party ----
     # The party pays on the weight they received, takes their cash discount
     # (CD) and, when they pay the broker themselves, cuts the brokerage.
     unload_date = models.DateField(null=True, blank=True)
-    received_weight_kg = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
-    cash_discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    received_weight_kg = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
+    cash_discount_percent = models.DecimalField(max_digits=6, decimal_places=3, default=0)
     cash_discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     BROKER_PAID_BY_US = "us"
@@ -661,6 +822,15 @@ class Sale(models.Model):
 
     def __str__(self):
         return f"{self.invoice_no} - {self.customer_name}"
+
+    @property
+    def goods_total(self):
+        """The invoice total without the freight added to it."""
+        return (self.total_amount or Decimal("0")) - (self.freight_on_invoice or Decimal("0"))
+
+    @property
+    def has_transport_invoice(self):
+        return self.freight_borne_by == self.FREIGHT_BILL and (self.transport_charge or 0) > 0
 
     @property
     def transport_due(self):
@@ -708,14 +878,15 @@ class SaleItem(models.Model):
         PurchaseItem, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
 
-    bag_weight = models.IntegerField()
-    bag_count = models.IntegerField()
+    # Pack size and number of packs (see Product for the two units).
+    bag_weight = models.DecimalField(max_digits=12, decimal_places=3)
+    bag_count = models.DecimalField(max_digits=12, decimal_places=3)
 
-    # SELLING rate per kg, before GST.
-    rate_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # SELLING rate per rate unit (kg, piece, litre...), before GST.
+    rate_per_kg = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
 
-    total_weight = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_weight = models.DecimalField(max_digits=14, decimal_places=3, default=0)
 
     # Selling value before GST (bags x bag weight x rate).
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -728,12 +899,12 @@ class SaleItem(models.Model):
         ordering = ["id"]
 
     def __str__(self):
-        return f"{self.sale.invoice_no} - {self.product.rice_name} x {self.bag_count}"
+        return f"{self.sale.invoice_no} - {self.product.name} x {self.bag_count:g}"
 
     def compute(self):
         self.total_weight = Decimal(self.bag_count or 0) * Decimal(self.bag_weight or 0)
-        self.amount = (self.total_weight * Decimal(self.rate_per_kg or 0)).quantize(Decimal("0.01"))
-        self.gst_amount = (self.amount * Decimal(self.gst_percent or 0) / Decimal("100")).quantize(Decimal("0.01"))
+        self.amount = (self.total_weight * Decimal(self.rate_per_kg or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        self.gst_amount = (self.amount * Decimal(self.gst_percent or 0) / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         self.line_total = self.amount + self.gst_amount
         return self
 
@@ -755,13 +926,13 @@ class SaleLot(models.Model):
     purchase_item = models.ForeignKey(PurchaseItem, on_delete=models.PROTECT, related_name="sale_lots")
     mill = models.ForeignKey(Mill, on_delete=models.PROTECT)
 
-    bag_count = models.IntegerField()
-    total_kg = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    bag_count = models.DecimalField(max_digits=12, decimal_places=3)
+    total_kg = models.DecimalField(max_digits=14, decimal_places=3, default=0)
 
     # Rate on the mill's bill, and the landed cost per kg (bill rate + transport,
     # labour and other expenses of that purchase, GST excluded).
-    buy_rate_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    cost_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    buy_rate_per_kg = models.DecimalField(max_digits=12, decimal_places=3, default=0)
+    cost_per_kg = models.DecimalField(max_digits=14, decimal_places=4, default=0)
     cost_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     objects = TenantManager()
@@ -770,7 +941,7 @@ class SaleLot(models.Model):
         ordering = ["id"]
 
     def __str__(self):
-        return f"{self.sale.invoice_no}: {self.bag_count} bags from {self.purchase_item_id}"
+        return f"{self.sale.invoice_no}: {self.bag_count:g} from lot {self.purchase_item_id}"
 
 
 class Payment(models.Model):
@@ -781,7 +952,7 @@ class Payment(models.Model):
     )
     PAYMENT_TYPE = [
         ("sale", _("Received from customer")),
-        ("purchase", _("Paid to mill")),
+        ("purchase", _("Paid to supplier")),
         ("broker", _("Commission paid to broker")),
     ]
 
@@ -950,3 +1121,47 @@ class PurchaseExpense(models.Model):
 
     def __str__(self):
         return f"{self.get_category_display()} - {self.amount}"
+
+
+class TaxAdjustment(models.Model):
+    """
+    Audit trail of every manual GST change: what the app calculated, what the
+    user typed instead, who did it, and why.
+    """
+
+    company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="tax_adjustments")
+    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, null=True, blank=True, related_name="tax_adjustments")
+    purchase = models.ForeignKey(Purchase, on_delete=models.CASCADE, null=True, blank=True, related_name="tax_adjustments")
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    calculated_cgst = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    calculated_sgst = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    calculated_igst = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    entered_cgst = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    entered_sgst = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    entered_igst = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    reason = models.CharField(max_length=200, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = TenantManager()
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        target = self.sale or self.purchase
+        return f"GST adjusted on {target}: {self.reason}"
+
+    @property
+    def difference(self):
+        calculated = self.calculated_cgst + self.calculated_sgst + self.calculated_igst
+        entered = sum(
+            (v if v is not None else c)
+            for v, c in (
+                (self.entered_cgst, self.calculated_cgst),
+                (self.entered_sgst, self.calculated_sgst),
+                (self.entered_igst, self.calculated_igst),
+            )
+        )
+        return entered - calculated

@@ -37,6 +37,29 @@
     return parseFloat((el && el.value) || 0) || 0;
   }
 
+  // Quantities keep up to 3 decimals, without trailing zeros: 12.345, 50.
+  function qty(n) {
+    return String(Math.round((Number(n) || 0) * 1000) / 1000);
+  }
+
+  // Manual GST typed from the bill replaces the calculated figure, but only
+  // for the heads this bill has. Also shows the calculated figure next to
+  // each box and hides the boxes that do not apply.
+  function manualGst(taxType, cgst, sgst, igst) {
+    var calculated = { cgst: cgst, sgst: sgst, igst: igst };
+    var result = { cgst: cgst, sgst: sgst, igst: igst };
+    ["cgst", "sgst", "igst"].forEach(function (head) {
+      var applies = taxType === "cgst_sgst" ? head !== "igst" : (taxType === "igst" && head === "igst");
+      form.querySelectorAll('[data-manual-gst-field="' + head + '"]').forEach(function (el) {
+        el.style.display = applies ? "" : "none";
+      });
+      setText(form, '[data-calculated-gst="' + head + '"]', money(calculated[head]));
+      var input = form.querySelector('[data-manual-gst="' + head + '"]');
+      if (applies && input && input.value !== "") result[head] = num(input);
+    });
+    return result;
+  }
+
   function setText(scope, selector, value) {
     var el = scope.querySelector(selector);
     if (el) el.textContent = value;
@@ -97,13 +120,14 @@
 
     lines.forEach(function (line) {
       var share = goods ? (line.goods / goods) * discount : 0;
-      var lineTaxable = Math.max(line.goods - share, 0);
-      var lineGst = taxType === "none" ? 0 : (lineTaxable * line.gstPct) / 100;
+      // Each line is rounded to paise, as the server does.
+      var lineTaxable = Math.round(Math.max(line.goods - share, 0) * 100) / 100;
+      var lineGst = taxType === "none" ? 0 : Math.round(lineTaxable * line.gstPct) / 100;
 
       taxable += lineTaxable;
       gstTotal += lineGst;
 
-      setText(line.row, '[data-cell="kg"]', line.kg ? money(line.kg) : "0");
+      setText(line.row, '[data-cell="kg"]', line.kg ? qty(line.kg) : "0");
       setText(line.row, '[data-cell="taxable"]', inr(lineTaxable));
       setText(line.row, '[data-cell="gst_amount"]', inr(lineGst));
       setText(line.row, '[data-cell="line_total"]', inr(lineTaxable + lineGst));
@@ -111,11 +135,13 @@
 
     var cgst = 0, sgst = 0, igst = 0;
     if (taxType === "cgst_sgst") {
-      cgst = gstTotal / 2;
+      cgst = Math.round(gstTotal / 2 * 100) / 100;
       sgst = gstTotal - cgst;
     } else if (taxType === "igst") {
       igst = gstTotal;
     }
+    var taxes = manualGst(taxType, cgst, sgst, igst);
+    cgst = taxes.cgst; sgst = taxes.sgst; igst = taxes.igst;
 
     var beforeRound = taxable + cgst + sgst + igst + freight + labour;
     var total = Math.round(beforeRound);
@@ -146,18 +172,18 @@
     setText(form, '[data-sum="cost_per_kg"]', money(costPerKg));
     setText(form, '[data-sum="suggested_per_kg"]', money(suggestedPerKg));
     setText(form, '[data-sum="suggested_per_bag"]', inr(suggestedPerKg * avgBag));
-    setText(form, '[data-sum="avg_bag"]', avgBag ? money(avgBag) : "0");
+    setText(form, '[data-sum="avg_bag"]', avgBag ? qty(avgBag) : "0");
     setText(form, '[data-sum="expected_profit"]', inr((suggestedPerKg - costPerKg) * kg));
 
     // table footer
-    setText(form, '[data-total="kg"]', money(kg));
+    setText(form, '[data-total="kg"]', qty(kg));
     setText(form, '[data-total="taxable"]', inr(taxable));
     setText(form, '[data-total="gst"]', inr(gstTotal));
     setText(form, '[data-total="lines"]', inr(taxable + gstTotal));
 
     // summary panel
-    setText(form, '[data-sum="bags"]', bags);
-    setText(form, '[data-sum="kg"]', money(kg));
+    setText(form, '[data-sum="bags"]', qty(bags));
+    setText(form, '[data-sum="kg"]', qty(kg));
     setText(form, '[data-sum="goods"]', inr(goods));
     setText(form, '[data-sum="discount"]', inr(discount));
     setText(form, '[data-sum="taxable"]', inr(taxable));
@@ -200,13 +226,28 @@
     var info = (window.PRODUCT_TAX || {})[select.value];
     var hsn = row.querySelector('[data-cell="hsn"]');
     var gstInput = row.querySelector('[data-cell="gst"]');
+    var unitHint = row.querySelector('[data-cell="unit_hint"]');
+    var sizeInput = row.querySelector('[data-cell="bag_weight"]');
 
     if (!info) {
       if (hsn) hsn.textContent = "—";
+      if (unitHint) unitHint.textContent = "";
       return;
     }
 
     if (hsn) hsn.textContent = info.hsn || "—";
+
+    // "qty in bag · rate per kg · 50 kg per bag"
+    if (unitHint) {
+      unitHint.textContent = info.unit === info.rate_unit
+        ? info.unit
+        : info.unit + " · " + qty(info.pack_size) + " " + info.rate_unit + "/" + info.unit + " · ₹/" + info.rate_unit;
+    }
+
+    // A fresh line takes the product's pack size; one the user typed is kept.
+    if (sizeInput && !sizeInput.dataset.touched && info.pack_size) {
+      sizeInput.value = qty(info.pack_size);
+    }
 
     // Fill the GST rate from the product, unless the user typed one already.
     if (gstInput && !gstInput.dataset.touched) {
@@ -264,7 +305,7 @@
   });
 
   form.addEventListener("input", function (e) {
-    if (e.target.matches('[data-cell="gst"]')) e.target.dataset.touched = "1";
+    if (e.target.matches('[data-cell="gst"]') || e.target.matches('[data-cell="bag_weight"]')) e.target.dataset.touched = "1";
     recalculate();
   });
 
@@ -333,6 +374,20 @@
   }, { passive: true });
 
   // First paint
+  // Lines coming back from an edit or a failed save keep their pack size.
+  rowsBody.querySelectorAll("[data-line]").forEach(function (row) {
+    var product = row.querySelector("[data-product]");
+    var size = row.querySelector('[data-cell="bag_weight"]');
+    if (product && product.value && size && size.value) size.dataset.touched = "1";
+  });
   rowsBody.querySelectorAll("[data-product]").forEach(applyProduct);
+
+  // A product added from the pop-up: remember its GST and pack size.
+  document.addEventListener("quick-created", function (e) {
+    if (e.detail.kind === "product") {
+      window.PRODUCT_TAX = window.PRODUCT_TAX || {};
+      window.PRODUCT_TAX[e.detail.id] = e.detail.data;
+    }
+  });
   recalculate();
 })();

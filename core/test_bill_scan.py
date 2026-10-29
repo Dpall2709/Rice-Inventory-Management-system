@@ -83,7 +83,7 @@ class BillScanTests(TestCase):
         self.client.login(username="sigma_user", password="TestPass#2026")
         self.mill = Mill.objects.create(company=self.company, mill_name="Satya Rice Mill",
                                         mobile="9876543210", gst_number="10ABCDE1234F1Z5")
-        self.product = Product.objects.create(company=self.company, rice_name="Katarni",
+        self.product = Product.objects.create(company=self.company, name="Katarni",
                                               hsn_code="1006", gst_percent=5)
 
     # ---- QR parsing ------------------------------------------------------
@@ -114,7 +114,7 @@ class BillScanTests(TestCase):
         self.assertEqual(draft["mill_id"], self.mill.id)
         self.assertEqual(draft["lines"][0]["product_id"], self.product.id)
         self.assertEqual(draft["lines"][0]["bag_count"], 200)
-        self.assertEqual(draft["lines"][0]["rate"], "30.00")
+        self.assertEqual(draft["lines"][0]["rate"], "30.000")
 
     def test_supplier_matched_by_name_without_pvt_ltd(self):
         self.mill.gst_number = ""

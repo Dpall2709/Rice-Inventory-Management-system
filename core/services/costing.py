@@ -58,7 +58,7 @@ def purchase_costing(purchase, margin_percent=None):
         "landed_cost": _round(landed_cost),
 
         "total_kg": _round(total_kg),
-        "total_bags": int(total_bags),
+        "total_bags": total_bags,
 
         "bill_rate_per_kg": _round(bill_rate_per_kg),
         "cost_per_kg": _round(cost_per_kg),

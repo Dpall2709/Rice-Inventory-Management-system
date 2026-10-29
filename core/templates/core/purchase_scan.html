@@ -12,7 +12,7 @@
     <div class="crumbs">
       <a href="{% url 'purchase_list' %}">{% translate "Purchases" %}</a> › <span>{% translate "Scan bill" %}</span>
     </div>
-    <h1>📷 {% translate "Scan the mill's bill" %}</h1>
+    <h1>📷 {% translate "Scan the supplier's bill" %}</h1>
     <p class="muted">
       {% translate "Take a photo of the bill or upload its PDF. The purchase form fills itself - you check it and press Save." %}
     </p>
@@ -32,7 +32,7 @@
     <div>
       {% blocktranslate trimmed %}
         Reading bill photos is switched off, so only the GST e-invoice <strong>QR code</strong> can fill the form
-        (supplier, bill no., date, total). To read the rice lines from the photo too, add
+        (supplier, bill no., date, total). To read the product lines from the photo too, add
         <code>ANTHROPIC_API_KEY</code> to the <code>.env</code> file.
       {% endblocktranslate %}
     </div>
@@ -94,8 +94,8 @@
 <div class="card card-narrow">
   <div class="list-title" style="margin-bottom:8px;">{% translate "What gets filled" %}</div>
   <ul class="muted small scan-help">
-    <li>{% translate "QR code (GST e-invoice): supplier GSTIN, bill number, date, bill total. It never contains the rice lines." %}</li>
-    {% if ai_enabled %}<li>{% translate "Bill photo / PDF: supplier, bill number, date, every rice line (bags, bag weight, rate per kg, GST), discount, freight and labour. Rates per quintal or per bag are converted to per kg." %}</li>{% endif %}
+    <li>{% translate "QR code (GST e-invoice): supplier GSTIN, bill number, date, bill total. It never contains the product lines." %}</li>
+    {% if ai_enabled %}<li>{% translate "Bill photo / PDF: supplier, bill number, date, every product line (qty, pack size, rate, GST), discount, freight and labour. Rates per quintal or per bag are converted to per kg." %}</li>{% endif %}
     <li>{% translate "The supplier is matched by GSTIN or name; if it is new you can add it in one tap. The bill file is attached to the purchase." %}</li>
     <li>{% translate "Nothing is saved until you check the form and press Save." %}</li>
   </ul>

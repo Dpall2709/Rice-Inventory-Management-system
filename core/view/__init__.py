@@ -46,3 +46,12 @@ from .broker.broker_views import (
 )
 from .reports.trade_register import trade_register
 from .reports.party_statements import broker_statement_export, customer_statement_export
+from .product.product_views import (
+    add_product,
+    edit_product,
+    product_list,
+    toggle_category,
+    toggle_unit,
+    units_and_categories,
+)
+from .quick.quick_create import quick_customer, quick_product, quick_supplier

@@ -70,7 +70,7 @@ def trade_register(request):
     ]
     filtered = any([customer_id, broker_id, mill_id, status]) or (date_from, date_to) != (default_from, today)
 
-    title = _("Truck register %(start)s to %(end)s") % {
+    title = _("Trade register %(start)s to %(end)s") % {
         "start": date_from.strftime("%d %b %Y"), "end": date_to.strftime("%d %b %Y"),
     }
 

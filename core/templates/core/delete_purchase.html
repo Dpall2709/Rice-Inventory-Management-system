@@ -1,5 +1,5 @@
 {% extends 'core/base.html' %}
-{% load i18n %}
+{% load i18n form_tags %}
 {% block nav_kind %}form{% endblock %}
 {% block back_url %}{% url 'purchase_detail' purchase.id %}{% endblock %}
 {% block content_class %}page-narrow{% endblock %}
@@ -23,8 +23,8 @@
     <span>{% if can_delete %}⚠️{% else %}🔒{% endif %}</span>
     <div>
       {% if can_delete %}
-        {% blocktranslate trimmed with bags=purchase.total_bags %}
-        Deleting this bill also removes <strong>{{ bags }} bags</strong> from your stock.
+        {% blocktranslate trimmed with qty=purchase.total_bags|qty %}
+        Deleting this bill also removes <strong>qty {{ qty }}</strong> from your stock.
         This cannot be undone.
         {% endblocktranslate %}
       {% else %}
@@ -40,14 +40,14 @@
   </div>
 
   <dl class="kv">
-    <dt>{% translate "Mill" %}</dt><dd>{{ purchase.mill.mill_name }}</dd>
+    <dt>{% translate "Supplier" %}</dt><dd>{{ purchase.mill.mill_name }}</dd>
     <dt>{% translate "Bill date" %}</dt><dd>{{ purchase.purchase_date|date:"d M Y" }}</dd>
     <dt>{% translate "Our reference" %}</dt><dd>{{ purchase.purchase_ref|default:"—" }}</dd>
     <dt>{% translate "Bill total" %}</dt><dd>₹ {{ purchase.total_amount }}</dd>
     <dt>{% translate "Stock added" %}</dt>
     <dd>
       {% for item in items %}
-        {{ item.bag_count }} × {{ item.bag_weight }}kg {{ item.product.rice_name }}{% if not forloop.last %}<br>{% endif %}
+        {{ item.bag_count|qty }} {{ item.product.unit_label }} × {{ item.bag_weight|qty }} {{ item.product.rate_unit_label }} {{ item.product.name }}{% if not forloop.last %}<br>{% endif %}
       {% empty %}—{% endfor %}
     </dd>
   </dl>
@@ -56,7 +56,7 @@
     {% csrf_token %}
     {% if can_delete %}
       <button class="btn btn-danger" type="submit"
-              data-confirm="{% blocktranslate with invoice_no=purchase.invoice_no bags=purchase.total_bags %}Bill {{ invoice_no }} and {{ bags }} bags of stock will be removed permanently.{% endblocktranslate %}"
+              data-confirm="{% blocktranslate with invoice_no=purchase.invoice_no qty=purchase.total_bags|qty %}Bill {{ invoice_no }} and qty {{ qty }} of stock will be removed permanently.{% endblocktranslate %}"
               data-confirm-title="{% translate 'Delete this purchase?' %}">🗑 {% translate "Delete permanently" %}</button>
     {% endif %}
     <a class="btn btn-ghost" href="{% url 'purchase_detail' purchase.id %}">{% translate "Cancel" %}</a>

@@ -3,12 +3,14 @@
 
    Mirrors core/services/sale_service.py:
 
-       line taxable   = bags x bag weight x rate
+       line taxable   = qty x pack size x rate
        line GST       = taxable x GST% (0 when the invoice has no GST)
-       CGST/SGST or IGST from the chosen tax type
-       invoice total  = rounded to whole rupees
-       freight        = total kg / 1000 x rate per ton (not on the invoice)
-       commission     = per bag / per quintal / % of taxable
+       CGST/SGST or IGST from the chosen tax type (or as typed by hand)
+       freight        = typed total, else weight / 1000 x rate per ton,
+                        else what was paid to the transporter
+       buyer's share  = by the freight arrangement (A-E, see freight_figures)
+       invoice total  = goods + GST + freight on the invoice, rounded
+       commission     = per pack / per unit / per 100 units / % of taxable
 
    The server recalculates everything on save, and checks the stock - this is
    only so the person typing sees the invoice add up as they go.
@@ -38,6 +40,11 @@
     return (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
   }
 
+  // Quantities keep up to 3 decimals, without trailing zeros: 12.345, 50.
+  function qty(n) {
+    return String(Math.round((Number(n) || 0) * 1000) / 1000);
+  }
+
   function inr(n) {
     return window.formatINR ? window.formatINR(n) : money(n);
   }
@@ -55,6 +62,23 @@
     if (el) el.textContent = value;
   }
 
+  // Manual GST typed from the bill replaces the calculated figure, only for
+  // the heads this invoice has. The calculated figure is shown beside it.
+  function manualGst(taxType, cgst, sgst, igst) {
+    var calculated = { cgst: cgst, sgst: sgst, igst: igst };
+    var result = { cgst: cgst, sgst: sgst, igst: igst };
+    ["cgst", "sgst", "igst"].forEach(function (head) {
+      var applies = taxType === "cgst_sgst" ? head !== "igst" : (taxType === "igst" && head === "igst");
+      form.querySelectorAll('[data-manual-gst-field="' + head + '"]').forEach(function (el) {
+        el.style.display = applies ? "" : "none";
+      });
+      setAll('[data-calculated-gst="' + head + '"]', money(calculated[head]));
+      var input = form.querySelector('[data-manual-gst="' + head + '"]');
+      if (applies && input && input.value !== "") result[head] = num(input);
+    });
+    return result;
+  }
+
   /* ---------------------------------------------------------- per line */
 
   function lineInfo(row) {
@@ -63,7 +87,7 @@
     return {
       productId: product ? product.value : "",
       product: product && data.products ? data.products[product.value] : null,
-      weight: weight ? String(parseInt(weight.value || 0, 10)) : "0",
+      weight: weight ? qty(weight.value) : "0",
     };
   }
 
@@ -133,7 +157,17 @@
       if (weightInput && !sameSize.length && any.length) {
         weightInput.value = any[0].bag_weight;
         info = lineInfo(row);
+      } else if (weightInput && !any.length && !weightInput.dataset.touched && info.product && info.product.pack_size) {
+        weightInput.value = qty(info.product.pack_size);
+        info = lineInfo(row);
       }
+    }
+    var unitHint = row.querySelector('[data-cell="unit_hint"]');
+    if (unitHint) {
+      var p = info.product;
+      unitHint.textContent = !p ? "" : (p.unit === p.rate_unit
+        ? p.unit
+        : p.unit + " · " + qty(p.pack_size) + " " + p.rate_unit + "/" + p.unit + " · ₹/" + p.rate_unit);
     }
     var gst = row.querySelector('[data-cell="gst"]');
     if (info.product && gst && !gst.dataset.touched) {
@@ -173,7 +207,7 @@
       taxable += lineTaxable;
       gstTotal += lineGst;
 
-      setText(row, '[data-cell="kg"]', lineKg ? money(lineKg) : "0");
+      setText(row, '[data-cell="kg"]', lineKg ? qty(lineKg) : "0");
       setText(row, '[data-cell="taxable"]', inr(lineTaxable));
       setText(row, '[data-cell="line_total"]', inr(lineTaxable + lineGst));
 
@@ -182,6 +216,7 @@
       var hint = row.querySelector('[data-cell="hint"]');
       if (info.product) {
         var key = info.productId + ":" + info.weight;
+        var unit = info.product.unit || "";
         var inStock = (info.product.stock && info.product.stock[info.weight]) || 0;
         var usedBefore = askedPerStock[key] || 0;
         askedPerStock[key] = usedBefore + count;
@@ -190,16 +225,16 @@
         if (stockCell) {
           var otherSizes = Object.keys(info.product.stock || {})
             .filter(function (w) { return w !== info.weight && info.product.stock[w] > 0; })
-            .map(function (w) { return info.product.stock[w] + " × " + w + " kg"; });
+            .map(function (w) { return qty(info.product.stock[w]) + " × " + w; });
           stockCell.textContent = left > 0
-            ? left + " " + (text.bags || "bags")
+            ? qty(left) + " " + unit + " " + (text.bags || "left")
             : (text.noStock || "none") + (otherSizes.length ? " (" + (text.inOther || "have") + " " + otherSizes.join(", ") + ")" : "");
           stockCell.classList.toggle("is-short", count > left);
           stockCell.title = count > left ? (text.notEnough || "") : "";
         }
         if (hint) {
           hint.textContent = info.product.cost_per_kg
-            ? (text.suggested || "Your cost") + " ₹" + money(info.product.cost_per_kg) + "/kg · " +
+            ? (text.suggested || "Your cost") + " ₹" + money(info.product.cost_per_kg) + "/" + (info.product.rate_unit || "") + " · " +
               (text.sellAt || "sell at least") + " ₹" + money(info.product.suggested_per_kg)
             : "";
         }
@@ -217,26 +252,51 @@
     } else if (taxType === "igst") {
       igst = gstTotal;
     }
+    var taxes = manualGst(taxType, cgst, sgst, igst);
+    cgst = taxes.cgst; sgst = taxes.sgst; igst = taxes.igst;
 
-    var beforeRound = taxable + cgst + sgst + igst;
+    // Freight - mirrors freight_figures() in sale_service.py.
+    var weighbridgeKg = num(form.querySelector("[data-loading-weight]"));
+    var dispatchedKg = weighbridgeKg || kg;
+    var ton = dispatchedKg / 1000;
+    var paidByUs = num(form.querySelector('[data-transport="dealer"]'));
+    var paidByParty = num(form.querySelector('[data-transport="customer"]'));
+    var typedFreight = num(form.querySelector('[data-transport="amount"]'));
+    var rateFreight = Math.round(ton * num(form.querySelector('[data-transport="rate"]')) * 100) / 100;
+    var freight = typedFreight || rateFreight || (paidByUs + paidByParty);
+    var freightBy = form.querySelector("[data-freight-by]");
+    freightBy = freightBy ? freightBy.value : "us";
+
+    var share = 0;
+    if (freightBy === "customer" || freightBy === "bill") share = freight;
+    else if (freightBy === "shared") share = Math.min(num(form.querySelector('[data-transport="share"]')), freight);
+    var inBooks = freightBy !== "separate";
+    var freightOnInvoice = (freightBy === "customer" || freightBy === "shared") ? share : 0;
+    var freightAdj = inBooks ? share - paidByParty : 0;
+    var freightCost = inBooks ? freight - share : 0;
+
+    var goodsBeforeRound = taxable + cgst + sgst + igst;
+    var beforeRound = goodsBeforeRound + freightOnInvoice;
     var total = Math.round(beforeRound);
+    var goodsTotal = total - freightOnInvoice;
     var advance = num(form.querySelector("[data-advance]"));
 
-    setAll('[data-total="bags"]', bags);
-    setAll('[data-total="kg"]', money(kg));
+    setAll('[data-total="bags"]', qty(bags));
+    setAll('[data-total="kg"]', qty(kg));
     setAll('[data-total="taxable"]', inr(taxable));
-    setAll('[data-total="lines"]', inr(beforeRound));
+    setAll('[data-total="lines"]', inr(goodsBeforeRound));
 
-    setAll('[data-sum="bags"]', bags);
-    setAll('[data-sum="kg"]', money(kg));
+    setAll('[data-sum="bags"]', qty(bags));
+    setAll('[data-sum="kg"]', qty(kg));
     setAll('[data-sum="taxable"]', inr(taxable));
     setAll('[data-sum="cgst"]', inr(cgst));
     setAll('[data-sum="sgst"]', inr(sgst));
     setAll('[data-sum="igst"]', inr(igst));
+    setAll('[data-sum="freight_invoice"]', inr(freightOnInvoice));
+    setAll('[data-sum="freight_bill"]', inr(freightBy === "bill" ? share : 0));
     setAll('[data-sum="round"]', money(total - beforeRound));
     setAll('[data-sum="total"]', inr(total));
     setAll('[data-sum="advance"]', inr(advance));
-    setAll('[data-sum="due"]', inr(Math.max(total - advance, 0)));
 
     form.querySelectorAll("[data-tax-label]").forEach(function (el) {
       var which = el.getAttribute("data-tax-label");
@@ -244,20 +304,20 @@
                  (which !== "igst" && taxType === "cgst_sgst");
       el.style.display = show ? "" : "none";
     });
+    form.querySelectorAll("[data-show-freight-invoice]").forEach(function (el) { el.style.display = freightOnInvoice ? "" : "none"; });
+    form.querySelectorAll("[data-show-transport-bill]").forEach(function (el) { el.style.display = freightBy === "bill" && share ? "" : "none"; });
 
-    // Freight: total from the rate per ton, or the advance + balance when no rate.
-    var ton = kg / 1000;
-    var paidByUs = num(form.querySelector('[data-transport="dealer"]'));
-    var paidByParty = num(form.querySelector('[data-transport="customer"]'));
-    var freight = Math.round(ton * num(form.querySelector('[data-transport="rate"]')) * 100) / 100;
-    if (!freight) freight = paidByUs + paidByParty;
-    var freightBy = form.querySelector("[data-freight-by]");
-    freightBy = freightBy ? freightBy.value : "us";
     setAll('[data-sum="ton"]', ton.toFixed(3));
     setAll('[data-sum="freight"]', inr(freight));
+    setAll('[data-sum="freight_share"]', inr(share));
+    setAll('[data-sum="freight_cost_box"]', inr(freightCost));
     setAll('[data-sum="freight_due"]', inr(Math.max(freight - paidByUs - paidByParty, 0)));
-    setAll('[data-sum="freight_cut"]', inr(paidByParty));
-    form.querySelectorAll("[data-freight-us]").forEach(function (el) { el.style.display = freightBy === "us" ? "" : "none"; });
+
+    // Only the boxes that matter for this arrangement are shown.
+    var shareBox = form.querySelector('[data-freight-field="freight_customer_share"]');
+    if (shareBox) shareBox.style.display = freightBy === "shared" ? "" : "none";
+    var explain = form.querySelector("[data-freight-explain]");
+    if (explain && text.freight) explain.textContent = text.freight[freightBy] || "";
 
     // Broker commission (on the dispatched weight here; settled on the received weight).
     var commission = 0;
@@ -265,7 +325,8 @@
     if (hasBroker) {
       var rate = num(commissionRate);
       var type = commissionType ? commissionType.value : "per_bag";
-      if (type === "per_bag") commission = rate * bags;
+      if (type === "per_kg") commission = rate * kg;
+      else if (type === "per_bag") commission = rate * bags;
       else if (type === "per_quintal") commission = rate * kg / 100;
       else if (type === "percent") commission = taxable * rate / 100;
     }
@@ -276,23 +337,20 @@
 
     // What the party will actually pay, and your profit on the truck.
     var cdPct = num(form.querySelector("[data-cd]"));
-    var cd = Math.round(total * cdPct) / 100;
+    var cd = Math.round(goodsTotal * cdPct) / 100;
     var brokerPaidBy = form.querySelector("[data-broker-paid-by]");
     var collectFrom = form.querySelector("[data-collect-from]");
     var brokerCollects = hasBroker && collectFrom && collectFrom.value === "broker";
     var partyPaysBroker = hasBroker && ((brokerPaidBy && brokerPaidBy.value === "customer") || brokerCollects);
     var brokerageCut = partyPaysBroker ? commission : 0;
     var commissionUs = partyPaysBroker ? 0 : commission;
-    var freightAdj = freightBy === "us" ? -paidByParty : (freightBy === "customer" ? paidByUs : 0);
-    var net = total - cd - brokerageCut + freightAdj;
+    var net = goodsTotal - cd - brokerageCut + freightAdj;
     // Loading charge = weight x the company's loading rate, until typed by hand.
     var loadingInput = form.querySelector("[data-loading]");
-    var weighbridge = num(form.querySelector("[data-loading-weight]"));
     if (loadingInput && !loadingInput.dataset.touched && data.loading_rate) {
-      loadingInput.value = (Math.round((weighbridge || kg) * data.loading_rate * 100) / 100).toFixed(2);
+      loadingInput.value = (Math.round(dispatchedKg * data.loading_rate * 100) / 100).toFixed(2);
     }
     var loading = num(loadingInput);
-    var freightCost = freightBy === "us" ? freight : 0;
     var income = taxable - cd - brokerageCut;
 
     setAll('[data-sum="cd"]', inr(cd));
@@ -397,7 +455,7 @@
       var visible = rowsBody.querySelectorAll('[data-line]:not([style*="display: none"])').length;
       if (visible <= 1) {
         row.querySelectorAll("input:not([type=hidden]):not([type=checkbox]), select").forEach(function (el) {
-          if (el.matches('[data-cell="bag_weight"]')) el.value = 50;
+          if (el.matches('[data-cell="bag_weight"]')) el.value = 1;
           else el.value = "";
         });
       } else if (del) {
@@ -408,7 +466,7 @@
   });
 
   form.addEventListener("input", function (e) {
-    if (e.target.matches('[data-cell="gst"]') || e.target.matches("[data-cd]") || e.target.matches("[data-loading]")) e.target.dataset.touched = "1";
+    if (e.target.matches('[data-cell="gst"]') || e.target.matches('[data-cell="bag_weight"]') || e.target.matches("[data-cd]") || e.target.matches("[data-loading]")) e.target.dataset.touched = "1";
     if (e.target.matches('[data-cell="bag_weight"]')) refreshLots(e.target.closest("[data-line]"));
     recalculate();
   });
@@ -427,7 +485,28 @@
     var gst = row.querySelector('[data-cell="gst"]');
     var product = row.querySelector("[data-product]");
     if (gst && product && product.value && gst.value !== "") gst.dataset.touched = "1";
+    var size = row.querySelector('[data-cell="bag_weight"]');
+    if (size && product && product.value) size.dataset.touched = "1";
     refreshLots(row);
+    var unitHint = row.querySelector('[data-cell="unit_hint"]');
+    var p = product && data.products ? data.products[product.value] : null;
+    if (unitHint && p) {
+      unitHint.textContent = p.unit === p.rate_unit ? p.unit
+        : p.unit + " · " + qty(p.pack_size) + " " + p.rate_unit + "/" + p.unit + " · ₹/" + p.rate_unit;
+    }
+  });
+
+  // A customer or product added from the pop-up: keep its details so the
+  // buyer card, tax type, GST% and pack size fill in like any other.
+  document.addEventListener("quick-created", function (e) {
+    var d = e.detail;
+    if (d.kind === "customer") {
+      data.customers = data.customers || {};
+      data.customers[d.id] = d.data;
+    } else if (d.kind === "product") {
+      data.products = data.products || {};
+      data.products[d.id] = d.data;
+    }
   });
 
   showCustomer(false);

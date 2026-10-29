@@ -85,9 +85,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'rest_framework_simplejwt',
     'core',
     'billing',
     'accounts',
+    'api',
 ]
 
 MIDDLEWARE = [
@@ -339,4 +342,29 @@ LOGGING = {
     "loggers": {
         "billing": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
+}
+
+
+# ---------------------------------------------------------------------------
+# REST API for the mobile app (/api/v1/). Phones log in with a JWT pair;
+# the access token is short-lived and renewed with the refresh token.
+# ---------------------------------------------------------------------------
+from datetime import timedelta  # noqa: E402
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,
+    "COERCE_DECIMAL_TO_STRING": True,
+    "DEFAULT_THROTTLE_RATES": {"anon": "30/min"},
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES", "30"))),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "30"))),
+    "UPDATE_LAST_LOGIN": True,
 }

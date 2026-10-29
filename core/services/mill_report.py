@@ -32,6 +32,7 @@ from reportlab.platypus import (
 )
 
 from core.services.ledger import mill_statement
+from core.utils import qty_str
 
 INDIGO = colors.HexColor("#4f46e5")
 INK = colors.HexColor("#0f172a")
@@ -162,7 +163,7 @@ def build_pdf(company, mill):
             tile("Total purchased", f"Rs {money(data['total_purchased'])}"),
             tile("Total paid", f"Rs {money(data['total_paid'])}", GREEN),
             tile("Balance due", f"Rs {money(data['total_due'])}", RED if data["total_due"] > 0 else GREEN),
-            tile("Stock bought", f"{data['total_bags']} bags / {money(data['total_kg'])} kg"),
+            tile("Qty bought", f"{qty_str(data['total_bags'])} ({qty_str(data['total_kg'])} units)"),
         ]],
         colWidths=[45.5 * mm] * 4,   # = 182mm
         style=TableStyle([
@@ -188,7 +189,7 @@ def build_pdf(company, mill):
     # ---------------- bill by bill ----------------
     story.append(Paragraph("Purchase bills", section))
 
-    head = ["Date", "Bill no", "Rice bought", "Bags", "Qty (kg)", "Rate/kg", "Bill total", "Paid", "Due"]
+    head = ["Date", "Bill no", "Products bought", "Qty", "Total", "Rate", "Bill total", "Paid", "Due"]
     rows = [head]
 
     for row in data["rows"]:
@@ -196,20 +197,21 @@ def build_pdf(company, mill):
         items = list(purchase.purchaseitem_set.all())
 
         description = "<br/>".join(
-            f"{item.product.rice_name} · {item.bag_count}×{item.bag_weight}kg @ Rs {money(item.purchase_price)}"
+            f"{item.product.name} · {qty_str(item.bag_count)} {item.product.unit_label} × {qty_str(item.bag_weight)} {item.product.rate_unit_label}"
+            f" @ Rs {qty_str(item.purchase_price)}/{item.product.rate_unit_label}"
             for item in items
         ) or "-"
 
         bags = sum(item.bag_count or 0 for item in items)
         kg = sum(Decimal(item.total_kg or 0) for item in items)
-        rates = {money(item.purchase_price) for item in items}
+        rates = {qty_str(item.purchase_price) for item in items}
 
         rows.append([
             Paragraph(f"{purchase.purchase_date:%d-%m-%Y}", tight),
             Paragraph(f"<b>{purchase.invoice_no}</b><br/><font size=6.5 color='#64748b'>{purchase.purchase_ref or ''}</font>", tight),
             Paragraph(description, tight),
-            str(bags),
-            money(kg),
+            qty_str(bags),
+            qty_str(kg),
             " / ".join(sorted(rates)) if rates else "-",
             money(row["total"]),
             money(row["paid"]),
@@ -218,7 +220,7 @@ def build_pdf(company, mill):
 
     rows.append([
         "", Paragraph("<b>Total</b>", tight), "",
-        str(data["total_bags"]), money(data["total_kg"]), "",
+        qty_str(data["total_bags"]), qty_str(data["total_kg"]), "",
         money(data["total_purchased"]),
         money(data["total_paid_on_bills"]),
         money(sum(r["due"] for r in data["rows"])),
@@ -434,11 +436,11 @@ def build_excel(company, mill):
         ("Total purchased", data["total_purchased"]),
         ("Total paid", data["total_paid"]),
         ("Balance due", data["total_due"]),
-        ("Advance with mill", data["advance"]),
+        ("Advance with supplier", data["advance"]),
         ("", ""),
         ("Bills", len(data["rows"])),
-        ("Bags bought", data["total_bags"]),
-        ("Quantity (kg)", data["total_kg"]),
+        ("Qty bought", data["total_bags"]),
+        ("Total (units)", data["total_kg"]),
         ("", ""),
         ("Generated", data["generated_at"].strftime("%d-%m-%Y %H:%M")),
     ]
@@ -450,7 +452,7 @@ def build_excel(company, mill):
         label.font = Font(bold=True, size=10, color="475569")
 
         cell = summary.cell(row=index, column=2, value=value)
-        if isinstance(value, Decimal):
+        if isinstance(value, Decimal) and name not in ("Qty bought", "Total (units)"):
             cell.number_format = RUPEES
         cell.font = Font(size=11)
 
@@ -476,7 +478,7 @@ def build_excel(company, mill):
             entry["debit"] or None,
             entry["credit"] or None,
             balance,
-            "advance with mill" if balance < 0 else ("settled" if balance == 0 else ""),
+            "advance with supplier" if balance < 0 else ("settled" if balance == 0 else ""),
         ]
         for column, value in enumerate(values, start=1):
             cell = ledger.cell(row=line, column=column, value=value)
@@ -502,8 +504,8 @@ def build_excel(company, mill):
     bills.sheet_view.showGridLines = False
 
     headers = [
-        "Date", "Bill no", "Our ref", "GST type", "Rice", "Bag wt (kg)", "Bags",
-        "Quantity (kg)", "Rate / kg", "Taxable", "GST", "Bill total", "Paid", "Due", "Status",
+        "Date", "Bill no", "Our ref", "GST type", "Product", "Pack size", "Qty",
+        "Total qty", "Rate", "Taxable", "GST", "Bill total", "Paid", "Due", "Status",
     ]
     _write_header(bills, headers)
 
@@ -519,7 +521,7 @@ def build_excel(company, mill):
                 purchase.invoice_no,
                 purchase.purchase_ref or "",
                 purchase.get_tax_type_display(),
-                item.product.rice_name if item else "-",
+                item.product.name if item else "-",
                 item.bag_weight if item else None,
                 item.bag_count if item else None,
                 Decimal(item.total_kg or 0) if item else None,

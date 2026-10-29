@@ -10,7 +10,7 @@
 <div class="page-head">
   <div>
     <div class="crumbs">
-      <a href="{% url 'mill_list' %}">{% translate "Mills / Suppliers" %}</a> › <span>{{ mill.mill_name }}</span>
+      <a href="{% url 'mill_list' %}">{% translate "Suppliers" %}</a> › <span>{{ mill.mill_name }}</span>
     </div>
     <h1>{% blocktranslate with name=mill.mill_name %}Deactivate “{{ name }}”?{% endblocktranslate %}</h1>
   </div>

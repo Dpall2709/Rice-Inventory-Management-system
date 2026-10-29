@@ -1,0 +1,24 @@
+{% load i18n form_tags %}
+{# Manual GST: type the tax exactly as printed on the bill when it differs by a few paise. #}
+<details class="manual-gst" {% if form.instance.gst_is_manual or form.manual_cgst.value or form.manual_sgst.value or form.manual_igst.value or form.gst_adjust_reason.errors %}open{% endif %}>
+  <summary>✏️ {% translate "Adjust GST to match the bill" %}</summary>
+  <p class="muted small" style="margin:8px 0 12px;">
+    {% blocktranslate trimmed %}
+      The app works GST out for you. If the bill shows a slightly different figure (rounding),
+      type it here - the total is worked out again and the change is kept in the audit trail.
+      Leave a box empty to use the calculated figure.
+    {% endblocktranslate %}
+  </p>
+  <div class="form-grid">
+    {% for field in form %}
+      {% if field.name|one_of:"manual_cgst,manual_sgst,manual_igst,gst_adjust_reason" %}
+        <div class="field {% if field.errors %}has-error{% endif %}" {% if field.name != 'gst_adjust_reason' %}data-manual-gst-field="{{ field.name|slice:'7:' }}"{% endif %}>
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.name != 'gst_adjust_reason' %}<div class="field-hint">{% translate "Calculated" %}: ₹ <span data-calculated-gst="{{ field.name|slice:'7:' }}">0.00</span></div>{% endif %}
+          {% for error in field.errors %}<div class="field-error">{{ error }}</div>{% endfor %}
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+</details>

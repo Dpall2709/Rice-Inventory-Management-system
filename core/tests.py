@@ -481,7 +481,7 @@ class PurchaseGstTests(TestCase):
             company=self.company, mill_name="GST Mill", mobile="9876543210"
         )
         self.product = Product.objects.create(
-            company=self.company, rice_name="Basmati", hsn_code="1006", gst_percent=5
+            company=self.company, name="Basmati", hsn_code="1006", gst_percent=5
         )
 
     def bill(self, **overrides):
@@ -581,7 +581,7 @@ class PurchaseGstTests(TestCase):
 
     def test_two_lines_split_the_discount_by_value(self):
         second = Product.objects.create(
-            company=self.company, rice_name="Sona", hsn_code="1006", gst_percent=5
+            company=self.company, name="Sona", hsn_code="1006", gst_percent=5
         )
         self.client.post(reverse("add_purchase"), self.bill(**{
             "purchaseitem_set-TOTAL_FORMS": "2",
@@ -640,7 +640,7 @@ class PurchaseGstTests(TestCase):
             "purchaseitem_set-0-purchase_price": "",
         }))
 
-        self.assertContains(response, "at least one rice line")
+        self.assertContains(response, "at least one product line")
         self.assertFalse(Purchase.objects.filter(invoice_no="MILL-001").exists())
 
     def test_letters_in_quantity_do_not_crash(self):
@@ -712,7 +712,7 @@ class CostingTests(TestCase):
             company=self.company, mill_name="Cost Mill", mobile="9876543210"
         )
         self.product = Product.objects.create(
-            company=self.company, rice_name="Sona Masoori", hsn_code="1006", gst_percent=5
+            company=self.company, name="Sona Masoori", hsn_code="1006", gst_percent=5
         )
 
     def make_bill(self, **overrides):
@@ -796,7 +796,7 @@ class CostingTests(TestCase):
 
     def test_expenses_are_shared_between_rice_types_by_value(self):
         cheap = Product.objects.create(
-            company=self.company, rice_name="Cheap Rice", hsn_code="1006", gst_percent=5
+            company=self.company, name="Cheap Rice", hsn_code="1006", gst_percent=5
         )
         purchase = self.make_bill(**{
             "transport_amount": "6000",
@@ -808,7 +808,7 @@ class CostingTests(TestCase):
             "purchaseitem_set-1-gst_percent": "5",
         })
 
-        rows = {row["product"].rice_name: row for row in line_costing(purchase)}
+        rows = {row["product"].name: row for row in line_costing(purchase)}
 
         # 1,50,000 and 50,000 -> the 6,000 transport splits 3:1
         self.assertEqual(rows["Sona Masoori"]["share_of_expenses"], Decimal("4500.00"))
@@ -878,7 +878,7 @@ class ChargeOwnershipTests(TestCase):
             company=self.company, mill_name="Tick Mill", mobile="9876543210"
         )
         self.product = Product.objects.create(
-            company=self.company, rice_name="IR64", hsn_code="1006", gst_percent=0
+            company=self.company, name="IR64", hsn_code="1006", gst_percent=0
         )
 
     def bill(self, **overrides):
@@ -996,7 +996,7 @@ class PaymentAllocationTests(TestCase):
             company=self.company, mill_name="Ledger Mill", mobile="9876543210"
         )
         self.product = Product.objects.create(
-            company=self.company, rice_name="IR64", hsn_code="1006", gst_percent=0
+            company=self.company, name="IR64", hsn_code="1006", gst_percent=0
         )
 
     def add_bill(self, invoice_no, amount, days_ago=0):
@@ -1102,7 +1102,7 @@ class ExportTests(TestCase):
             owner_name="Owner", gst_number="10ABCDE1234F1Z5", city="Patna",
         )
         product = Product.objects.create(
-            company=self.company, rice_name="Basmati", hsn_code="1006", gst_percent=5
+            company=self.company, name="Basmati", hsn_code="1006", gst_percent=5
         )
         purchase = Purchase.objects.create(
             company=self.company, mill=self.mill, invoice_no="EXP-1",
@@ -1169,7 +1169,7 @@ class SettlementAndHistoryTests(TestCase):
             company=self.company, mill_name="History Mill", mobile="9876543210"
         )
         self.product = Product.objects.create(
-            company=self.company, rice_name="IR64", hsn_code="1006", gst_percent=0
+            company=self.company, name="IR64", hsn_code="1006", gst_percent=0
         )
 
     def bill(self, invoice_no, amount, days_ago=0):
@@ -1335,7 +1335,7 @@ class BillPaymentExplanationTests(TestCase):
         self.company, self.user = make_company("Chi Rice", "chi_user")
         self.client.login(username="chi_user", password="TestPass#2026")
         self.mill = Mill.objects.create(company=self.company, mill_name="Explain Mill", mobile="9876543210")
-        self.product = Product.objects.create(company=self.company, rice_name="IR64", hsn_code="1006", gst_percent=0)
+        self.product = Product.objects.create(company=self.company, name="IR64", hsn_code="1006", gst_percent=0)
 
     def bill(self, invoice_no, amount):
         purchase = Purchase.objects.create(
@@ -1412,7 +1412,7 @@ class SaleTests(TestCase):
 
         self.mill = Mill.objects.create(company=self.company, mill_name="Lot Mill", mobile="9876543210")
         self.product = Product.objects.create(
-            company=self.company, rice_name="Katarni", hsn_code="1006", gst_percent=5
+            company=self.company, name="Katarni", hsn_code="1006", gst_percent=5
         )
         self.customer = Customer.objects.create(
             company=self.company, customer_name="Ram Traders", state="Bihar",
@@ -1536,7 +1536,7 @@ class SaleTests(TestCase):
         response, sale = self.make_sale(**{"items-0-bag_count": "21"})
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(sale)
-        self.assertContains(response, "only 20 bags in stock")
+        self.assertContains(response, "only 20 nos in stock")
 
         # The refused sale must not use up an invoice number.
         _, ok = self.make_sale()
@@ -1545,10 +1545,10 @@ class SaleTests(TestCase):
     def test_more_than_a_chosen_lot_holds_is_refused(self):
         response, sale = self.make_sale(**{"items-0-purchase_item": self.old_lot.id, "items-0-bag_count": "11"})
         self.assertIsNone(sale)
-        self.assertContains(response, "only 10 bags left in lot OLD-1")
+        self.assertContains(response, "only 10 nos left in lot OLD-1")
 
     def test_a_lot_of_another_rice_is_refused(self):
-        other_rice = Product.objects.create(company=self.company, rice_name="Sona", gst_percent=5)
+        other_rice = Product.objects.create(company=self.company, name="Sona", gst_percent=5)
         other_lot = self._lot("SONA-1", timezone.localdate(), bags=10, rate="25", product=other_rice)
         response, sale = self.make_sale(**{"items-0-purchase_item": other_lot.id})
         self.assertIsNone(sale)
@@ -1557,7 +1557,7 @@ class SaleTests(TestCase):
     def test_bag_size_must_match_the_stock(self):
         response, sale = self.make_sale(**{"items-0-bag_weight": "30"})
         self.assertIsNone(sale)
-        self.assertContains(response, "only 0 bags in stock")
+        self.assertContains(response, "only 0 nos in stock")
 
     def test_stock_goes_down_and_comes_back_when_the_sale_is_deleted(self):
         key = (self.product.id, 50)
@@ -1781,7 +1781,7 @@ class DashboardTests(TestCase):
     def setup_trade(self, company=None, name="Dash"):
         company = company or self.company
         mill = Mill.objects.create(company=company, mill_name=f"{name} Mill", mobile="9876543210")
-        product = Product.objects.create(company=company, rice_name=f"{name} Katarni", hsn_code="1006", gst_percent=5)
+        product = Product.objects.create(company=company, name=f"{name} Katarni", hsn_code="1006", gst_percent=5)
         customer = Customer.objects.create(company=company, customer_name=f"{name} Traders", mobile="9123456780")
         return mill, product, customer
 
@@ -1818,7 +1818,7 @@ class DashboardTests(TestCase):
     def test_empty_company_shows_onboarding(self):
         response = self.client.get(reverse("dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Add a mill")
+        self.assertContains(response, "Add a supplier")
         self.assertContains(response, "/purchase/scan/")
         self.assertNotContains(response, "Do this today")
 

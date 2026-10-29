@@ -1024,6 +1024,13 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
 .modal h3 { margin-bottom: var(--s-2); }
 .modal p { color: var(--text-soft); margin-bottom: var(--s-4); }
 .modal-actions { display: flex; justify-content: flex-end; gap: var(--s-2); }
+.modal-wide { max-width: 720px; max-height: calc(100vh - 32px); overflow-y: auto; }
+
+/* "+ New" button sitting next to a dropdown on entry screens */
+.select-with-add { display: flex; gap: 6px; align-items: stretch; }
+.select-with-add > select { flex: 1; min-width: 0; }
+.select-with-add > .btn { white-space: nowrap; padding-inline: 10px; }
+.unit-hint { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
 /* ---------- misc ---------- */
 
